@@ -1,6 +1,8 @@
+// Shared by the CRM and shop Workers: password hashing and D1-backed sessions.
+// Both apps need a `sessions (token_hash, user_id, expires_at)` table.
+
 const ITERATIONS = 100_000; // Workers' PBKDF2 maximum
 const SESSION_DAYS = 7;
-export const SESSION_COOKIE = "crm_session";
 
 const enc = new TextEncoder();
 const b64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -31,12 +33,6 @@ async function sha256(text: string) {
   return b64(await crypto.subtle.digest("SHA-256", enc.encode(text)));
 }
 
-export interface User {
-  id: number;
-  username: string;
-  is_admin: number;
-}
-
 /** Create a session and return the raw token for the cookie (only its hash is stored). */
 export async function createSession(db: D1Database, userId: number) {
   const token = b64(crypto.getRandomValues(new Uint8Array(32)));
@@ -48,15 +44,14 @@ export async function createSession(db: D1Database, userId: number) {
   return { token, maxAge: SESSION_DAYS * 86400 };
 }
 
-export async function sessionUser(db: D1Database, token: string | undefined): Promise<User | null> {
+/** The user id behind a session cookie, or null if missing/expired. */
+export async function sessionUserId(db: D1Database, token: string | undefined): Promise<number | null> {
   if (!token) return null;
-  return db
-    .prepare(
-      `SELECT u.id, u.username, u.is_admin FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > ?`,
-    )
+  const row = await db
+    .prepare("SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?")
     .bind(await sha256(token), Date.now())
-    .first<User>();
+    .first<{ user_id: number }>();
+  return row?.user_id ?? null;
 }
 
 export async function deleteSession(db: D1Database, token: string | undefined) {

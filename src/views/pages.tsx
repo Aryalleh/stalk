@@ -1,8 +1,8 @@
-import type { User } from "../auth";
+import type { User } from "../session";
 import type { ContactRow, FieldDef } from "../db";
 import { CONTACT_KEY, CORE_FIELDS, SECTIONS, contactName, type ContactData } from "../fields";
 import type { Extras, LogRow, Snapshot } from "../history";
-import { formatJalali } from "../jalali";
+import { formatJalali } from "../../lib/jalali";
 import { Errors, Layout } from "./layout";
 
 const ACTION_LABEL: Record<string, string> = { create: "ایجاد", update: "ویرایش", delete: "حذف" };

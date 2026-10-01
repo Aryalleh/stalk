@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { cleanContact, CONTACT_KEY } from "../src/fields";
 import { buildSnapshot, diffContact, type LogRow } from "../src/history";
-import { formatJalali, parseJalali, toGregorian, toJalali } from "../src/jalali";
-import { nationalCodeError, normalizeHandle, normalizePhone } from "../src/normalize";
+import { formatJalali, parseJalali, toGregorian, toJalali } from "../lib/jalali";
+import { nationalCodeError, normalizeHandle, normalizePhone } from "../lib/normalize";
 
 describe("normalize", () => {
   it("phones", () => {

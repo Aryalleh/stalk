@@ -1,5 +1,5 @@
 import type { Child } from "hono/jsx";
-import type { User } from "../auth";
+import type { User } from "../session";
 
 const CSS = `
 :root{--bg:#f5f6f8;--card:#fff;--text:#1d2330;--muted:#6b7280;--line:#e3e6eb;--accent:#2563eb;--accent-text:#fff;--danger:#c62828;--ok:#1b7f3b;--hl:#eef3ff}

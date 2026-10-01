@@ -1,4 +1,4 @@
-import { nationalCodeError, normalizeDigits, normalizeHandle, normalizePhone, phoneError, postalCodeError } from "./normalize";
+import { nationalCodeError, normalizeDigits, normalizeHandle, normalizePhone, phoneError, postalCodeError } from "../lib/normalize";
 
 type Kind = "text" | "phone" | "handle" | "national" | "postal" | "textarea";
 

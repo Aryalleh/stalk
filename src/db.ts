@@ -1,7 +1,7 @@
-import type { User } from "./auth";
+import type { User } from "./session";
 import { CONTACT_KEY, CORE_NAMES, contactName, type ContactData } from "./fields";
 import { diffContact, type Extras, type LogEntry, type LogRow } from "./history";
-import { normalizePhone, toLatinDigits } from "./normalize";
+import { normalizePhone, toLatinDigits } from "../lib/normalize";
 
 export type ContactRow = ContactData & { id: number; created_at: string; updated_at: string; created_by: number | null };
 export interface FieldDef {
