@@ -382,12 +382,11 @@ export function UsersPage(props: { user: User; users: (User & { created_at: stri
       <div class="card">
         <h2>دادن دسترسی CRM</h2>
         <p class="muted" style="margin-top:0">
-          اگر این شماره در سایت حساب دارد فقط دسترسی داده می‌شود؛ وگرنه با نام و رمز زیر حساب جدید ساخته می‌شود.
+          اگر این شماره در سایت حساب دارد فقط دسترسی داده می‌شود؛ وگرنه با نام زیر حساب ساخته می‌شود و فرد با کد بله روی شماره خودش وارد می‌شود.
         </p>
         <form method="post" action="/crm/users" class="row">
           <input name="phone" placeholder="شماره موبایل" class="ltr" required style="max-width:180px" />
           <input name="name" placeholder="نام (برای حساب جدید)" style="max-width:200px" />
-          <input name="password" type="password" placeholder="رمز (برای حساب جدید)" class="ltr" style="max-width:220px" />
           <button>افزودن</button>
         </form>
       </div>

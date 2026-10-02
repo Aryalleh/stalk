@@ -32,10 +32,12 @@ app.use(async (c, next) => {
   await next();
 });
 
-// Signed-in accounts must connect the site's bot before using the site (when a bot is set up).
+// Every signed-in account must connect the site's Bale/Telegram bot before using the site. Only the
+// admin is let through while no bot is connected yet, so they can set one up in /admin/settings.
 app.use(async (c, next) => {
   const user = c.get("user");
-  if (user && !isConnected(user) && activeBots(c.get("settings")).length && !CONNECT_EXEMPT.test(c.req.path)) {
+  const adminSettingUp = user?.is_admin && !activeBots(c.get("settings")).length;
+  if (user && !isConnected(user) && !adminSettingUp && !CONNECT_EXEMPT.test(c.req.path)) {
     const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";
     return c.redirect(`/connect?next=${encodeURIComponent(back)}`);
   }

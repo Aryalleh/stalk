@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { render } from "../render";
-import { hashPassword } from "../../lib/auth";
 import { inviteLink, linksFor } from "../bale/links";
 import { sendSafirText } from "../bale/safir";
 import { safirReady } from "../settings";
@@ -303,18 +302,16 @@ crm.post("/users", requireAdmin, async (c) => {
   const form = await c.req.parseBody();
   const phone = normalizePhone(String(form.phone ?? ""));
   const name = String(form.name ?? "").trim();
-  const password = String(form.password ?? "");
   if (!/^09\d{9}$/.test(phone)) return staffPage(c, { error: "شماره موبایل نامعتبر است." }, 400);
   const existing = await c.env.DB.prepare("SELECT id, name FROM users WHERE phone = ?").bind(phone).first<{ id: number; name: string }>();
   if (existing) {
     await c.env.DB.prepare("UPDATE users SET is_staff = 1 WHERE id = ?").bind(existing.id).run();
     return staffPage(c, { ok: `دسترسی CRM به ${existing.name} داده شد.` });
   }
-  if (!name || password.length < 10) {
-    return staffPage(c, { error: "این شماره هنوز در سایت حساب ندارد؛ برای ساختن حساب، نام و رمز حداقل ۱۰ کاراکتری لازم است." }, 400);
-  }
-  await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, is_staff, created_at) VALUES (?, ?, ?, 1, ?)")
-    .bind(phone, name, await hashPassword(password), new Date().toISOString())
+  if (!name) return staffPage(c, { error: "این شماره هنوز در سایت حساب ندارد؛ برای ساختن حساب، نام را هم وارد کنید." }, 400);
+  // No password: the person signs in with a Bale one-time code on their own phone.
+  await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, is_staff, created_at) VALUES (?, ?, '!', 1, ?)")
+    .bind(phone, name, new Date().toISOString())
     .run();
   return staffPage(c, { ok: `حساب ${name} با دسترسی CRM ساخته شد.` });
 });

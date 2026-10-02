@@ -408,13 +408,13 @@ async function saveAdminSettings(c: C): Promise<string> {
       }
     }
   }
-  if (f.safir_remove === "1") values.safir_api_key = "";
-  else if (f.safir_api_key) {
+  // Safir is the only way to log in, so it can be changed but never cleared.
+  if (f.safir_api_key) {
     if (!/^[\w.:-]{10,300}$/.test(f.safir_api_key)) return "کلید سفیر نامعتبر به نظر می‌رسد.";
     values.safir_api_key = f.safir_api_key;
   }
   const botId = normalizeDigits(f.safir_bot_id ?? "");
-  if (botId && !/^\d{1,20}$/.test(botId)) return "شناسه بازو باید عدد باشد.";
+  if (!/^\d{1,20}$/.test(botId)) return "شناسه عددی بازوی سفیر لازم است (ورود کاربران به آن وابسته است).";
   values.safir_bot_id = botId;
   await saveSiteSettings(c.env.DB, values);
   return "";

@@ -4,81 +4,39 @@ import { STATUS_LABEL, toman, type ItemView, type Order, type Wishlist } from ".
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
-export function LoginPage(props: { next: string; error?: string; phone?: string; codeLogin?: boolean }) {
-  return (
-    <Layout title="ورود" user={null}>
-      <div class="card" style="max-width:400px;margin:40px auto">
-        <h1>ورود</h1>
-        <Errors errors={[props.error]} />
-        <form method="post" action="/login">
-          <input type="hidden" name="next" value={props.next} />
-          <label>شماره موبایل</label>
-          <input name="phone" value={props.phone ?? ""} class="ltr" inputmode="tel" autocomplete="username" required autofocus />
-          <label>رمز عبور</label>
-          <input name="password" type="password" class="ltr" autocomplete="current-password" required />
-          <p><button>ورود</button></p>
-        </form>
-        {props.codeLogin && (
-          <p><a class="btn secondary" href={`/login/code?next=${encodeURIComponent(props.next)}`}>ورود یا ثبت‌نام با کد یکبار مصرف بله</a></p>
-        )}
-        <p class="small">حساب ندارید؟ <a href={`/register?next=${encodeURIComponent(props.next)}`}>ثبت‌نام</a></p>
-      </div>
-    </Layout>
-  );
-}
-
-export function RegisterPage(props: { next: string; errors?: string[]; values?: Record<string, string>; codeLogin?: boolean }) {
-  const v = props.values ?? {};
-  return (
-    <Layout title="ثبت‌نام" user={null}>
-      <div class="card" style="max-width:400px;margin:40px auto">
-        <h1>ثبت‌نام</h1>
-        {props.codeLogin && (
-          <p><a class="btn secondary" href={`/login/code?next=${encodeURIComponent(props.next)}`}>ثبت‌نام سریع با کد یکبار مصرف بله (بدون رمز)</a></p>
-        )}
-        <Errors errors={props.errors} />
-        <form method="post" action="/register">
-          <input type="hidden" name="next" value={props.next} />
-          <label>نام و نام خانوادگی</label>
-          <input name="name" value={v.name ?? ""} required maxlength={80} />
-          <label>شماره موبایل</label>
-          <input name="phone" value={v.phone ?? ""} class="ltr" inputmode="tel" autocomplete="username" required />
-          <label>رمز عبور (حداقل ۸ کاراکتر)</label>
-          <input name="password" type="password" class="ltr" minlength={8} autocomplete="new-password" required />
-          <p><button>ثبت‌نام</button></p>
-        </form>
-      </div>
-    </Layout>
-  );
-}
-
 export function CodeLoginPage(props: {
   next: string;
-  step: "phone" | "code";
+  step: "phone" | "code" | "unavailable";
   phone?: string;
   isNew?: boolean;
   name?: string;
   error?: string;
+  setupOpen?: boolean;
 }) {
   return (
-    <Layout title="ورود با کد بله" user={null}>
+    <Layout title="ورود / ثبت‌نام" user={null}>
       <div class="card" style="max-width:400px;margin:40px auto">
-        <h1>ورود با کد یکبار مصرف</h1>
+        <h1>ورود / ثبت‌نام</h1>
         <Errors errors={[props.error]} />
-        {props.step === "phone" ? (
-          <form method="post" action="/login/code">
+        {props.step === "unavailable" ? (
+          <div class="warnbox">
+            ورود فعلاً ممکن نیست: سرویس ارسال کد بله (سفیر) هنوز راه‌اندازی نشده است.
+            {props.setupOpen && <> مدیر سایت: <a href="/setup">راه‌اندازی</a></>}
+          </div>
+        ) : props.step === "phone" ? (
+          <form method="post" action="/login">
             <input type="hidden" name="next" value={props.next} />
-            <p class="muted small" style="margin-top:0">کد ورود در پیام‌رسان بله برای شما ارسال می‌شود.</p>
+            <p class="muted small" style="margin-top:0">کد ورود در پیام‌رسان بله برایتان ارسال می‌شود. اگر حساب ندارید، همین‌جا ساخته می‌شود.</p>
             <label>شماره موبایل</label>
             <input name="phone" value={props.phone ?? ""} class="ltr" inputmode="tel" autocomplete="tel" required autofocus />
             <p><button>ارسال کد</button></p>
           </form>
         ) : (
-          <form method="post" action="/login/code/verify">
+          <form method="post" action="/login/verify">
             <input type="hidden" name="next" value={props.next} />
             <input type="hidden" name="phone" value={props.phone} />
             <p class="muted small" style="margin-top:0">
-              کد ۶ رقمی به بله شماره <span class="dt">{props.phone}</span> ارسال شد. <a href={`/login/code?next=${encodeURIComponent(props.next)}`}>تغییر شماره</a>
+              کد ۶ رقمی به بله شماره <span class="dt">{props.phone}</span> ارسال شد. <a href={`/login?next=${encodeURIComponent(props.next)}`}>تغییر شماره</a>
             </p>
             <label>کد</label>
             <input name="code" class="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength={6} required autofocus />
@@ -101,7 +59,9 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
   const script = `
     (function poll(){
       fetch('/connect/status',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
-        if(d.connected){location.href=${JSON.stringify(props.next)};}else{setTimeout(poll,3000);}
+        if(d.connected){location.href=${JSON.stringify(props.next)};}
+        else if(${props.links.length ? "false" : "d.bots>0"}){location.reload();}
+        else{setTimeout(poll,3000);}
       }).catch(()=>setTimeout(poll,5000));
     })();`;
   return (
@@ -113,6 +73,9 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
           سفارش‌ها، فیش‌های واریز و همه اطلاع‌رسانی‌ها از طریق بات برایتان ارسال می‌شود. یکی از دکمه‌های زیر را بزنید و در بات
           «شروع» (Start) را بزنید.
         </p>
+        {!props.links.length && (
+          <div class="warnbox">بات سایت هنوز راه‌اندازی نشده است. کمی بعد دوباره سر بزنید؛ این صفحه خودکار ادامه می‌دهد.</div>
+        )}
         <div class="row" style="justify-content:center;margin:18px 0">
           {props.links.map((l) => (
             <a class="btn" href={l.url} target="_blank" rel="noopener">{label[l.kind] ?? l.kind}</a>

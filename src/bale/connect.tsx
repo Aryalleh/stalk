@@ -52,12 +52,13 @@ connect.get("/connect", async (c) => {
   const next = safeNext(c.req.query("next"));
   const s = c.get("settings");
   const bots = activeBots(s);
-  if (isConnected(user) || !bots.length) return c.redirect(next);
+  if (isConnected(user) || (!bots.length && user.is_admin)) return c.redirect(next);
+  if (!bots.length) return render(c, <ConnectPage user={user} next={next} links={[]} />);
   const token = await connectToken(c.env.DB, user.id);
   return render(c, <ConnectPage user={user} next={next} links={bots.map((k) => ({ kind: k, url: botLink(s, k, token) }))} />);
 });
 
 connect.get("/connect/status", (c) => {
   const user = c.get("user") as User | null;
-  return c.json({ connected: !!user && isConnected(user) });
+  return c.json({ connected: !!user && isConnected(user), bots: activeBots(c.get("settings")).length });
 });

@@ -403,23 +403,41 @@ export function AdminPage(props: {
   );
 }
 
-export function SetupPage(props: { error?: string; values?: Record<string, string> }) {
+export function SetupPage(props: { step: "details" | "code"; error?: string; values?: Record<string, string> }) {
   const v = props.values ?? {};
   return (
     <Layout title="راه‌اندازی" user={null}>
-      <div class="card" style="max-width:420px;margin:40px auto">
-        <h1>ساخت مدیر پلتفرم</h1>
-        <p class="warnbox">اولین کسی که این فرم را پر کند مدیر سایت می‌شود و بعد این صفحه بسته می‌شود؛ بلافاصله بعد از راه‌اندازی پرش کنید.</p>
-        <form method="post" action="/setup">
-          <Errors errors={[props.error]} />
-          <label>نام</label>
-          <input name="name" value={v.name ?? ""} required />
-          <label>شماره موبایل</label>
-          <input name="phone" value={v.phone ?? ""} class="ltr" required />
-          <label>رمز عبور (حداقل ۱۰ کاراکتر)</label>
-          <input name="password" type="password" class="ltr" minlength={10} required />
-          <p><button>ساخت</button></p>
-        </form>
+      <div class="card" style="max-width:460px;margin:40px auto">
+        <h1>راه‌اندازی سایت</h1>
+        <Errors errors={[props.error]} />
+        {props.step === "details" ? (
+          <form method="post" action="/setup">
+            <p class="warnbox">
+              ورود به سایت فقط با کد یکبار مصرف بله است، پس اول سرویس «سفیر» بله را وصل کنید. اولین کسی که این فرم را کامل کند مدیر سایت
+              می‌شود و بعد این صفحه بسته می‌شود.
+            </p>
+            <label>نام شما</label>
+            <input name="name" value={v.name ?? ""} required maxlength={80} />
+            <label>شماره موبایل شما (کد تأیید به بله همین شماره می‌رود)</label>
+            <input name="phone" value={v.phone ?? ""} class="ltr" inputmode="tel" required />
+            <label>کلید API سفیر (api-access-key از پنل کسب‌وکار بله)</label>
+            <input name="safir_api_key" class="ltr" autocomplete="off" required />
+            <label>شناسه عددی بازوی فرستنده (bot_id)</label>
+            <input name="safir_bot_id" value={v.safir_bot_id ?? ""} class="ltr" inputmode="numeric" required />
+            <p><button>ارسال کد تأیید</button></p>
+          </form>
+        ) : (
+          <form method="post" action="/setup/verify">
+            <input type="hidden" name="name" value={v.name} />
+            <input type="hidden" name="phone" value={v.phone} />
+            <p class="muted small" style="margin-top:0">
+              کد ۶ رقمی به بله شماره <span class="dt">{v.phone}</span> ارسال شد.
+            </p>
+            <label>کد</label>
+            <input name="code" class="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength={6} required autofocus />
+            <p><button>ساخت حساب مدیر</button></p>
+          </form>
+        )}
       </div>
     </Layout>
   );
@@ -499,17 +517,12 @@ export function AdminSettingsPage(props: {
 
         <h2 style="margin-top:20px">سفیر بله (کد ورود و پیام به شماره)</h2>
         <p class="muted small" style="margin-top:0">
-          از پنل کسب‌وکار بله بعد از ساخت «سفیر» بگیرید. با آن، کاربران با کد یکبار مصرف وارد می‌شوند و CRM می‌تواند به شماره‌هایی که هنوز به بات
+          ورود و ثبت‌نام سایت فقط با همین سرویس است (برای همین قابل حذف نیست). با آن، کاربران با کد یکبار مصرف وارد می‌شوند و CRM می‌تواند به شماره‌هایی که هنوز به بات
           وصل نیستند پیام بدهد (هزینه‌دار). پیام به شماره‌های وصل‌شده از طریق بات و رایگان است.
         </p>
         {s.safir_api_key && <p class="small">کلید فعلی: <span class="dt">{mask(s.safir_api_key)}</span></p>}
         <label>{s.safir_api_key ? "کلید API جدید (برای نگه‌داشتن کلید فعلی خالی بگذارید)" : "کلید API (api-access-key)"}</label>
         <input name="safir_api_key" class="ltr" autocomplete="off" />
-        {s.safir_api_key && (
-          <label class="row" style="color:var(--text)">
-            <input type="checkbox" name="safir_remove" value="1" style="width:auto" /> حذف کلید
-          </label>
-        )}
         <label>شناسه عددی بازوی فرستنده (bot_id)</label>
         <input name="safir_bot_id" value={s.safir_bot_id} class="ltr" inputmode="numeric" style="max-width:220px" />
         {s.safir_api_key && s.safir_bot_id && (

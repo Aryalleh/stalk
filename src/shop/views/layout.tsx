@@ -78,8 +78,7 @@ export function Layout(props: { title: string; user: User | null; children?: Chi
             </>
           ) : (
             <>
-              <a href="/login">ورود</a>
-              <a class="btn small" href="/register">ثبت‌نام</a>
+              <a class="btn small" href="/login">ورود / ثبت‌نام</a>
             </>
           )}
         </header>

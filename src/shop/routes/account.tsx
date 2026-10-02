@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
-import { deleteSession, hashPassword, verifyPassword } from "../../../lib/auth";
+import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { normCity, now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import { upsertCustomer } from "../../crm/sync";
@@ -9,100 +9,87 @@ import type { C, Env } from "../../env";
 import { SESSION_COOKIE } from "../../session";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
-import { safirReady } from "../../settings";
-import { CodeLoginPage, LoginPage, MyWishlistsPage, RegisterPage, WishlistFormPage } from "../views/account";
+import { loadSettings, safirReady, saveSettings } from "../../settings";
+import { CodeLoginPage, MyWishlistsPage, WishlistFormPage } from "../views/account";
 import { SetupPage } from "../views/panel";
 import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
 
 export const account = new Hono<Env>();
 const MOBILE = /^09\d{9}$/;
 
-account.get("/login", (c) => render(c, <LoginPage next={safeNext(c.req.query("next"))} codeLogin={safirReady(c.get("settings"))} />));
+// Accounts are created and signed in to only with a one-time code sent in Bale (Safir); there are no passwords.
+
+const isLocal = (c: C) => ["localhost", "127.0.0.1"].includes(new URL(c.req.url).hostname);
+
+/** Issue a code for the phone and deliver it in Bale. Returns an error message, or "" on success. */
+async function sendCode(c: C, phone: string): Promise<string> {
+  const issued = await issueCode(c.env.DB, phone);
+  if ("wait" in issued) return issued.wait;
+  try {
+    await sendSafirOtp(c.get("settings"), phone, issued.code);
+    return "";
+  } catch (e) {
+    if (isLocal(c)) {
+      // Local development only: Safir is usually unreachable, so show the code in the wrangler console.
+      console.log(`[dev] login code for ${phone}: ${issued.code}`);
+      return "";
+    }
+    await cancelCode(c.env.DB, phone);
+    console.error(e);
+    return e instanceof SafirError ? e.message : "ارسال کد ناموفق بود؛ دوباره تلاش کنید.";
+  }
+}
+
+const userByPhone = (c: C, phone: string) => c.env.DB.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+const hasAdmin = async (c: C) => !!(await c.env.DB.prepare("SELECT 1 FROM users WHERE is_admin = 1 LIMIT 1").first());
+
+account.get("/login", async (c) => {
+  const next = safeNext(c.req.query("next"));
+  if (!safirReady(c.get("settings"))) return render(c, <CodeLoginPage next={next} step="unavailable" setupOpen={!(await hasAdmin(c))} />, 503);
+  return render(c, <CodeLoginPage next={next} step="phone" />);
+});
 
 account.post("/login", async (c) => {
-  const f = await form(c);
-  const phone = normalizePhone(f.phone);
-  const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE phone = ?").bind(phone).first<{ id: number; password_hash: string }>();
-  if (!user || !(await verifyPassword(f.password ?? "", user.password_hash))) {
-    return render(c, <LoginPage next={safeNext(f.next)} phone={f.phone} codeLogin={safirReady(c.get("settings"))} error="شماره موبایل یا رمز عبور اشتباه است." />, 401);
-  }
-  return startSession(c, user.id, f.next);
-});
-
-account.get("/register", (c) => render(c, <RegisterPage next={safeNext(c.req.query("next"))} codeLogin={safirReady(c.get("settings"))} />));
-
-account.post("/register", async (c) => {
-  const f = await form(c);
-  const phone = normalizePhone(f.phone);
-  const errors: string[] = [];
-  if (!f.name) errors.push("نام لازم است.");
-  if (!MOBILE.test(phone)) errors.push("شماره موبایل نامعتبر است.");
-  if ((f.password ?? "").length < 8) errors.push("رمز عبور باید حداقل ۸ کاراکتر باشد.");
-  const fail = (errs: string[]) => render(c, <RegisterPage next={safeNext(f.next)} errors={errs} values={f} />, 400);
-  if (errors.length) return fail(errors);
-  const row = await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
-    .bind(phone, f.name, await hashPassword(f.password), now())
-    .first<{ id: number }>();
-  if (!row) return fail(["این شماره قبلاً ثبت‌نام کرده است. وارد شوید."]);
-  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "ثبت‌نام در سایت" }));
-  return startSession(c, row.id, f.next);
-});
-
-// ---------- login / sign-up with a one-time code sent in Bale (Safir) ----------
-
-account.get("/login/code", (c) => {
   if (!safirReady(c.get("settings"))) return c.redirect("/login");
-  return render(c, <CodeLoginPage next={safeNext(c.req.query("next"))} step="phone" />);
-});
-
-account.post("/login/code", async (c) => {
-  const s = c.get("settings");
-  if (!safirReady(s)) return c.redirect("/login");
   const f = await form(c);
   const next = safeNext(f.next);
   const phone = normalizePhone(f.phone ?? "");
   const again = (error: string) => render(c, <CodeLoginPage next={next} step="phone" phone={f.phone} error={error} />, 400);
   if (!MOBILE.test(phone)) return again("شماره موبایل نامعتبر است.");
-  const issued = await issueCode(c.env.DB, phone);
-  if ("wait" in issued) return again(issued.wait);
-  try {
-    await sendSafirOtp(s, phone, issued.code);
-  } catch (e) {
-    await cancelCode(c.env.DB, phone);
-    console.error(e);
-    return again(e instanceof SafirError ? e.message : "ارسال کد ناموفق بود؛ دوباره تلاش کنید.");
-  }
-  return c.redirect(`/login/code/verify?phone=${phone}&next=${encodeURIComponent(next)}`);
+  const error = await sendCode(c, phone);
+  if (error) return again(error);
+  return c.redirect(`/login/verify?phone=${phone}&next=${encodeURIComponent(next)}`);
 });
 
-const userByPhone = (c: C, phone: string) => c.env.DB.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
-
-account.get("/login/code/verify", async (c) => {
+account.get("/login/verify", async (c) => {
   const phone = normalizePhone(c.req.query("phone") ?? "");
-  if (!MOBILE.test(phone)) return c.redirect("/login/code");
+  if (!MOBILE.test(phone)) return c.redirect("/login");
   const isNew = !(await userByPhone(c, phone));
   return render(c, <CodeLoginPage next={safeNext(c.req.query("next"))} step="code" phone={phone} isNew={isNew} />);
 });
 
-account.post("/login/code/verify", async (c) => {
+account.post("/login/verify", async (c) => {
   const f = await form(c);
   const next = safeNext(f.next);
   const phone = normalizePhone(f.phone ?? "");
-  if (!MOBILE.test(phone)) return c.redirect("/login/code");
+  if (!MOBILE.test(phone)) return c.redirect("/login");
   const existing = await userByPhone(c, phone);
   const fail = (error: string) => render(c, <CodeLoginPage next={next} step="code" phone={phone} isNew={!existing} name={f.name} error={error} />, 400);
   if (!existing && !f.name) return fail("نام و نام خانوادگی را وارد کنید.");
   const ok = await verifyCode(c.env.DB, phone, normalizeDigits(f.code ?? ""));
   if (ok !== true) return fail(ok);
   if (existing) return startSession(c, existing.id, next);
-  // New account without a password ("!" never matches a hash); they can always log in with a code.
   const row = await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, created_at) VALUES (?, ?, '!', ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
     .bind(phone, f.name.slice(0, 80), now())
     .first<{ id: number }>();
   const id = row?.id ?? (await userByPhone(c, phone))!.id;
-  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "ثبت‌نام در سایت (کد بله)" }));
+  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "ثبت‌نام در سایت" }));
   return startSession(c, id, next);
 });
+
+// Old addresses.
+account.get("/register", (c) => c.redirect(`/login${new URL(c.req.url).search}`));
+account.get("/login/code", (c) => c.redirect(`/login${new URL(c.req.url).search}`));
 
 account.post("/logout", async (c) => {
   await deleteSession(c.env.DB, getCookie(c, SESSION_COOKIE));
@@ -110,28 +97,45 @@ account.post("/logout", async (c) => {
   return c.redirect("/");
 });
 
-// The first person to complete /setup becomes platform admin; the page closes once an admin exists,
-// so run it right after deploying.
-const hasAdmin = async (c: C) => !!(await c.env.DB.prepare("SELECT 1 FROM users WHERE is_admin = 1 LIMIT 1").first());
+// ---------- first platform admin ----------
+// Login needs Safir, so setup takes the Safir key and bot id and proves the admin's phone with a code.
+// The first person to finish becomes admin and the page closes, so run it right after deploying.
 
 account.get("/setup", async (c) => {
   if (await hasAdmin(c)) return c.redirect("/login");
-  return render(c, <SetupPage />);
+  return render(c, <SetupPage step="details" values={{ safir_bot_id: c.get("settings").safir_bot_id }} />);
 });
 
 account.post("/setup", async (c) => {
   if (await hasAdmin(c)) return c.redirect("/login");
   const f = await form(c);
-  const phone = normalizePhone(f.phone);
-  if (!f.name || !MOBILE.test(phone) || (f.password ?? "").length < 10) {
-    return render(c, <SetupPage error="نام، موبایل معتبر و رمز حداقل ۱۰ کاراکتری لازم است." values={f} />, 400);
-  }
+  const phone = normalizePhone(f.phone ?? "");
+  const botId = normalizeDigits(f.safir_bot_id ?? "");
+  const fail = (error: string) => render(c, <SetupPage step="details" values={f} error={error} />, 400);
+  if (!f.name || !MOBILE.test(phone)) return fail("نام و شماره موبایل معتبر لازم است.");
+  if (!/^[\w.:-]{10,300}$/.test(f.safir_api_key ?? "")) return fail("کلید API سفیر را وارد کنید.");
+  if (!/^\d{1,20}$/.test(botId)) return fail("شناسه عددی بازو را وارد کنید.");
+  if (await userByPhone(c, phone)) return fail("این شماره قبلاً در سایت حساب دارد؛ شماره دیگری وارد کنید.");
+  await saveSettings(c.env.DB, { safir_api_key: f.safir_api_key, safir_bot_id: botId });
+  c.set("settings", await loadSettings(c.env.DB));
+  const error = await sendCode(c, phone);
+  if (error) return fail(`ارسال کد ناموفق بود (کلید و شناسه بازو را بررسی کنید): ${error}`);
+  return render(c, <SetupPage step="code" values={{ name: f.name, phone }} />);
+});
+
+account.post("/setup/verify", async (c) => {
+  if (await hasAdmin(c)) return c.redirect("/login");
+  const f = await form(c);
+  const phone = normalizePhone(f.phone ?? "");
+  if (!f.name || !MOBILE.test(phone)) return c.redirect("/setup");
+  const ok = await verifyCode(c.env.DB, phone, normalizeDigits(f.code ?? ""));
+  if (ok !== true) return render(c, <SetupPage step="code" values={{ name: f.name, phone }} error={ok} />, 400);
   const row = await c.env.DB.prepare(
-    "INSERT INTO users (phone, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT (phone) DO NOTHING RETURNING id",
+    "INSERT INTO users (phone, name, password_hash, is_admin, created_at) VALUES (?, ?, '!', 1, ?) ON CONFLICT (phone) DO NOTHING RETURNING id",
   )
-    .bind(phone, f.name, await hashPassword(f.password), now())
+    .bind(phone, f.name.slice(0, 80), now())
     .first<{ id: number }>();
-  if (!row) return render(c, <SetupPage error="این شماره قبلاً در سایت حساب دارد؛ شماره دیگری وارد کنید." values={f} />, 400);
+  if (!row) return c.redirect("/setup");
   c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "مدیر سایت" }));
   return startSession(c, row.id, "/admin/settings");
 });
