@@ -453,6 +453,20 @@ admin.post("/admin/settings/connect/:kind{bale|telegram}", async (c) => {
     await saveSiteSettings(c.env.DB, { [`${kind}_bot_username`]: username });
     return settingsPage(c, { ok: `بات @${username} وصل شد. کاربران بعد از ثبت‌نام از صفحه «اتصال به بات» به آن وصل می‌شوند.` });
   } catch (e) {
-    return settingsPage(c, { error: `اتصال ناموفق: ${(e as Error).message}` }, 400);
+    return settingsPage(c, { error: connectErrorMessage(String((e as Error).message), new URL(base).host, !!s.site_url) }, 400);
   }
 });
+
+/** Explain the usual bot-connect failures in Persian, naming the domain that was sent to Bale/Telegram. */
+export function connectErrorMessage(raw: string, host: string, fromSetting: boolean) {
+  const source = fromSetting ? "«آدرس سایت» در همین صفحه" : "آدرسی که این صفحه با آن باز شده";
+  if (/resolve host|name resolution|bad webhook/i.test(raw)) {
+    return (
+      `اتصال ناموفق: سرور بله/تلگرام نتوانست دامنه ${host} را پیدا کند (این دامنه از ${source} آمده). ` +
+      "اگر دامنه را تازه وصل کرده‌اید چند دقیقه صبر کنید و دوباره «اتصال» را بزنید؛ اگر اشتباه تایپ شده، «آدرس سایت» را اصلاح یا خالی کنید " +
+      `(خالی = همان آدرس workers.dev). جزئیات: ${raw}`
+    );
+  }
+  if (/unauthorized|401|404/i.test(raw)) return `اتصال ناموفق: توکن بات نامعتبر است؛ توکن را دوباره از BotFather بگیرید. جزئیات: ${raw}`;
+  return `اتصال ناموفق: ${raw}`;
+}

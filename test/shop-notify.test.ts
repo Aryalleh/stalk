@@ -81,3 +81,13 @@ describe("bot api", () => {
     expect(calls.map((c) => c[0])).toEqual(["https://tapi.bale.ai/bottok/getMe", "https://tapi.bale.ai/bottok/setWebhook"]);
   });
 });
+
+describe("bot connect errors", () => {
+  it("names the domain when Telegram can't resolve it", async () => {
+    const { connectErrorMessage } = await import("../src/shop/routes/panel");
+    const msg = connectErrorMessage("telegram setWebhook 400: Bad Request: bad webhook: Failed to resolve host", "shop.example.ir", true);
+    expect(msg).toContain("shop.example.ir");
+    expect(msg).toContain("«آدرس سایت»");
+    expect(connectErrorMessage("bale getMe 401: Unauthorized", "x", false)).toContain("توکن بات نامعتبر");
+  });
+});
