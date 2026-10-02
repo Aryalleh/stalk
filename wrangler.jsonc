@@ -9,8 +9,7 @@
     {
       "binding": "DB",
       "database_name": "app",
-      // Replace with the id printed by: npx wrangler d1 create app
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "71822bce-b8b6-4b62-b3e1-da79c293740d",
       "migrations_dir": "migrations"
     }
   ],

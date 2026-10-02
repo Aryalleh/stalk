@@ -61,7 +61,7 @@
 ```bash
 npm install
 npx wrangler login
-npx wrangler d1 create app                    # database_id را در wrangler.jsonc بگذارید
+npx wrangler d1 create app                    # فقط برای راه‌اندازی تازه: database_id را در wrangler.jsonc عوض کنید
 npx wrangler r2 bucket create gift-shop-images
 npm run deploy
 ```
