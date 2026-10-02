@@ -754,8 +754,18 @@ export function AdminSettingsPage(props: {
         <input name="site_url" value={s.site_url} class="ltr" placeholder={props.webhookBase} maxlength={200} />
         <label>مهلت واریز خریدار (دقیقه) — در این مدت آرزو برای او رزرو است</label>
         <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
+        <label>توضیح سایت برای گوگل، دستیارهای هوش مصنوعی و پیش‌نمایش لینک‌ها (حدود ۱۵۰ حرف؛ خالی = متن پیش‌فرض)</label>
+        <textarea name="site_description" maxlength={300} style="min-height:70px">{s.site_description}</textarea>
         <label>دسته‌بندی محصولات (هر خط یکی؛ در صفحه اول و فرم محصول نمایش داده می‌شود)</label>
         <textarea name="categories" maxlength={1000} style="min-height:150px">{s.categories}</textarea>
+        <div class="card" style="margin-top:16px">
+          <h2>مینی‌اپ بله و تلگرام (ورود خودکار)</h2>
+          <p class="muted small" style="margin:0">
+            با «اتصال» بات، دکمه منوی بات خودکار سایت را داخل بله/تلگرام باز می‌کند. برای ساخت مینی‌اپ جدا در BotFather (مثلاً با /newapp)،
+            این آدرس را بدهید: <b class="dt">{`${props.webhookBase}/app`}</b>
+            <br />کاربری که بات را قبلاً وصل کرده، داخل مینی‌اپ بدون کد وارد می‌شود؛ کاربر جدید یک‌بار با کد وارد می‌شود و حسابش خودکار به بات وصل می‌شود.
+          </p>
+        </div>
         {bot("bale", "بله", "@BotFather در بله")}
         {bot("telegram", "تلگرام", "@BotFather در تلگرام")}
 

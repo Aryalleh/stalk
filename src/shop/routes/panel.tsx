@@ -472,6 +472,7 @@ async function saveAdminSettings(c: C): Promise<string> {
   const minutes = Math.floor(Number(normalizeDigits(f.reservation_minutes ?? "")));
   if (!(minutes >= 5 && minutes <= 1440)) return "مهلت واریز باید بین ۵ تا ۱۴۴۰ دقیقه باشد.";
   const values: Partial<Settings> = { site_name: f.site_name.slice(0, 40), site_url: siteUrl, reservation_minutes: String(minutes) };
+  if (f.site_description !== undefined) values.site_description = f.site_description.replace(/\s+/g, " ").trim().slice(0, 300);
   if (f.categories !== undefined) {
     const cats = [...new Set(f.categories.split(/\r?\n/).map((x) => x.trim().slice(0, 40)).filter(Boolean))];
     if (cats.length > 30) return "حداکثر ۳۰ دسته‌بندی.";
@@ -531,7 +532,7 @@ admin.post("/admin/settings/connect/:kind{bale|telegram}", async (c) => {
     return settingsPage(c, { error: "بات فقط به آدرس https وصل می‌شود؛ سایت را روی دامنه واقعی باز کنید یا «آدرس سایت» را تنظیم کنید." }, 400);
   }
   try {
-    const username = await connectBot(kind, token, `${base}/bot/${kind}/${await webhookSecret(c.env.DB, s)}`);
+    const username = await connectBot(kind, token, `${base}/bot/${kind}/${await webhookSecret(c.env.DB, s)}`, `${base}/app`, s.site_name);
     await saveSiteSettings(c.env.DB, { [`${kind}_bot_username`]: username });
     return settingsPage(c, { ok: `بات @${username} وصل شد. کاربران بعد از ثبت‌نام از صفحه «اتصال به بات» به آن وصل می‌شوند.` });
   } catch (e) {

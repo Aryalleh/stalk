@@ -15,8 +15,15 @@ const HEAD_LINKS = (
   </>
 );
 
-/** Small client helpers used by several pages: copy-to-clipboard and native share. */
+/** Small client helpers used by several pages: copy-to-clipboard, native share, back, PWA install. */
 const HELPERS = `
+if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+var installPrompt = null;
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault(); installPrompt = e;
+  document.querySelectorAll('[data-install]').forEach(function (b) { b.classList.remove('hidden'); });
+});
+window.addEventListener('appinstalled', function () { document.querySelectorAll('[data-install]').forEach(function (b) { b.classList.add('hidden'); }); });
 document.addEventListener('click', function (e) {
   var c = e.target.closest('[data-copy]');
   if (c) { e.preventDefault(); navigator.clipboard && navigator.clipboard.writeText(c.getAttribute('data-copy'));
@@ -25,6 +32,8 @@ document.addEventListener('click', function (e) {
   if (s) { e.preventDefault(); var url = s.getAttribute('data-share') || location.href, title = document.title;
     if (navigator.share) navigator.share({ title: title, url: url }).catch(function () {});
     else if (navigator.clipboard) { navigator.clipboard.writeText(url); s.classList.add('text-pink'); } }
+  var i = e.target.closest('[data-install]');
+  if (i && installPrompt) { e.preventDefault(); installPrompt.prompt(); installPrompt = null; }
   var b = e.target.closest('[data-back]');
   if (b) { e.preventDefault(); if (history.length > 1 && document.referrer.indexOf(location.host) > -1) history.back(); else location.href = b.getAttribute('data-back') || '/'; }
 });`;
@@ -96,6 +105,69 @@ function DesktopNav(props: { user: User | null }) {
   );
 }
 
+/** Per-page search engine / AI answer / link preview data. Pages are noindex unless `index` is set. */
+export interface Seo {
+  description?: string;
+  /** Path or absolute URL of the preview image. */
+  image?: string;
+  /** Canonical path (default: the current path without query). */
+  canonical?: string;
+  type?: "website" | "product" | "profile" | "article";
+  /** schema.org objects, emitted as JSON-LD. */
+  jsonLd?: object[];
+  index?: boolean;
+  /** City for geo meta tags (shops). */
+  place?: string;
+  /** Extra <meta property=…> pairs (e.g. product price). */
+  props?: [string, string][];
+}
+
+const abs = (origin: string, url: string) => (/^https?:\/\//.test(url) ? url : origin + url);
+/** JSON for a <script> tag: escape "<" so text can never close the tag. */
+export const jsonLd = (o: object) => JSON.stringify(o).replace(/</g, "\\u003c");
+
+function SeoTags(props: { title: string; seo: Seo }) {
+  const site = useSite();
+  const seo = props.seo;
+  const url = abs(site.origin, seo.canonical ?? site.path);
+  const image = abs(site.origin, seo.image || "/static/icon-512.png");
+  const description = (seo.description ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  return (
+    <>
+      {description && <meta name="description" content={description} />}
+      <meta name="robots" content={seo.index ? "index, follow, max-image-preview:large" : "noindex, follow"} />
+      {seo.index && <link rel="canonical" href={url} />}
+      <link rel="alternate" hreflang="fa-IR" href={url} />
+      <meta property="og:site_name" content={site.site_name} />
+      <meta property="og:locale" content="fa_IR" />
+      <meta property="og:type" content={seo.type ?? "website"} />
+      <meta property="og:title" content={props.title} />
+      {description && <meta property="og:description" content={description} />}
+      <meta property="og:url" content={url} />
+      <meta property="og:image" content={image} />
+      <meta name="twitter:card" content={seo.image ? "summary_large_image" : "summary"} />
+      <meta name="twitter:title" content={props.title} />
+      {description && <meta name="twitter:description" content={description} />}
+      <meta name="twitter:image" content={image} />
+      <meta name="geo.region" content="IR" />
+      {seo.place && <meta name="geo.placename" content={seo.place} />}
+      {(seo.props ?? []).map(([k, v]) => <meta property={k} content={v} />)}
+      {(seo.jsonLd ?? []).map((o) => <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(o) }} />)}
+    </>
+  );
+}
+
+function Footer() {
+  const site = useSite();
+  return (
+    <footer class="max-w-5xl mx-auto px-4 pt-10 pb-4 text-center text-xs text-muted space-x-reverse space-x-4">
+      <a href="/about" class="hover:text-fg">درباره {site.site_name}</a>
+      <a href="/faq" class="hover:text-fg">سوالات متداول</a>
+      <a href="/search" class="hover:text-fg">جستجوی هدیه</a>
+    </footer>
+  );
+}
+
 /**
  * Page shell.
  * - `nav`: which bottom tab is active ("none" hides the tab bar, for focused flows like checkout).
@@ -112,17 +184,29 @@ export function Layout(props: {
   bare?: boolean;
   panel?: boolean;
   wide?: boolean;
+  seo?: Seo;
+  /** Use the title as is, without " · site name". */
+  fullTitle?: boolean;
 }) {
   const site = useSite();
   const nav = props.nav ?? "home";
   const showNav = nav !== "none" && !props.panel;
+  const title = props.fullTitle ? props.title : `${props.title} · ${site.site_name}`;
   return (
     <html lang="fa" dir="rtl">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content={props.panel ? "#ffffff" : "#17131a"} />
-        <title>{props.title} · {site.site_name}</title>
+        <title>{title}</title>
+        <SeoTags title={title} seo={props.seo ?? {}} />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content={site.site_name} />
         {HEAD_LINKS}
         <link rel="stylesheet" href={CSS_URL} />
       </head>
@@ -139,6 +223,7 @@ export function Layout(props: {
           </header>
         )}
         <main class={`${props.wide ? "max-w-5xl" : "max-w-3xl"} mx-auto ${props.bare ? "" : "ui px-4 py-6"}`}>{props.children}</main>
+        {showNav && <Footer />}
         {showNav && <BottomNav active={nav} user={props.user} />}
         <script dangerouslySetInnerHTML={{ __html: HELPERS }} />
       </body>

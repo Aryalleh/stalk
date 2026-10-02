@@ -64,7 +64,7 @@ store.get("/p/:id{[0-9]+}", async (c) => {
   if (!product) return c.notFound();
   const user = c.get("user");
   const [wishlists, images, packages, shop] = await Promise.all([
-    user ? c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all<Wishlist>().then((r) => r.results) : [],
+    user ? c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY created_at DESC").bind(user.id).all<Wishlist>().then((r) => r.results) : [],
     productImages(c.env.DB, id),
     productPackages(c.env.DB, id),
     c.env.DB.prepare(
@@ -106,7 +106,7 @@ async function wishlistWithOwner(db: D1Database, where: string, value: string | 
 
 store.get("/w/:slug", async (c) => {
   const w = await wishlistWithOwner(c.env.DB, "w.slug = ?", c.req.param("slug"));
-  if (!w) return c.notFound();
+  if (!w || w.is_direct) return c.notFound();
   const user = c.get("user");
   return render(
     c,
@@ -187,7 +187,7 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
 
 async function orderByToken(c: C) {
   return c.env.DB.prepare(
-    `SELECT o.*, w.slug AS wishlist_slug, u.name AS owner_name, s.card_holder, s.name AS shop_name,
+    `SELECT o.*, w.slug AS wishlist_slug, w.is_direct, u.name AS owner_name, s.card_holder, s.name AS shop_name,
             COALESCE(p.image_key, '') AS image_key
      FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id JOIN shops s ON s.id = o.shop_id
      LEFT JOIN products p ON p.id = o.product_id

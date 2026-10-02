@@ -2,7 +2,7 @@ import { formatJalali } from "../../../lib/jalali";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
-import { Avatar, Errors, Layout, Thumb } from "./layout";
+import { Avatar, Errors, Layout, Thumb, TitleBar } from "./layout";
 
 /** Centered dark card for the account flows (login, setup). */
 function AuthShell(props: { title: string; icon: string; subtitle: string; children?: unknown }) {
@@ -223,7 +223,9 @@ export function ProfilePage(props: {
           {action("/me/wishlists/new", "fa-plus", "لیست جدید", true)}
           {props.shareUrl ? action("#", "fa-share-nodes", "اشتراک‌گذاری", false, { "data-share": props.shareUrl }) : null}
           {action("/me/wishlists", "fa-list", "لیست‌ها")}
+          {action("/me/orders", "fa-bag-shopping", "خریدهای من")}
           {action("/me/settings", "fa-robot", "اتصال ربات")}
+          {action("#", "fa-download", "نصب اپ", false, { "data-install": "", class: "hidden flex flex-col items-center gap-2 min-w-[80px]" })}
           {action("/panel", "fa-store", "فروشگاه من")}
         </section>
 
@@ -466,6 +468,46 @@ export function WishlistFormPage(props: {
           </table>
         </div>
       )}
+    </Layout>
+  );
+}
+
+export interface MyOrder {
+  token: string;
+  id: number;
+  product_title: string;
+  amount: number;
+  status: Order["status"];
+  created_at: string;
+  image_key: string;
+  owner_name: string;
+  is_direct: number;
+}
+
+/** Everything the signed-in person has bought: gifts for others and direct purchases for themselves. */
+export function MyOrdersPage(props: { user: User; orders: MyOrder[] }) {
+  return (
+    <Layout title="خریدهای من" user={props.user} nav="profile" header={<TitleBar title="خریدهای من" back="/me" />} bare>
+      <div class="px-6 pb-10 space-y-4">
+        {props.orders.length === 0 && (
+          <div class="bg-card rounded-2xl p-6 text-center text-sm text-muted">
+            هنوز خریدی ثبت نکرده‌اید. در صفحه هر محصول «خرید مستقیم» را بزنید یا از لیست آرزوی دوستانتان کادو بخرید.
+          </div>
+        )}
+        {props.orders.map((o) => (
+          <a href={`/order/${o.token}`} class="flex items-center gap-4 p-4 bg-card rounded-2xl border border-muted/5">
+            <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-2xl">
+              {o.image_key ? <img src={`/img/${o.image_key}`} alt="" class="w-full h-full object-cover" loading="lazy" /> : "🎁"}
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="text-sm font-bold text-fg truncate">{o.product_title}</h3>
+              <p class="text-[10px] text-muted">{o.is_direct ? "برای خودم" : `کادو برای ${o.owner_name}`} · <span class="dt">{formatJalali(o.created_at, false)}</span></p>
+              <p class="text-xs font-bold text-pink mt-1">{toman(o.amount)}</p>
+            </div>
+            <span class="text-[10px] text-muted text-left max-w-[90px]">{STATUS_LABEL[o.status]}</span>
+          </a>
+        ))}
+      </div>
     </Layout>
   );
 }

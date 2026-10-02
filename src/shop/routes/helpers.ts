@@ -1,7 +1,8 @@
-import { setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createSession } from "../../../lib/auth";
 import type { C } from "../../env";
 import { SESSION_COOKIE, type User } from "../../session";
+import { MINIAPP_COOKIE, linkPendingChat } from "../../bale/chatlink";
 
 export const PAGE = 24;
 export const pageParam = (c: C) => Math.max(1, Number(c.req.query("page")) || 1);
@@ -19,9 +20,26 @@ export function safeNext(next: string | undefined) {
   return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
 }
 
-export async function startSession(c: C, userId: number, next = "/") {
+/**
+ * Cookie options. Inside a Bale/Telegram mini app the site may run in a cross-site iframe (web
+ * clients), where only SameSite=None cookies work; Partitioned keeps them scoped to that embedding.
+ * Cross-site form posts are still refused by the CSRF (Origin) check.
+ */
+export function cookieOptions(maxAge: number, embedded: boolean) {
+  return embedded
+    ? ({ httpOnly: true, secure: true, sameSite: "None", partitioned: true, path: "/", maxAge } as const)
+    : ({ httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge } as const);
+}
+
+export async function startSession(c: C, userId: number, next = "/", embedded = false) {
   const { token, maxAge } = await createSession(c.env.DB, userId);
-  setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge });
+  const pending = getCookie(c, MINIAPP_COOKIE);
+  if (pending) {
+    // Signed in from a mini app: connect that Bale/Telegram chat to this account automatically.
+    await linkPendingChat(c.env.DB, pending, userId);
+    deleteCookie(c, MINIAPP_COOKIE, cookieOptions(0, true));
+  }
+  setCookie(c, SESSION_COOKIE, token, cookieOptions(maxAge, embedded || !!pending));
   return c.redirect(safeNext(next));
 }
 

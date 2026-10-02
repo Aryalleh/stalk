@@ -4,7 +4,7 @@ import { normalizePhone } from "../../lib/normalize";
 import type { C, Env } from "../env";
 import { confirmOrder, rejectOrder, shopOwnerChats } from "../shop/orders";
 import { siteUrl } from "../shop/routes/helpers";
-import { answerCallback, botToken, clearButtons, sendBotMessage, type BotKind } from "./botapi";
+import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, type BotKind } from "./botapi";
 import { useConnectToken } from "./connect";
 import { saveLink } from "./links";
 
@@ -92,7 +92,12 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     return c.json({ ok: true });
   }
 
-  reply(`سلام! به بات ${s.site_name} خوش آمدید.\nبرای اتصال حساب سایت، از صفحه «اتصال به بات» در سایت وارد شوید.`, shareMarkup);
+  const app = openAppMarkup(`${siteUrl(c)}/app`, `🎁 باز کردن ${s.site_name}`);
+  reply(
+    `سلام! به بات ${s.site_name} خوش آمدید.\n` +
+      (app ? "با دکمه زیر سایت را همین‌جا باز کنید؛ ورود و اتصال حساب خودکار انجام می‌شود." : "برای اتصال حساب سایت، از صفحه «اتصال به بات» در سایت وارد شوید."),
+    app ?? shareMarkup,
+  );
   return c.json({ ok: true });
 });
 

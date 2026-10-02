@@ -4,7 +4,8 @@
   "main": "src/index.tsx",
   "compatibility_date": "2026-09-01",
   // Migrations are bundled as text and applied automatically on startup (src/migrate.ts).
-  "rules": [{ "type": "Text", "globs": ["**/*.sql", "**/*.css"], "fallthrough": true }],
+  "rules": [{ "type": "Text", "globs": ["**/*.sql", "**/*.css", "**/*.svg"], "fallthrough": true },
+    { "type": "Data", "globs": ["**/*.png"], "fallthrough": true }],
   "d1_databases": [
     {
       "binding": "DB",

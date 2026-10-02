@@ -68,6 +68,7 @@ export interface Wishlist {
   postal_code: string;
   city: string;
   is_open: number;
+  is_direct: number; // 1 = "buy for myself" (hidden list holding the buyer's own address)
   created_at: string;
 }
 

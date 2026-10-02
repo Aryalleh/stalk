@@ -14,6 +14,7 @@ export const DEFAULTS = {
   safir_bot_id: "", // numeric id of the bot Safir sends as
   categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line
   featured_shop_id: "", // the "shop of the week" banner on the home page
+  site_description: "", // meta description of the home page (search engines, AI answers, link previews); empty = default text
 };
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -61,3 +62,8 @@ export const categoryList = (s: Settings) =>
     .split("\n")
     .map((c) => c.trim())
     .filter(Boolean);
+
+/** Home page description for search engines and link previews. */
+export const siteDescription = (s: Settings) =>
+  s.site_description ||
+  `${s.site_name}: لیست آرزوی آنلاین بساز، لینکش را برای دوستانت بفرست و از فروشگاه‌های ایرانی کادو بگیر. پرداخت کارت به کارت مستقیم به حساب فروشگاه و ارسال به آدرس محرمانه گیرنده.`;

@@ -15,10 +15,14 @@ import {
   type Shop,
   type Wishlist,
 } from "../db";
+import { CITIES } from "../cities";
 import { DELIVERY_LABEL } from "../notify";
 import { readSizeGuide, type SizeGuide } from "../sizes";
 import type { User } from "../../session";
 import { useSite } from "../../render";
+import { siteDescription } from "../../settings";
+import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
+import type { Seo } from "./layout";
 import { Avatar, Errors, IconButton, Layout, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
@@ -144,8 +148,27 @@ export function HomePage(props: {
     </header>
   );
   const f = props.featured;
+  // Home and category pages are indexed (one canonical URL each); searches and later pages are not.
+  const isHome = !props.search && !props.q && !props.category;
+  const title = props.search
+    ? props.q ? `جستجوی «${props.q}»` : "جستجوی هدیه"
+    : props.category ? `خرید هدیه ${props.category}` : `${site.site_name} | لیست آرزو و خرید کادو آنلاین`;
+  const seo: Seo = isHome
+    ? { index: props.page === 1, canonical: "/", description: siteDescription(site), jsonLd: [organizationLd(site), websiteLd(site), itemListLd(site, "تازه‌ترین هدیه‌ها", props.products)] }
+    : props.category && !props.search && !props.q
+      ? {
+          index: props.page === 1,
+          canonical: `/?cat=${encodeURIComponent(props.category)}`,
+          description: `خرید هدیه و کادو ${props.category} از فروشگاه‌های ${site.site_name}؛ به لیست آرزویت اضافه کن یا مستقیم بخر. پرداخت کارت به کارت مستقیم به فروشگاه.`,
+          jsonLd: [
+            { "@context": "https://schema.org", "@type": "CollectionPage", name: `هدیه ${props.category}`, url: `${site.origin}/?cat=${encodeURIComponent(props.category)}`, isPartOf: { "@id": `${site.origin}/#website` } },
+            itemListLd(site, `هدیه ${props.category}`, props.products),
+            breadcrumbLd(site, [[site.site_name, "/"], [props.category, `/?cat=${encodeURIComponent(props.category)}`]]),
+          ],
+        }
+      : { description: siteDescription(site) };
   return (
-    <Layout title={props.search ? "جستجو" : "کادو بگیر، آرزو بساز"} user={props.user} nav={props.search ? "search" : "home"} header={header} bare wide>
+    <Layout title={title} fullTitle={isHome} user={props.user} nav={props.search ? "search" : "home"} header={header} bare wide seo={seo}>
       <div class="px-4 py-6">
         {f && !props.q && !props.category && props.page === 1 && (
           <a href={`/s/${f.slug}`} class="block mb-8 overflow-hidden rounded-3xl bg-card relative h-48 group">
@@ -171,6 +194,8 @@ export function HomePage(props: {
             </p>
           </div>
         )}
+        {isHome && props.user && <h1 class="sr-only">{site.site_name}: لیست آرزو و خرید کادو آنلاین</h1>}
+        {props.category && !props.q && <h1 class="text-lg font-bold mb-4">هدیه {props.category}</h1>}
         {(props.q || props.category) && (
           <p class="text-sm text-muted mb-4">
             {props.q && <>نتیجه جستجوی «<b class="text-fg">{props.q}</b>»</>} {props.category && <>در دسته <b class="text-fg">{props.category}</b></>}
@@ -262,6 +287,48 @@ export function ProductPage(props: {
   const loginHref = `/login?next=/p/${p.id}`;
   const wishHref = !props.user ? loginHref : props.wishlists.length ? "#wish" : `/me/wishlists/new?product=${p.id}`;
   const sheetOpen = !!props.error;
+  const site = useSite();
+  const images = props.images.length ? props.images.map((i) => i.image_key) : p.image_key ? [p.image_key] : [];
+  const url = `${site.origin}/p/${p.id}`;
+  const seo: Seo = {
+    index: true,
+    canonical: `/p/${p.id}`,
+    type: "product",
+    description: summary(p.description ? `${p.title}: ${p.description}` : `خرید ${p.title} از فروشگاه ${p.shop_name} در ${site.site_name}؛ به لیست آرزویت اضافه کن تا دوستانت برایت کادو بخرند، یا مستقیم بخر.`),
+    image: images[0] ? `/img/${images[0]}` : undefined,
+    props: [["product:price:amount", String(p.price * 10)], ["product:price:currency", "IRR"]],
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "@id": `${url}#product`,
+        name: p.title,
+        description: p.description || p.title,
+        sku: String(p.id),
+        url,
+        ...(images.length ? { image: images.map((k) => `${site.origin}/img/${k}`) } : {}),
+        ...(p.category ? { category: p.category } : {}),
+        brand: { "@type": "Brand", name: p.shop_name },
+        ...(features.length ? { additionalProperty: features.map((x) => ({ "@type": "PropertyValue", name: "ویژگی", value: x })) } : {}),
+        offers: {
+          "@type": "Offer",
+          url,
+          price: String(p.price * 10),
+          priceCurrency: "IRR",
+          availability: "https://schema.org/InStock",
+          itemCondition: "https://schema.org/NewCondition",
+          areaServed: { "@type": "Country", name: "Iran" },
+          seller: { "@type": "Organization", name: p.shop_name, url: `${site.origin}/s/${p.shop_slug}` },
+        },
+      },
+      breadcrumbLd(site, [
+        [site.site_name, "/"],
+        ...(p.category ? ([[p.category, `/?cat=${encodeURIComponent(p.category)}`]] as [string, string][]) : []),
+        [p.shop_name, `/s/${p.shop_slug}`],
+        [p.title, `/p/${p.id}`],
+      ]),
+    ],
+  };
   const header = (
     <header class="fixed top-0 inset-x-0 z-50 px-4 py-4 flex items-center justify-between pointer-events-none">
       <div class="pointer-events-auto"><IconButton icon="fa-chevron-right" label="بازگشت" glass attrs={{ "data-back": "/" }} /></div>
@@ -285,7 +352,7 @@ export function ProductPage(props: {
     </>
   );
   return (
-    <Layout title={p.title} user={props.user} nav="none" header={header} bare>
+    <Layout title={`${p.title} | ${p.shop_name}`} user={props.user} nav="none" header={header} bare seo={seo}>
       <Gallery images={props.images} title={p.title} overlay={overlay} />
       <div class="px-6 py-8 pb-36 space-y-6">
         {props.added && (
@@ -385,9 +452,9 @@ export function ProductPage(props: {
           <a href={wishHref} class="flex-[2] py-4 bg-pink text-white text-center rounded-2xl font-bold shadow-lg shadow-pink/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
           </a>
-          <button type="button" data-share="" class="flex-1 py-4 bg-card text-fg rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform">
-            <i class="fa-solid fa-share-nodes ml-1"></i> اشتراک
-          </button>
+          <a href={props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} class="flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform">
+            <i class="fa-solid fa-bag-shopping ml-1"></i> خرید مستقیم
+          </a>
         </div>
       </div>
     </Layout>
@@ -403,8 +470,38 @@ const SOCIALS: [keyof Shop, string, string, (v: string) => string][] = [
 
 export function ShopPage(props: { user: User | null; shop: Shop; products: ProductWithShop[]; preview?: boolean }) {
   const shop = props.shop;
+  const site = useSite();
+  const url = `${site.origin}/s/${shop.slug}`;
+  const sameAs = SOCIALS.filter(([k]) => shop[k]).map(([k, , , link]) => link(String(shop[k])));
+  const seo: Seo = {
+    index: !props.preview,
+    canonical: `/s/${shop.slug}`,
+    type: "profile",
+    place: shop.city || undefined,
+    description: summary(shop.description ? `${shop.name}${shop.city ? ` (${shop.city})` : ""}: ${shop.description}` : `فروشگاه ${shop.name}${shop.city ? ` در ${shop.city}` : ""}؛ خرید هدیه و کادو در ${site.site_name}.`),
+    image: shop.cover_key ? `/img/${shop.cover_key}` : shop.logo_key ? `/img/${shop.logo_key}` : undefined,
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "Store",
+        "@id": `${url}#store`,
+        name: shop.name,
+        url,
+        ...(shop.description ? { description: shop.description } : {}),
+        ...(shop.logo_key ? { logo: `${site.origin}/img/${shop.logo_key}` } : {}),
+        ...(shop.cover_key || shop.logo_key ? { image: `${site.origin}/img/${shop.cover_key || shop.logo_key}` } : {}),
+        ...(shop.phone ? { telephone: shop.phone } : {}),
+        address: { "@type": "PostalAddress", addressCountry: "IR", ...(shop.city ? { addressLocality: shop.city } : {}) },
+        ...(sameAs.length ? { sameAs } : {}),
+        paymentAccepted: "کارت به کارت",
+        currenciesAccepted: "IRR",
+      },
+      itemListLd(site, `محصولات ${shop.name}`, props.products),
+      breadcrumbLd(site, [[site.site_name, "/"], [shop.name, `/s/${shop.slug}`]]),
+    ],
+  };
   return (
-    <Layout title={shop.name} user={props.user} bare wide>
+    <Layout title={shop.city ? `${shop.name} | ${shop.city}` : shop.name} user={props.user} bare wide seo={seo}>
       {props.preview && (
         <div class="bg-amber-400/10 text-amber-200 text-sm px-4 py-3 text-center">
           پیش‌نمایش: این فروشگاه هنوز تأیید نشده و فقط شما (و مدیر سایت) این صفحه را می‌بینید.
@@ -461,8 +558,13 @@ export function WishlistPublicPage(props: {
     </header>
   );
   const done = props.items.filter((it) => it.bought >= it.quantity).length;
+  const cover = props.items.find((it) => it.image_key)?.image_key;
+  const seo: Seo = {
+    description: summary(w.description || `لیست آرزوی ${props.owner.name} در ${site.site_name}: ${props.items.length} آرزو. یکی را انتخاب کن و برایش کادو بخر.`),
+    image: cover ? `/img/${cover}` : props.owner.avatar_key ? `/img/${props.owner.avatar_key}` : undefined,
+  };
   return (
-    <Layout title={w.title} user={props.user} nav={props.isOwner ? "wishes" : "home"} header={header} bare wide>
+    <Layout title={`${w.title} | آرزوهای ${props.owner.name}`} user={props.user} nav={props.isOwner ? "wishes" : "home"} header={header} bare wide seo={seo}>
       <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">
         <div class="relative inline-block mb-4">
           <Avatar user={props.owner} size="w-24 h-24" ring />
@@ -592,8 +694,10 @@ export function CheckoutPage(props: {
       var b=document.getElementById('ship-fee');if(b)b.textContent=dd?fa(dd):'رایگان';}
     f.addEventListener('change',upd);upd();})();`;
   const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
+  const direct = !!props.wishlist.is_direct;
+  const heading = direct ? "خرید برای خودم" : "خرید کادو";
   return (
-    <Layout title="خرید کادو" user={props.user} nav="none" header={<TitleBar title="خرید کادو" back={`/w/${props.wishlist.slug}`} />} bare>
+    <Layout title={heading} user={props.user} nav="none" header={<TitleBar title={heading} back={direct ? `/p/${it.product_id}` : `/w/${props.wishlist.slug}`} />} bare>
       <form method="post" action={`/gift/${it.id}`} id="checkout" class="px-6 pb-36 space-y-8">
         <section class="p-4 bg-card rounded-2xl border border-muted/10">
           <div class="flex items-center gap-4 mb-4">
@@ -602,7 +706,7 @@ export function CheckoutPage(props: {
             </div>
             <div class="min-w-0">
               <h2 class="text-sm font-bold text-fg truncate">{it.title}</h2>
-              <p class="text-[10px] text-muted">برای: لیست «{props.wishlist.title}» {props.ownerName}</p>
+              <p class="text-[10px] text-muted">{direct ? `ارسال به ${props.wishlist.city}` : `برای: لیست «${props.wishlist.title}» ${props.ownerName}`}</p>
               <p class="text-[10px] text-muted">{it.shop_name}{it.size && <> · سایز: <b class="text-fg">{it.size}</b></>}</p>
             </div>
           </div>
@@ -645,16 +749,20 @@ export function CheckoutPage(props: {
           <h3 class="text-sm font-bold px-1">مشخصات شما</h3>
           <input name="name" value={v.name ?? props.user?.name ?? ""} required maxlength={80} placeholder="نام شما" class={input} />
           <input name="phone" value={v.phone ?? props.user?.phone ?? ""} inputmode="tel" required placeholder="شماره موبایل" class={`${input} ltr text-left`} />
-          <textarea name="message" maxlength={300} rows={3} placeholder="پیام روی کارت هدیه (اختیاری)" class={input}>{v.message ?? ""}</textarea>
-          <label class="flex items-center gap-2 text-xs text-muted px-1">
-            <input type="checkbox" name="anonymous" value="1" checked={v.anonymous === "1"} class="accent-pink" /> نامم به گیرنده نمایش داده نشود
-          </label>
+          {!direct && (
+            <>
+              <textarea name="message" maxlength={300} rows={3} placeholder="پیام روی کارت هدیه (اختیاری)" class={input}>{v.message ?? ""}</textarea>
+              <label class="flex items-center gap-2 text-xs text-muted px-1">
+                <input type="checkbox" name="anonymous" value="1" checked={v.anonymous === "1"} class="accent-pink" /> نامم به گیرنده نمایش داده نشود
+              </label>
+            </>
+          )}
         </section>
 
         <p class="text-[11px] text-muted leading-relaxed px-1">
           <i class="fa-solid fa-lock ml-1"></i>
-          پرداخت کارت به کارت مستقیم به حساب فروشگاه است: در مرحله بعد شماره کارت را می‌بینید و فقط عکس فیش را می‌فرستید. آدرس گیرنده
-          محرمانه است و به شما نمایش داده نمی‌شود.
+          پرداخت کارت به کارت مستقیم به حساب فروشگاه است: در مرحله بعد شماره کارت را می‌بینید و فقط عکس فیش را می‌فرستید.
+          {direct ? " آدرس شما فقط بعد از تأیید واریز به فروشگاه نشان داده می‌شود." : " آدرس گیرنده محرمانه است و به شما نمایش داده نمی‌شود."}
         </p>
       </form>
       <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
@@ -675,6 +783,7 @@ export type OrderView = Order & {
   card_holder: string;
   shop_name: string;
   image_key: string;
+  is_direct: number;
 };
 
 const RECEIPT_PREVIEW = `(function(){var i=document.getElementById('receipt-input'),z=document.getElementById('dropzone'),p=document.getElementById('receipt-preview');if(!i)return;
@@ -700,10 +809,12 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
   const o = props.order;
   const expired = o.status === "pending" && o.expires_at <= new Date().toISOString();
   const bank = bankName(o.pay_card_number);
+  const back = o.is_direct ? "/me/orders" : `/w/${o.wishlist_slug}`;
+  const forWhom = o.is_direct ? "برای خودم" : `برای ${o.owner_name}`;
   const header = (
     <TitleBar
       title={o.status === "pending" ? "پرداخت کارت به کارت" : "جزئیات هدیه"}
-      back={`/w/${o.wishlist_slug}`}
+      back={back}
       end={<IconButton icon="fa-print" label="چاپ" attrs={{ onclick: "event.preventDefault();print()" }} />}
     />
   );
@@ -716,7 +827,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
         </div>
         <div class="min-w-0">
           <h3 class="text-sm font-bold text-fg mb-1">{o.product_title}</h3>
-          <p class="text-[10px] text-muted mb-1">فروشگاه: {o.shop_name} · برای {o.owner_name}</p>
+          <p class="text-[10px] text-muted mb-1">فروشگاه: {o.shop_name} · {forWhom}</p>
           {o.size && <p class="text-[10px] text-muted mb-1">سایز: <b class="text-fg">{o.size}</b></p>}
           <span class="text-xs font-bold text-pink">{toman(o.amount)}</span>
         </div>
@@ -726,7 +837,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
 
   if (o.status === "pending") {
     return (
-      <Layout title={`کادو برای ${o.owner_name}`} user={props.user} nav="none" header={header} bare>
+      <Layout title={o.is_direct ? o.product_title : `کادو برای ${o.owner_name}`} user={props.user} nav="none" header={header} bare>
         <form method="post" action={`/order/${o.token}/receipt`} enctype="multipart/form-data" id="receipt-form" class="px-6 pb-36 space-y-8">
           <section class="p-4 bg-card rounded-2xl border border-muted/10">
             <div class="flex items-center gap-4 mb-4">
@@ -735,7 +846,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
               </div>
               <div class="min-w-0">
                 <h2 class="text-sm font-bold text-fg truncate">{o.product_title}</h2>
-                <p class="text-[10px] text-muted">برای: {o.owner_name} · سفارش #{fa(o.id)}</p>
+                <p class="text-[10px] text-muted">{forWhom} · سفارش #{fa(o.id)}</p>
               </div>
             </div>
             <div class="space-y-3 pt-4 border-t border-ink">
@@ -820,7 +931,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
   const shipped = o.status === "shipped" || o.status === "delivered";
   const icon = o.status === "rejected" ? "fa-circle-xmark" : paid ? (shipped ? "fa-truck-fast" : "fa-circle-check") : "fa-clock-rotate-left";
   return (
-    <Layout title={`کادو برای ${o.owner_name}`} user={props.user} nav="none" header={header} bare>
+    <Layout title={o.is_direct ? o.product_title : `کادو برای ${o.owner_name}`} user={props.user} nav="none" header={header} bare>
       <div class="px-6 pb-12 space-y-8">
         <section class="p-6 bg-card rounded-3xl border border-muted/5">
           <div class="flex items-center justify-between mb-8">
@@ -838,7 +949,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           ) : (
             <div class="space-y-6 relative pr-4">
               <div class="absolute right-[7px] top-2 bottom-2 w-[2px] bg-ink"></div>
-              <Step done title={`پرداخت توسط ${o.giver_name}`} hint="فیش برای فروشگاه ارسال شد" />
+              <Step done title={o.is_direct ? "پرداخت شما" : `پرداخت توسط ${o.giver_name}`} hint="فیش برای فروشگاه ارسال شد" />
               <Step done={paid} active={!paid} title="تأیید واریز توسط فروشگاه" hint={paid ? "مبلغ دریافت شد" : "در حال بررسی رسید..."} />
               <Step
                 done={shipped}
@@ -867,7 +978,82 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
             </a>
           </section>
         )}
-        <a href={`/w/${o.wishlist_slug}`} class="block text-center py-3 rounded-2xl bg-card text-sm">بازگشت به لیست آرزو</a>
+        <a href={back} class="block text-center py-3 rounded-2xl bg-card text-sm">{o.is_direct ? "خریدهای من" : "بازگشت به لیست آرزو"}</a>
+      </div>
+    </Layout>
+  );
+}
+
+/** "Buy for myself": size and the buyer's own delivery address, then the usual checkout. */
+export function DirectBuyPage(props: { user: User; product: ProductWithShop; image: string; values: Record<string, string>; errors?: string[] }) {
+  const p = props.product;
+  const v = props.values;
+  const sizes = readSizeGuide(p.size_guide)?.rows.map((r) => r[0]) ?? [];
+  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
+  const label = "block text-xs text-muted mb-1.5 px-1";
+  return (
+    <Layout title={`خرید ${p.title}`} user={props.user} nav="none" header={<TitleBar title="خرید مستقیم" back={`/p/${p.id}`} />} bare>
+      <form method="post" action={`/p/${p.id}/buy`} id="direct" class="px-6 pb-36 space-y-6">
+        <section class="p-4 bg-card rounded-2xl border border-muted/10 flex items-center gap-4">
+          <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0">
+            <ImageOrGift imageKey={props.image} alt={p.title} class="w-full h-full object-cover" />
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-bold text-fg truncate">{p.title}</h2>
+            <p class="text-[10px] text-muted">{p.shop_name}</p>
+            <p class="text-xs font-bold text-pink mt-1">{toman(p.price)}</p>
+          </div>
+        </section>
+        <Errors errors={props.errors} />
+        {sizes.length > 0 && (
+          <div>
+            <label class={label}>سایز</label>
+            <select name="size" required class={input}>
+              <option value="">انتخاب سایز…</option>
+              {sizes.map((z) => <option value={z} selected={v.size === z}>{z}</option>)}
+            </select>
+          </div>
+        )}
+        <section class="space-y-4">
+          <h3 class="text-sm font-bold px-1">ارسال به</h3>
+          <div>
+            <label class={label}>نام گیرنده</label>
+            <input name="recipient_name" value={v.recipient_name ?? ""} required maxlength={80} class={input} />
+          </div>
+          <div>
+            <label class={label}>موبایل گیرنده</label>
+            <input name="recipient_phone" value={v.recipient_phone ?? ""} required inputmode="tel" class={`${input} ltr text-left`} />
+          </div>
+          <div>
+            <label class={label}>شهر</label>
+            <input name="city" value={v.city ?? ""} list="cities" required maxlength={40} autocomplete="off" class={input} />
+            <datalist id="cities">{CITIES.map((c) => <option value={c} />)}</datalist>
+          </div>
+          <div>
+            <label class={label}>آدرس کامل</label>
+            <textarea name="address" required maxlength={400} rows={3} class={input}>{v.address ?? ""}</textarea>
+          </div>
+          <div>
+            <label class={label}>کد پستی (۱۰ رقم)</label>
+            <input name="postal_code" value={v.postal_code ?? ""} required inputmode="numeric" maxlength={12} class={`${input} ltr text-left`} />
+          </div>
+          <div>
+            <label class={label}>یادداشت برای فروشگاه (اختیاری)</label>
+            <input name="note" value={v.note ?? ""} maxlength={200} placeholder="مثلاً رنگ" class={input} />
+          </div>
+        </section>
+        <p class="text-[11px] text-muted leading-relaxed px-1">
+          <i class="fa-solid fa-lock ml-1"></i>
+          در قدم بعد بسته‌بندی و روش ارسال را انتخاب می‌کنید و مبلغ را مستقیم به کارت فروشگاه واریز می‌کنید. آدرس فقط بعد از تأیید واریز
+          به فروشگاه نشان داده می‌شود.
+        </p>
+      </form>
+      <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+        <div class="max-w-3xl mx-auto p-4 safe-bottom">
+          <button form="direct" class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+            ادامه: روش ارسال و پرداخت <i class="fa-solid fa-arrow-left"></i>
+          </button>
+        </div>
       </div>
     </Layout>
   );

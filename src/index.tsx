@@ -15,6 +15,9 @@ import { account } from "./shop/routes/account";
 import { admin, panel } from "./shop/routes/panel";
 import { bot } from "./bale/bot";
 import { store } from "./shop/routes/store";
+import { miniapp } from "./bale/miniapp";
+import { pwa } from "./pwa";
+import { seo } from "./seo";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
@@ -27,7 +30,9 @@ app.use(async (c, next) => {
   await ensureMigrated(c.env.DB);
   await next();
 });
-app.use(secureHeaders());
+// Bale/Telegram web clients show mini apps in an iframe, so those (and only those) may frame the site.
+const FRAME_ANCESTORS = ["'self'", "https://web.telegram.org", "https://*.telegram.org", "https://web.bale.ai", "https://*.bale.ai", "https://bale.ai"];
+app.use(secureHeaders({ xFrameOptions: false, contentSecurityPolicy: { frameAncestors: FRAME_ANCESTORS } }));
 app.use(csrf()); // rejects cross-origin form posts; bot webhooks send JSON and are unaffected
 
 app.use(async (c, next) => {
@@ -50,7 +55,7 @@ app.use(async (c, next) => {
 });
 
 // Shop pages that need a logged-in user (the CRM checks for itself).
-const LOGIN_REQUIRED = /^\/(me|panel|admin)(\/|$)|^\/p\/\d+\/wish$/;
+const LOGIN_REQUIRED = /^\/(me|panel|admin)(\/|$)|^\/p\/\d+\/(wish|buy)$/;
 app.use(async (c, next) => {
   if (!c.get("user") && LOGIN_REQUIRED.test(c.req.path)) {
     const back = c.req.method === "GET" ? c.req.path : "/";
@@ -59,6 +64,9 @@ app.use(async (c, next) => {
   await next();
 });
 
+app.route("/", pwa);
+app.route("/", seo);
+app.route("/", miniapp);
 app.route("/", connect);
 app.route("/crm", crm);
 app.route("/", store);

@@ -3,7 +3,7 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { normCity, now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
+import { getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import { upsertCustomer } from "../../crm/sync";
 import { sizeNames } from "../sizes";
 import type { C, Env } from "../../env";
@@ -15,7 +15,8 @@ import { activeBots, botLink } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { CodeLoginPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type ProfileItem } from "../views/account";
+import { CodeLoginPage, MyOrdersPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
+import { DirectBuyPage } from "../views/store";
 
 const sessionUserById = (db: D1Database, id: number) =>
   db.prepare("SELECT id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key FROM users WHERE id = ?").bind(id).first<User>();
@@ -163,18 +164,18 @@ account.get("/me", async (c) => {
                 (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
                 (SELECT COUNT(DISTINCT o.giver_phone) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS givers
          FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id JOIN products p ON p.id = i.product_id
-         WHERE w.user_id = ? AND w.is_open = 1 ORDER BY i.created_at DESC LIMIT 30`,
+         WHERE w.user_id = ? AND w.is_open = 1 AND w.is_direct = 0 ORDER BY i.created_at DESC LIMIT 30`,
       )
       .bind(user.id)
       .all<ProfileItem>(),
     db
       .prepare(
-        `SELECT (SELECT COUNT(*) FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE w.user_id = ?1) AS wishes,
-                (SELECT COUNT(*) FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ?1 AND o.status IN ${SOLD}) AS gifts`,
+        `SELECT (SELECT COUNT(*) FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE w.user_id = ?1 AND w.is_direct = 0) AS wishes,
+                (SELECT COUNT(*) FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD}) AS gifts`,
       )
       .bind(user.id)
       .first<{ wishes: number; gifts: number }>(),
-    db.prepare("SELECT slug FROM wishlists WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").bind(user.id).first<{ slug: string }>(),
+    db.prepare("SELECT slug FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY created_at DESC LIMIT 1").bind(user.id).first<{ slug: string }>(),
   ]);
   const s = c.get("settings");
   const bots = activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id) }));
@@ -221,7 +222,7 @@ account.get("/me/wishlists", async (c) => {
     `SELECT w.*, (SELECT COUNT(*) FROM wishlist_items i WHERE i.wishlist_id = w.id) AS items,
             COALESCE((SELECT p.image_key FROM wishlist_items i JOIN products p ON p.id = i.product_id
                       WHERE i.wishlist_id = w.id ORDER BY i.created_at LIMIT 1), '') AS cover
-     FROM wishlists w WHERE w.user_id = ? ORDER BY w.created_at DESC`,
+     FROM wishlists w WHERE w.user_id = ? AND w.is_direct = 0 ORDER BY w.created_at DESC`,
   )
     .bind(user.id)
     .all<Wishlist & { items: number; cover: string }>();
@@ -250,7 +251,7 @@ function cleanWishlist(f: Record<string, string>) {
 }
 
 async function ownWishlist(c: C) {
-  return c.env.DB.prepare("SELECT * FROM wishlists WHERE id = ? AND user_id = ?").bind(intParam(c, "id"), currentUser(c).id).first<Wishlist>();
+  return c.env.DB.prepare("SELECT * FROM wishlists WHERE id = ? AND user_id = ? AND is_direct = 0").bind(intParam(c, "id"), currentUser(c).id).first<Wishlist>();
 }
 
 async function addItem(db: D1Database, wishlistId: number, productId: number, quantity = 1, note = "", size = "") {
@@ -345,7 +346,7 @@ account.post("/me/items/:id{[0-9]+}/delete", async (c) => {
 account.post("/p/:id{[0-9]+}/wish", async (c) => {
   const user = currentUser(c);
   const f = await form(c);
-  const w = await c.env.DB.prepare("SELECT id, title FROM wishlists WHERE id = ? AND user_id = ?").bind(Number(f.wishlist_id), user.id).first<{ id: number; title: string }>();
+  const w = await c.env.DB.prepare("SELECT id, title FROM wishlists WHERE id = ? AND user_id = ? AND is_direct = 0").bind(Number(f.wishlist_id), user.id).first<{ id: number; title: string }>();
   if (!w) return c.text("لیست پیدا نشد", 404);
   const qty = Math.min(20, Math.max(1, Math.floor(Number(f.quantity) || 1)));
   const sizes = await productSizes(c.env.DB, intParam(c, "id"));
@@ -353,4 +354,63 @@ account.post("/p/:id{[0-9]+}/wish", async (c) => {
   if (sizes.length && !sizes.includes(size)) return c.redirect(`/p/${intParam(c, "id")}?err=size`);
   await addItem(c.env.DB, w.id, intParam(c, "id"), qty, (f.note ?? "").slice(0, 200), sizes.length ? size : "");
   return c.redirect(`/p/${intParam(c, "id")}?added=${encodeURIComponent(w.title)}`);
+});
+
+// ---------- buy for myself ----------
+// A direct purchase is a hidden, single-item list holding the buyer's own address; it then goes
+// through the same checkout, reservation and card-to-card flow as a gift.
+
+async function directBuyPage(c: C, values: Record<string, string>, errors?: string[], status: 200 | 400 = 200) {
+  const product = await getPublicProduct(c.env.DB, intParam(c, "id"));
+  if (!product) return c.notFound();
+  const image = (await productImages(c.env.DB, product.id))[0]?.image_key ?? product.image_key;
+  return render(c, <DirectBuyPage user={currentUser(c)} product={product} image={image} values={values} errors={errors} />, status);
+}
+
+account.get("/p/:id{[0-9]+}/buy", async (c) => {
+  const user = currentUser(c);
+  // Prefill from the last address this person used.
+  const last = await c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY is_direct DESC, id DESC LIMIT 1").bind(user.id).first<Wishlist>();
+  const values: Record<string, string> = last?.is_direct
+    ? { recipient_name: last.recipient_name, recipient_phone: last.recipient_phone, address: last.address, postal_code: last.postal_code, city: last.city }
+    : { recipient_name: user.name, recipient_phone: user.phone, city: last?.city ?? "" };
+  return directBuyPage(c, values);
+});
+
+account.post("/p/:id{[0-9]+}/buy", async (c) => {
+  const user = currentUser(c);
+  const productId = intParam(c, "id");
+  const product = await getPublicProduct(c.env.DB, productId);
+  if (!product) return c.notFound();
+  const f = await form(c);
+  const { values, errors } = cleanWishlist({ ...f, title: `خرید مستقیم: ${product.title}`.slice(0, 120), is_open: "1" });
+  const sizes = await productSizes(c.env.DB, productId);
+  const size = f.size ?? "";
+  if (sizes.length && !sizes.includes(size)) errors.push("سایز را انتخاب کنید.");
+  if (errors.length) return directBuyPage(c, { ...f, ...values }, errors, 400);
+  const db = c.env.DB;
+  const w = await db
+    .prepare(
+      `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, is_direct, created_at)
+       VALUES (?, ?, ?, '', '', ?, ?, ?, ?, ?, 1, ?) RETURNING id`,
+    )
+    .bind(user.id, randomSlug(), values.title, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, now())
+    .first<{ id: number }>();
+  await addItem(db, w!.id, productId, 1, (f.note ?? "").slice(0, 200), sizes.length ? size : "");
+  const item = await db.prepare("SELECT id FROM wishlist_items WHERE wishlist_id = ?").bind(w!.id).first<{ id: number }>();
+  if (!item) return directBuyPage(c, { ...f, ...values }, ["این محصول دیگر قابل خرید نیست."], 400);
+  return c.redirect(`/gift/${item.id}`);
+});
+
+account.get("/me/orders", async (c) => {
+  const user = currentUser(c);
+  const { results } = await c.env.DB.prepare(
+    `SELECT o.token, o.id, o.product_title, o.amount, o.status, o.created_at, w.is_direct, u.name AS owner_name,
+            COALESCE(p.image_key, '') AS image_key
+     FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id LEFT JOIN products p ON p.id = o.product_id
+     WHERE o.giver_phone = ? ORDER BY o.created_at DESC LIMIT 100`,
+  )
+    .bind(user.phone)
+    .all<MyOrder>();
+  return render(c, <MyOrdersPage user={user} orders={results} />);
 });

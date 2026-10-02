@@ -73,13 +73,23 @@ export async function clearButtons(s: Settings, kind: BotKind, chatId: string, m
   );
 }
 
-/** Check a token and point the bot's webhook at this site. Returns the bot's username. */
-export async function connectBot(kind: BotKind, token: string, webhookUrl: string) {
+/**
+ * Check a token and point the bot's webhook at this site. Also makes the chat's menu button open
+ * the site as a mini app (best effort: not every client supports it). Returns the bot's username.
+ */
+export async function connectBot(kind: BotKind, token: string, webhookUrl: string, appUrl: string, siteName: string) {
   const s = { [kind === "bale" ? "bale_bot_token" : "telegram_bot_token"]: token } as unknown as Settings;
   const me = (await callBot(s, kind, "getMe", {})) as { username?: string };
   await callBot(s, kind, "setWebhook", { url: webhookUrl });
+  await callBot(s, kind, "setChatMenuButton", { menu_button: { type: "web_app", text: siteName, web_app: { url: appUrl } } }).catch((e) =>
+    console.error("menu button:", e),
+  );
   return me.username ?? "";
 }
+
+/** Inline button that opens the site inside the messenger (mini apps need https). */
+export const openAppMarkup = (appUrl: string, text: string) =>
+  appUrl.startsWith("https://") ? { inline_keyboard: [[{ text, web_app: { url: appUrl } }]] } : undefined;
 
 // ---------- sending to people (their connected chats) ----------
 

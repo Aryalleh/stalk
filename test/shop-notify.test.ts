@@ -73,12 +73,22 @@ describe("bot api", () => {
     expect((body.get("photo") as File).size).toBe(3);
   });
 
-  it("connectBot checks the token and sets the webhook", async () => {
-    const fetch = vi.fn(async (url: string) => new Response(JSON.stringify({ ok: true, result: url.endsWith("/getMe") ? { username: "kadoochi_bot" } : true })));
+  it("connectBot checks the token, sets the webhook and the mini-app menu button", async () => {
+    const fetch = vi.fn(async (url: string) =>
+      url.endsWith("/setChatMenuButton")
+        ? new Response(JSON.stringify({ ok: false, description: "not supported" }), { status: 400 }) // must not fail the connect
+        : new Response(JSON.stringify({ ok: true, result: url.endsWith("/getMe") ? { username: "kadoochi_bot" } : true })),
+    );
     vi.stubGlobal("fetch", fetch);
-    expect(await connectBot("bale", "tok", "https://site.example/bot/bale/sec")).toBe("kadoochi_bot");
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await connectBot("bale", "tok", "https://site.example/bot/bale/sec", "https://site.example/app", "کادوچی")).toBe("kadoochi_bot");
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
-    expect(calls.map((c) => c[0])).toEqual(["https://tapi.bale.ai/bottok/getMe", "https://tapi.bale.ai/bottok/setWebhook"]);
+    expect(calls.map((c) => c[0])).toEqual([
+      "https://tapi.bale.ai/bottok/getMe",
+      "https://tapi.bale.ai/bottok/setWebhook",
+      "https://tapi.bale.ai/bottok/setChatMenuButton",
+    ]);
+    expect(JSON.parse(calls[2][1].body as string).menu_button.web_app.url).toBe("https://site.example/app");
   });
 });
 
