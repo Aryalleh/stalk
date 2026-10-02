@@ -1,5 +1,7 @@
-import { toman, type ItemView, type ProductWithShop, type Shop, type Wishlist } from "../db";
-import type { User } from "../session";
+import { formatJalali } from "../../../lib/jalali";
+import { formatCard } from "../../../lib/normalize";
+import { STATUS_LABEL, toman, type ItemView, type Order, type ProductWithShop, type Shop, type Wishlist } from "../db";
+import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
 function ProductGrid(props: { products: ProductWithShop[] }) {
@@ -205,7 +207,9 @@ export function CheckoutPage(props: {
             </div>
           </div>
           <p class="muted small">
-            فروشگاه کادو را مستقیم به آدرس گیرنده ارسال می‌کند. آدرس گیرنده محرمانه است و به شما نمایش داده نمی‌شود.
+            پرداخت کارت به کارت مستقیم به حساب فروشگاه است. در مرحله بعد شماره کارت را می‌بینید و این آرزو تا ۳۰ دقیقه برای شما رزرو
+            می‌شود. فروشگاه بعد از تأیید واریز، کادو را مستقیم به آدرس گیرنده می‌فرستد؛ آدرس گیرنده محرمانه است و به شما نمایش داده
+            نمی‌شود.
           </p>
         </div>
         <form method="post" action={`/gift/${it.id}`}>
@@ -219,39 +223,87 @@ export function CheckoutPage(props: {
           <label class="row" style="color:var(--text)">
             <input type="checkbox" name="anonymous" value="1" style="width:auto" checked={v.anonymous === "1"} /> نامم به گیرنده نمایش داده نشود
           </label>
-          <p><button>پرداخت {toman(it.price)}</button></p>
+          <p><button>ادامه و دریافت شماره کارت</button></p>
         </form>
       </div>
     </Layout>
   );
 }
 
-export function PayResultPage(props: { user: User | null; ok: boolean; message: string; wishlistSlug?: string; refId?: string }) {
+export function OrderPage(props: {
+  user: User | null;
+  order: Order & { wishlist_slug: string; owner_name: string; card_holder: string; shop_name: string };
+  errors?: string[];
+  values?: Record<string, string>;
+}) {
+  const o = props.order;
+  const v = props.values ?? {};
+  const expired = o.status === "pending" && o.expires_at <= new Date().toISOString();
+  const back = <a class="btn secondary" href={`/w/${o.wishlist_slug}`}>بازگشت به لیست آرزو</a>;
   return (
-    <Layout title={props.ok ? "پرداخت موفق" : "پرداخت ناموفق"} user={props.user}>
-      <div class="card" style="max-width:520px;margin:40px auto;text-align:center">
-        <div style="font-size:48px">{props.ok ? "🎉" : "😕"}</div>
-        <h1>{props.ok ? "کادو خریداری شد!" : "پرداخت انجام نشد"}</h1>
-        <p>{props.message}</p>
-        {props.refId && <p class="muted">کد پیگیری پرداخت: <span class="dt">{props.refId}</span></p>}
-        {props.wishlistSlug && <a class="btn secondary" href={`/w/${props.wishlistSlug}`}>بازگشت به لیست آرزو</a>}
-      </div>
-    </Layout>
-  );
-}
+    <Layout title={`کادو برای ${o.owner_name}`} user={props.user}>
+      <div class="card" style="max-width:640px;margin:20px auto">
+        <h1>🎁 {o.product_title} برای {o.owner_name}</h1>
+        <p class="muted" style="margin-top:0">
+          سفارش #{o.id} · فروشگاه {o.shop_name} · <span class="tag">{STATUS_LABEL[o.status]}</span>
+        </p>
+        <p class="small muted">این صفحه مخصوص شماست؛ لینکش را نگه دارید تا وضعیت سفارش را ببینید.</p>
 
-export function DevPayPage(props: { authority: string; amount: number; cb: string }) {
-  const back = (status: string) => `${props.cb}${props.cb.includes("?") ? "&" : "?"}Authority=${props.authority}&Status=${status}`;
-  return (
-    <Layout title="درگاه آزمایشی" user={null}>
-      <div class="card" style="max-width:420px;margin:40px auto;text-align:center">
-        <h1>درگاه پرداخت آزمایشی</h1>
-        <p class="warnbox">فقط برای توسعه محلی. در محیط واقعی زرین‌پال استفاده می‌شود.</p>
-        <p>مبلغ: {toman(props.amount)}</p>
-        <div class="row" style="justify-content:center">
-          <a class="btn" href={back("OK")}>پرداخت موفق</a>
-          <a class="btn secondary" href={back("NOK")}>انصراف</a>
-        </div>
+        {o.status === "pending" && (
+          <>
+            {expired && (
+              <div class="warnbox">
+                زمان رزرو تمام شده. اگر هنوز واریز نکرده‌اید، ممکن است شخص دیگری این آرزو را بخرد؛ اگر واریز کرده‌اید، مشخصاتش را وارد کنید.
+              </div>
+            )}
+            <div class="card" style="background:var(--bg)">
+              <h2>۱. مبلغ را کارت به کارت کنید</h2>
+              <p>مبلغ: <b class="price" style="font-size:20px">{toman(o.amount)}</b></p>
+              <p>
+                به کارت:
+                <br />
+                <b class="dt" style="font-size:22px;letter-spacing:1px">{formatCard(o.pay_card_number)}</b>
+                <br />
+                به نام: <b>{o.card_holder}</b>
+              </p>
+              {!expired && <p class="small muted">این آرزو تا <span class="dt">{formatJalali(o.expires_at)}</span> برای شما رزرو است.</p>}
+            </div>
+            <form method="post" action={`/order/${o.token}/transfer`} enctype="multipart/form-data">
+              <h2>۲. مشخصات واریز را وارد کنید</h2>
+              <Errors errors={props.errors} />
+              <label>شماره پیگیری</label>
+              <input name="ref" value={v.ref ?? ""} class="ltr" inputmode="numeric" required />
+              <label>۴ رقم آخر کارتی که از آن واریز کردید</label>
+              <input name="last4" value={v.last4 ?? ""} class="ltr" inputmode="numeric" maxlength={4} required style="max-width:140px" />
+              <label>زمان واریز (اختیاری)</label>
+              <input name="at" value={v.at ?? ""} placeholder="مثلاً ۱۴:۳۰" maxlength={40} style="max-width:240px" />
+              <label>عکس رسید (اختیاری)</label>
+              <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp" />
+              <p><button>ثبت واریز</button></p>
+            </form>
+          </>
+        )}
+
+        {o.status === "awaiting" && (
+          <div class="okbox">
+            واریز شما ثبت شد و برای فروشگاه ارسال شد. بعد از اینکه فروشگاه دریافت مبلغ را تأیید کند، کادو برای {o.owner_name} ارسال می‌شود.
+            <div class="small">شماره پیگیری: <span class="dt">{o.transfer_ref}</span></div>
+          </div>
+        )}
+
+        {(o.status === "paid" || o.status === "shipped" || o.status === "delivered") && (
+          <div class="okbox">
+            🎉 فروشگاه پرداخت را تأیید کرد{o.status === "paid" ? " و کادو به‌زودی ارسال می‌شود" : ""}. ممنون از مهربانی‌تان!
+          </div>
+        )}
+
+        {o.status === "rejected" && (
+          <div class="errbox">
+            فروشگاه دریافت این واریز را تأیید نکرد{o.reject_reason ? `: ${o.reject_reason}` : "."} اگر مبلغ از حساب شما کم شده، با رسید با
+            فروشگاه {o.shop_name} تماس بگیرید.
+          </div>
+        )}
+        <p>{back}</p>
       </div>
     </Layout>
   );

@@ -1,10 +1,9 @@
 import { Hono } from "hono";
-import { normalizePhone } from "../../../lib/normalize";
-import { getPublicProduct, listProducts, markPaid, reserveItem, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
-import type { C, Env } from "../env";
-import { notifyShop, orderMessage } from "../notify";
-import { gateway } from "../payment";
-import { CheckoutPage, DevPayPage, HomePage, PayResultPage, ProductPage, ShopPage, WishlistPublicPage } from "../views/store";
+import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
+import { getPublicProduct, listProducts, randomSlug, reportTransfer, reserveItem, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
+import type { C, Env } from "../../env";
+import { notifyShop, shipMessage, transferMessage } from "../notify";
+import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
 export const store = new Hono<Env>();
@@ -79,16 +78,13 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
   const { w, item } = found;
   const f = await form(c);
   const phone = normalizePhone(f.phone ?? "");
-  const fail = (errors: string[], status: 400 | 409 | 502 = 400) =>
+  const fail = (errors: string[], status: 400 | 409 = 400) =>
     c.html(<CheckoutPage user={c.get("user")} item={item} wishlist={w} ownerName={w.owner_name} values={f} errors={errors} />, status);
 
   const errors: string[] = [];
   if (!f.name) errors.push("نام خود را وارد کنید.");
   if (!/^09\d{9}$/.test(phone)) errors.push("شماره موبایل نامعتبر است.");
   if (errors.length) return fail(errors);
-
-  const gw = gateway(c.env);
-  if (!gw) return fail(["درگاه پرداخت تنظیم نشده است."], 502);
 
   const order = await reserveItem(c.env.DB, item.id, {
     name: f.name.slice(0, 80),
@@ -97,72 +93,74 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
     anonymous: f.anonymous === "1",
   });
   if (!order) return fail(["متأسفانه این آرزو همین الان توسط شخص دیگری خریده یا رزرو شده، یا دیگر در دسترس نیست."], 409);
+  return c.redirect(`/order/${order.token}`);
+});
 
-  const start = await gw.start({
-    amount: order.amount,
-    description: `کادو: ${item.title} برای ${w.owner_name}`,
-    callbackUrl: `${siteUrl(c)}/pay/callback?order=${order.id}`,
-    mobile: phone,
-  });
-  if (!start.ok) {
-    console.error(start.error);
-    await c.env.DB.prepare("UPDATE orders SET status = 'failed' WHERE id = ?").bind(order.id).run();
-    return fail(["اتصال به درگاه پرداخت ناموفق بود. دوباره تلاش کنید."], 502);
+// ---------- the giver's private order page (card-to-card) ----------
+
+type OrderView = Order & { wishlist_slug: string; owner_name: string; card_holder: string; shop_name: string };
+
+async function orderByToken(c: C) {
+  return c.env.DB.prepare(
+    `SELECT o.*, w.slug AS wishlist_slug, u.name AS owner_name, s.card_holder, s.name AS shop_name
+     FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id JOIN shops s ON s.id = o.shop_id
+     WHERE o.token = ?`,
+  )
+    .bind(c.req.param("token"))
+    .first<OrderView>();
+}
+
+store.get("/order/:token", async (c) => {
+  const order = await orderByToken(c);
+  if (!order) return c.notFound();
+  return c.html(<OrderPage user={c.get("user")} order={order} />);
+});
+
+const RECEIPT_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const MAX_RECEIPT = 3 * 1024 * 1024;
+
+store.post("/order/:token/transfer", async (c) => {
+  const order = await orderByToken(c);
+  if (!order) return c.notFound();
+  if (order.status !== "pending") return c.redirect(`/order/${order.token}`);
+  const body = await c.req.parseBody();
+  const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
+  const values = { ref: normalizeDigits(str("ref")), last4: normalizeDigits(str("last4")), at: str("at").slice(0, 40) };
+  const errors: string[] = [];
+  if (!/^\d{4,30}$/.test(values.ref)) errors.push("شماره پیگیری را درست وارد کنید (فقط عدد).");
+  if (!/^\d{4}$/.test(values.last4)) errors.push("۴ رقم آخر کارتی که از آن واریز کردید را وارد کنید.");
+  const file = body.receipt;
+  let receiptKey = "";
+  if (file instanceof File && file.size > 0) {
+    const ext = RECEIPT_TYPES[file.type];
+    if (!ext) errors.push("تصویر رسید باید JPG، PNG یا WebP باشد.");
+    else if (file.size > MAX_RECEIPT) errors.push("حجم تصویر رسید حداکثر ۳ مگابایت است.");
+    else receiptKey = `r/${order.shop_id}/${randomSlug(24)}.${ext}`;
   }
-  await c.env.DB.prepare("UPDATE orders SET pay_authority = ? WHERE id = ?").bind(start.authority, order.id).run();
-  return c.redirect(start.redirectUrl);
+  if (errors.length) return c.html(<OrderPage user={c.get("user")} order={order} errors={errors} values={values} />, 400);
+  if (receiptKey) await c.env.IMAGES.put(receiptKey, await (file as File).arrayBuffer(), { httpMetadata: { contentType: (file as File).type } });
+
+  if (await reportTransfer(c.env.DB, order.id, { ...values, receiptKey })) {
+    c.executionCtx.waitUntil(sendShopMessage(c, order.id, "transfer"));
+  }
+  return c.redirect(`/order/${order.token}`);
 });
 
-store.get("/pay/dev", (c) => {
-  if (c.env.DEV_PAYMENTS !== "1" || c.env.ZARINPAL_MERCHANT_ID) return c.notFound();
-  return c.html(<DevPayPage authority={c.req.query("authority") ?? ""} amount={Number(c.req.query("amount"))} cb={c.req.query("cb") ?? "/"} />);
-});
-
-async function sendShopNotification(c: C, orderId: number) {
+/** Message the shop on its bot channels and record the outcome on the order. */
+export async function sendShopMessage(c: C, orderId: number, kind: "transfer" | "ship") {
   const o = await c.env.DB.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
   const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(o!.shop_id).first<Shop>();
   let error = "";
   try {
-    error = await notifyShop(c.env, shop!, orderMessage(o!, siteUrl(c)));
+    error = await notifyShop(c.env, shop!, kind === "transfer" ? transferMessage(o!, siteUrl(c)) : shipMessage(o!, siteUrl(c)));
   } catch (e) {
     error = String(e);
   }
   await c.env.DB.prepare("UPDATE orders SET shop_notified = ?, notify_error = ? WHERE id = ?").bind(error ? 0 : 1, error, orderId).run();
 }
 
-store.get("/pay/callback", async (c) => {
-  const user = c.get("user");
-  const order = await c.env.DB.prepare("SELECT o.*, w.slug AS wishlist_slug FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE o.id = ?")
-    .bind(Number(c.req.query("order")))
-    .first<Order & { wishlist_slug: string }>();
-  const authority = c.req.query("Authority") ?? "";
-  if (!order || !order.pay_authority || order.pay_authority !== authority) {
-    return c.html(<PayResultPage user={user} ok={false} message="اطلاعات پرداخت نامعتبر است." />, 400);
-  }
-  const done = (refId: string | null) =>
-    c.html(
-      <PayResultPage user={user} ok message="فروشگاه مطلع شد و کادو را برای صاحب لیست ارسال می‌کند. ممنون از مهربانی‌تان!" wishlistSlug={order.wishlist_slug} refId={refId ?? undefined} />,
-    );
-  if (order.status !== "pending" && order.status !== "expired" && order.status !== "failed") return done(order.pay_ref_id);
-
-  const failed = async () => {
-    await c.env.DB.prepare("UPDATE orders SET status = 'failed' WHERE id = ? AND status = 'pending'").bind(order.id).run();
-    return c.html(<PayResultPage user={user} ok={false} message="پرداخت لغو شد یا ناموفق بود. مبلغی کسر نشده یا ظرف ۷۲ ساعت برمی‌گردد." wishlistSlug={order.wishlist_slug} />);
-  };
-  if (c.req.query("Status") !== "OK") return failed();
-
-  const gw = gateway(c.env);
-  const verified = gw ? await gw.verify(authority, order.amount) : { ok: false as const, error: "no gateway" };
-  if (!verified.ok) {
-    console.error(verified.error);
-    return failed();
-  }
-  // Verified money wins even if the reservation lapsed meanwhile.
-  if (await markPaid(c.env.DB, order.id, verified.refId)) c.executionCtx.waitUntil(sendShopNotification(c, order.id));
-  return done(verified.refId);
-});
-
-store.get("/img/:key{.+}", async (c) => {
+// Product images are public; receipts (r/...) are only served through /panel.
+store.get("/img/:key{p/.+}", async (c) => {
   const obj = await c.env.IMAGES.get(c.req.param("key"));
   if (!obj) return c.notFound();
   return c.body(obj.body, 200, {
@@ -171,5 +169,3 @@ store.get("/img/:key{.+}", async (c) => {
     "X-Content-Type-Options": "nosniff",
   });
 });
-
-export { sendShopNotification };

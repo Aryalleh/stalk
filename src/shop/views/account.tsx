@@ -1,6 +1,6 @@
 import { formatJalali } from "../../../lib/jalali";
 import { STATUS_LABEL, toman, type ItemView, type Order, type Wishlist } from "../db";
-import type { User } from "../session";
+import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
 export function LoginPage(props: { next: string; error?: string; phone?: string }) {

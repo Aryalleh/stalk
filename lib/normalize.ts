@@ -53,3 +53,20 @@ export function nationalCodeError(value: string): string | null {
 export function postalCodeError(value: string): string | null {
   return value && !/^\d{10}$/.test(value) ? "کد پستی باید ۱۰ رقم باشد." : null;
 }
+
+/** 16-digit bank card number with a valid Luhn checksum (all Shetab cards use it). */
+export function cardNumberError(value: string): string | null {
+  if (!/^\d{16}$/.test(value)) return "شماره کارت باید ۱۶ رقم باشد.";
+  let sum = 0;
+  for (let i = 0; i < 16; i++) {
+    let d = Number(value[i]);
+    if (i % 2 === 0) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0 ? null : "شماره کارت نامعتبر است.";
+}
+
+export const formatCard = (card: string) => card.replace(/(\d{4})(?=\d)/g, "$1-");

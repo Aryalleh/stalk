@@ -1,7 +1,7 @@
-import type { User } from "./session";
+import type { User } from "../session";
 import { CONTACT_KEY, CORE_NAMES, contactName, type ContactData } from "./fields";
 import { diffContact, type Extras, type LogEntry, type LogRow } from "./history";
-import { normalizePhone, toLatinDigits } from "../lib/normalize";
+import { normalizePhone, toLatinDigits } from "../../lib/normalize";
 
 export type ContactRow = ContactData & { id: number; created_at: string; updated_at: string; created_by: number | null };
 export interface FieldDef {
@@ -52,7 +52,7 @@ function logStatements(db: D1Database, contactId: number, repr: string, entries:
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   return entries.map((e) =>
-    stmt.bind(contactId, repr, e.field_name, e.field_label, e.action, e.old_value, e.new_value, user.id, user.username, at),
+    stmt.bind(contactId, repr, e.field_name, e.field_label, e.action, e.old_value, e.new_value, user.id, user.name, at),
   );
 }
 

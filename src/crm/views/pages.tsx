@@ -1,57 +1,11 @@
-import type { User } from "../session";
+import type { User } from "../../session";
 import type { ContactRow, FieldDef } from "../db";
 import { CONTACT_KEY, CORE_FIELDS, SECTIONS, contactName, type ContactData } from "../fields";
 import type { Extras, LogRow, Snapshot } from "../history";
-import { formatJalali } from "../../lib/jalali";
+import { formatJalali } from "../../../lib/jalali";
 import { Errors, Layout } from "./layout";
 
 const ACTION_LABEL: Record<string, string> = { create: "ایجاد", update: "ویرایش", delete: "حذف" };
-
-export function LoginPage(props: { error?: string }) {
-  return (
-    <Layout title="ورود">
-      <div class="card" style="max-width:380px;margin:60px auto">
-        <h1>ورود به CRM</h1>
-        <Errors errors={props.error ? [props.error] : []} />
-        <form method="post" action="/login">
-          <label>نام کاربری</label>
-          <input name="username" class="ltr" autocomplete="username" required autofocus />
-          <label style="margin-top:10px">رمز عبور</label>
-          <input name="password" type="password" class="ltr" autocomplete="current-password" required />
-          <p><button>ورود</button></p>
-        </form>
-      </div>
-    </Layout>
-  );
-}
-
-export function SetupPage(props: { error?: string; configured: boolean }) {
-  return (
-    <Layout title="راه‌اندازی">
-      <div class="card" style="max-width:420px;margin:60px auto">
-        <h1>ساخت اولین مدیر</h1>
-        {!props.configured ? (
-          <p class="errbox">
-            ابتدا secret به نام <code>SETUP_TOKEN</code> را تنظیم کنید:
-            <br />
-            <code class="ltr">npx wrangler secret put SETUP_TOKEN</code>
-          </p>
-        ) : (
-          <form method="post" action="/setup">
-            <Errors errors={props.error ? [props.error] : []} />
-            <label>SETUP_TOKEN</label>
-            <input name="token" type="password" class="ltr" required />
-            <label style="margin-top:10px">نام کاربری مدیر</label>
-            <input name="username" class="ltr" required />
-            <label style="margin-top:10px">رمز عبور (حداقل ۱۰ کاراکتر)</label>
-            <input name="password" type="password" class="ltr" minlength={10} required />
-            <p><button>ساخت</button></p>
-          </form>
-        )}
-      </div>
-    </Layout>
-  );
-}
 
 function Pager(props: { page: number; hasNext: boolean; base: string }) {
   const sep = props.base.includes("?") ? "&" : "?";
@@ -63,15 +17,16 @@ function Pager(props: { page: number; hasNext: boolean; base: string }) {
   );
 }
 
+
 export function ListPage(props: { user: User; q: string; page: number; rows: ContactRow[]; hasNext: boolean }) {
-  const base = props.q ? `/?q=${encodeURIComponent(props.q)}` : "/";
+  const base = props.q ? `/crm?q=${encodeURIComponent(props.q)}` : "/crm";
   return (
     <Layout title="مخاطبین" user={props.user}>
       <div class="card">
-        <form method="get" action="/" class="row">
+        <form method="get" action="/crm" class="row">
           <input name="q" value={props.q} placeholder="جستجو در همه فیلدها: نام، شماره، کد ملی، آیدی، ..." style="flex:1;min-width:220px" />
           <button>جستجو</button>
-          <a class="btn secondary" href={`/export.csv${props.q ? `?q=${encodeURIComponent(props.q)}` : ""}`}>خروجی اکسل (CSV)</a>
+          <a class="btn secondary" href={`/crm/export.csv${props.q ? `?q=${encodeURIComponent(props.q)}` : ""}`}>خروجی اکسل (CSV)</a>
         </form>
       </div>
       <div class="card wrap">
@@ -85,7 +40,7 @@ export function ListPage(props: { user: User; q: string; page: number; rows: Con
             <tbody>
               {props.rows.map((c) => (
                 <tr>
-                  <td><a href={`/contacts/${c.id}`}>{contactName(c)}</a></td>
+                  <td><a href={`/crm/contacts/${c.id}`}>{contactName(c)}</a></td>
                   <td class="ltr nowrap">{c.phone}</td>
                   <td class="ltr">{c.national_code}</td>
                   <td class="ltr">{c.telegram_id}</td>
@@ -142,7 +97,7 @@ export function ContactPage(props: {
       <h1>{title}</h1>
       {props.saved && <div class="okbox">ذخیره شد.</div>}
       <Errors errors={props.formErrors} />
-      <form method="post" action={c ? `/contacts/${c.id}` : "/contacts/new"}>
+      <form method="post" action={c ? `/crm/contacts/${c.id}` : "/crm/contacts/new"}>
         {SECTIONS.map((section) => (
           <div class="card">
             <h2>{section}</h2>
@@ -155,7 +110,7 @@ export function ContactPage(props: {
         ))}
         <div class="card">
           <h2>
-            اطلاعات اضافه <a href="/fields" style="font-size:13px;font-weight:400">(تعریف فیلد جدید)</a>
+            اطلاعات اضافه <a href="/crm/fields" style="font-size:13px;font-weight:400">(تعریف فیلد جدید)</a>
           </h2>
           <div class="grid">
             {props.defs.map((d) => (
@@ -173,11 +128,11 @@ export function ContactPage(props: {
           <div class="card" style="margin-top:16px">
             <div class="row" style="justify-content:space-between">
               <h2 style="margin:0">سابقه تغییرات</h2>
-              <a class="btn secondary" href={`/contacts/${c.id}/snapshot`}>وضعیت پرونده در یک تاریخ دلخواه</a>
+              <a class="btn secondary" href={`/crm/contacts/${c.id}/snapshot`}>وضعیت پرونده در یک تاریخ دلخواه</a>
             </div>
             <LogTable logs={props.logs ?? []} showContact={false} />
           </div>
-          <form method="post" action={`/contacts/${c.id}/delete`} onsubmit="return confirm('این مخاطب حذف شود؟ سابقه تغییراتش باقی می‌ماند.')">
+          <form method="post" action={`/crm/contacts/${c.id}/delete`} onsubmit="return confirm('این مخاطب حذف شود؟ سابقه تغییراتش باقی می‌ماند.')">
             <button class="danger">حذف مخاطب</button>
           </form>
         </>
@@ -203,19 +158,19 @@ export function LogTable(props: { logs: LogRow[]; showContact: boolean }) {
           {rows.map((l) => (
             <tr>
               <td class="nowrap"><span class="dt">{formatJalali(l.changed_at)}</span></td>
-              {props.showContact && <td><a href={`/contacts/${l.contact_id}`}>{l.contact_repr}</a></td>}
+              {props.showContact && <td><a href={`/crm/contacts/${l.contact_id}`}>{l.contact_repr}</a></td>}
               <td>
                 {l.field_name === CONTACT_KEY ? (
                   l.field_label
                 ) : (
-                  <a href={`/contacts/${l.contact_id}/history?field=${encodeURIComponent(l.field_name)}`} title="تاریخچه همین فیلد">{l.field_label}</a>
+                  <a href={`/crm/contacts/${l.contact_id}/history?field=${encodeURIComponent(l.field_name)}`} title="تاریخچه همین فیلد">{l.field_label}</a>
                 )}
               </td>
               <td><span class="tag">{ACTION_LABEL[l.action]}</span></td>
               <td>{l.old_value || "—"}</td>
               <td>{l.new_value || "—"}</td>
               <td class="muted">{l.username || "—"}</td>
-              <td class="nowrap"><a href={`/contacts/${l.contact_id}/snapshot?at=${encodeURIComponent(formatJalali(l.changed_at))}`}>وضعیت در آن لحظه</a></td>
+              <td class="nowrap"><a href={`/crm/contacts/${l.contact_id}/snapshot?at=${encodeURIComponent(formatJalali(l.changed_at))}`}>وضعیت در آن لحظه</a></td>
             </tr>
           ))}
         </tbody>
@@ -228,7 +183,7 @@ export function FieldHistoryPage(props: { user: User; contactId: number; name: s
   return (
     <Layout title={`تاریخچه ${props.label}`} user={props.user}>
       <h1>
-        تاریخچه «{props.label}» — <a href={`/contacts/${props.contactId}`}>{props.name}</a>
+        تاریخچه «{props.label}» — <a href={`/crm/contacts/${props.contactId}`}>{props.name}</a>
       </h1>
       <div class="card"><LogTable logs={props.logs} showContact={false} /></div>
     </Layout>
@@ -240,7 +195,7 @@ export function SnapshotPage(props: { user: User; contactId: number; name: strin
   return (
     <Layout title="وضعیت در تاریخ" user={props.user}>
       <h1>
-        وضعیت پرونده <a href={`/contacts/${props.contactId}`}>{props.name}</a>
+        وضعیت پرونده <a href={`/crm/contacts/${props.contactId}`}>{props.name}</a>
       </h1>
       <div class="card">
         <form method="get" class="row">
@@ -279,7 +234,7 @@ export function HistoryPage(props: { user: User; logs: LogRow[]; page: number; h
       <h1>سوابق تغییرات (همه مخاطبین)</h1>
       <div class="card">
         <LogTable logs={props.logs} showContact={true} />
-        <Pager page={props.page} hasNext={props.hasNext} base="/history" />
+        <Pager page={props.page} hasNext={props.hasNext} base="/crm/history" />
       </div>
     </Layout>
   );
@@ -293,7 +248,7 @@ export function FieldsPage(props: { user: User; defs: FieldDef[]; error?: string
       <div class="card">
         <p class="muted">هر اطلاعاتی که در فیلدهای اصلی نیست (ایمیل، شغل، ...) را اینجا تعریف کنید تا در فرم همه مخاطبین ظاهر شود.</p>
         {props.user.is_admin ? (
-          <form method="post" action="/fields" class="row">
+          <form method="post" action="/crm/fields" class="row">
             <input name="name" placeholder="عنوان فیلد جدید" required style="max-width:300px" />
             <button>افزودن</button>
           </form>
@@ -309,7 +264,7 @@ export function FieldsPage(props: { user: User; defs: FieldDef[]; error?: string
                 <td>{d.name}</td>
                 <td>
                   {props.user.is_admin ? (
-                    <form method="post" action={`/fields/${d.id}/rename`} class="row">
+                    <form method="post" action={`/crm/fields/${d.id}/rename`} class="row">
                       <input name="name" value={d.name} required style="max-width:220px" />
                       <button class="secondary">تغییر نام</button>
                     </form>
@@ -326,32 +281,36 @@ export function FieldsPage(props: { user: User; defs: FieldDef[]; error?: string
 
 export function UsersPage(props: { user: User; users: (User & { created_at: string })[]; error?: string; ok?: string }) {
   return (
-    <Layout title="کاربران" user={props.user}>
-      <h1>کاربران</h1>
+    <Layout title="کاربران CRM" user={props.user}>
+      <h1>کاربران CRM</h1>
       <Errors errors={props.error ? [props.error] : []} />
       {props.ok && <div class="okbox">{props.ok}</div>}
       <div class="card">
-        <h2>کاربر جدید</h2>
-        <form method="post" action="/users" class="row">
-          <input name="username" placeholder="نام کاربری" class="ltr" required style="max-width:200px" />
-          <input name="password" type="password" placeholder="رمز (حداقل ۱۰ کاراکتر)" class="ltr" minlength={10} required style="max-width:220px" />
-          <label class="row" style="margin:0"><input type="checkbox" name="is_admin" value="1" style="width:auto" /> مدیر</label>
-          <button>ساخت</button>
+        <h2>دادن دسترسی CRM</h2>
+        <p class="muted" style="margin-top:0">
+          اگر این شماره در سایت حساب دارد فقط دسترسی داده می‌شود؛ وگرنه با نام و رمز زیر حساب جدید ساخته می‌شود.
+        </p>
+        <form method="post" action="/crm/users" class="row">
+          <input name="phone" placeholder="شماره موبایل" class="ltr" required style="max-width:180px" />
+          <input name="name" placeholder="نام (برای حساب جدید)" style="max-width:200px" />
+          <input name="password" type="password" placeholder="رمز (برای حساب جدید)" class="ltr" style="max-width:220px" />
+          <button>افزودن</button>
         </form>
       </div>
       <div class="card wrap">
         <table>
-          <thead><tr><th>نام کاربری</th><th>نقش</th><th>تاریخ ساخت</th><th></th></tr></thead>
+          <thead><tr><th>نام</th><th>موبایل</th><th>نقش</th><th>عضویت در سایت</th><th></th></tr></thead>
           <tbody>
             {props.users.map((u) => (
               <tr>
-                <td class="ltr">{u.username}</td>
-                <td>{u.is_admin ? "مدیر" : "کاربر"}</td>
+                <td>{u.name}</td>
+                <td class="ltr">{u.phone}</td>
+                <td>{u.is_admin ? "مدیر پلتفرم" : "کارمند CRM"}</td>
                 <td class="muted"><span class="dt">{formatJalali(u.created_at)}</span></td>
                 <td>
-                  {u.id !== props.user.id && (
-                    <form method="post" action={`/users/${u.id}/delete`} onsubmit="return confirm('حذف شود؟')">
-                      <button class="danger" style="padding:3px 10px">حذف</button>
+                  {!u.is_admin && u.id !== props.user.id && (
+                    <form method="post" action={`/crm/users/${u.id}/revoke`} onsubmit="return confirm('دسترسی CRM گرفته شود؟')">
+                      <button class="danger" style="padding:3px 10px">گرفتن دسترسی</button>
                     </form>
                   )}
                 </td>
@@ -359,25 +318,6 @@ export function UsersPage(props: { user: User; users: (User & { created_at: stri
             ))}
           </tbody>
         </table>
-      </div>
-    </Layout>
-  );
-}
-
-export function AccountPage(props: { user: User; error?: string; ok?: string }) {
-  return (
-    <Layout title="حساب کاربری" user={props.user}>
-      <div class="card" style="max-width:420px">
-        <h1>تغییر رمز عبور</h1>
-        <Errors errors={props.error ? [props.error] : []} />
-        {props.ok && <div class="okbox">{props.ok}</div>}
-        <form method="post" action="/account">
-          <label>رمز فعلی</label>
-          <input name="current" type="password" class="ltr" required />
-          <label style="margin-top:10px">رمز جدید (حداقل ۱۰ کاراکتر)</label>
-          <input name="password" type="password" class="ltr" minlength={10} required />
-          <p><button>ذخیره</button></p>
-        </form>
       </div>
     </Layout>
   );

@@ -1,5 +1,5 @@
 import type { Child } from "hono/jsx";
-import type { User } from "../session";
+import type { User } from "../../session";
 
 const CSS = `
 :root{--bg:#f5f6f8;--card:#fff;--text:#1d2330;--muted:#6b7280;--line:#e3e6eb;--accent:#2563eb;--accent-text:#fff;--danger:#c62828;--ok:#1b7f3b;--hl:#eef3ff}
@@ -44,14 +44,15 @@ export function Layout(props: { title: string; user?: User | null; children?: Ch
       <body>
         {props.user && (
           <header>
-            <a class="brand" href="/">CRM</a>
-            <a href="/">مخاطبین</a>
-            <a href="/contacts/new">+ مخاطب جدید</a>
-            <a href="/history">سوابق تغییرات</a>
-            <a href="/fields">فیلدهای اضافه</a>
-            {props.user.is_admin ? <a href="/users">کاربران</a> : null}
+            <a class="brand" href="/crm">CRM</a>
+            <a href="/crm">مخاطبین</a>
+            <a href="/crm/contacts/new">+ مخاطب جدید</a>
+            <a href="/crm/history">سوابق تغییرات</a>
+            <a href="/crm/fields">فیلدهای اضافه</a>
+            {props.user.is_admin ? <a href="/crm/users">کاربران</a> : null}
             <span class="sp" />
-            <a href="/account" class="muted">{props.user.username}</a>
+            <a href="/">سایت</a>
+            <span class="muted">{props.user.name}</span>
             <form method="post" action="/logout" style="margin:0">
               <button class="secondary" style="padding:3px 10px">خروج</button>
             </form>

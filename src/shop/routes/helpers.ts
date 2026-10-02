@@ -1,7 +1,7 @@
 import { setCookie } from "hono/cookie";
 import { createSession } from "../../../lib/auth";
-import type { C } from "../env";
-import { SESSION_COOKIE, type User } from "../session";
+import type { C } from "../../env";
+import { SESSION_COOKIE, type User } from "../../session";
 
 export const PAGE = 24;
 export const pageParam = (c: C) => Math.max(1, Number(c.req.query("page")) || 1);

@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { safeEqual } from "../../../lib/auth";
-import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { now, randomSlug, type Order, type Product, type Shop } from "../db";
-import type { C, Env } from "../env";
+import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
+import { confirmPayment, now, randomSlug, rejectPayment, type Order, type Product, type Shop } from "../db";
+import type { C, Env } from "../../env";
 import { botToken, notifyShop, sendBotMessage, type BotKind } from "../notify";
-import { AdminPage, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
+import { sendShopMessage } from "./store";
+import { AdminPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam } from "./helpers";
 
 export const panel = new Hono<Env>();
@@ -37,36 +38,82 @@ panel.post("/panel/register", async (c) => {
 });
 
 // Everything below needs a shop.
-panel.use("/panel/*", async (c, next) => {
+const requireShop = async (c: C, next: () => Promise<void>) => {
   if (c.req.path === "/panel/register") return next();
   const shop = await myShop(c);
   if (!shop) return c.redirect("/panel/register");
   c.set("shop", shop);
   await next();
-});
+};
+panel.use("/panel", requireShop);
+panel.use("/panel/*", requireShop);
 const shopOf = (c: C) => c.get("shop");
 
+const FILTER_STATUSES: Record<string, string> = {
+  awaiting: "('awaiting')",
+  todo: "('paid')",
+  shipped: "('shipped', 'delivered')",
+  rejected: "('rejected')",
+};
+
 panel.get("/panel", async (c) => {
-  const shop = await myShop(c);
-  if (!shop) return c.redirect("/panel/register");
-  const filter = c.req.query("f") ?? "todo";
-  const statuses = filter === "shipped" ? "('shipped', 'delivered')" : filter === "all" ? "('paid', 'shipped', 'delivered')" : "('paid')";
-  const { results } = await c.env.DB.prepare(`SELECT * FROM orders WHERE shop_id = ? AND status IN ${statuses} ORDER BY paid_at DESC LIMIT 200`)
+  const shop = shopOf(c);
+  const { results: countRows } = await c.env.DB.prepare("SELECT status, COUNT(*) AS n FROM orders WHERE shop_id = ? GROUP BY status")
+    .bind(shop.id)
+    .all<{ status: string; n: number }>();
+  const byStatus = Object.fromEntries(countRows.map((r) => [r.status, r.n]));
+  const counts = { awaiting: byStatus.awaiting ?? 0, todo: byStatus.paid ?? 0 };
+  // Default to whatever needs action first.
+  const filter = c.req.query("f") ?? (counts.awaiting ? "awaiting" : "todo");
+  const statuses = FILTER_STATUSES[filter] ?? FILTER_STATUSES.todo;
+  const { results } = await c.env.DB.prepare(`SELECT * FROM orders WHERE shop_id = ? AND status IN ${statuses} ORDER BY reported_at DESC LIMIT 200`)
     .bind(shop.id)
     .all<Order>();
-  return c.html(<OrdersPage user={currentUser(c)} shop={shop} orders={results} filter={filter} />);
+  return c.html(<OrdersPage user={currentUser(c)} shop={shop} orders={results} filter={ORDER_FILTERS.some(([f]) => f === filter) ? filter : "todo"} counts={counts} />);
 });
 
+/** Orders the shop may see: anything the giver has reported a transfer for. */
 async function shopOrder(c: C) {
-  return c.env.DB.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ? AND status IN ('paid', 'shipped', 'delivered')")
+  return c.env.DB.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ? AND status <> 'pending'")
     .bind(intParam(c, "id"), shopOf(c).id)
     .first<Order>();
 }
 
+const SAVED_MESSAGES: Record<string, string> = {
+  confirmed: "واریز تأیید شد. آدرس گیرنده در همین صفحه است و پیام ارسال هم برایتان فرستاده شد.",
+  rejected: "واریز رد شد و آرزو دوباره قابل خرید است.",
+  saved: "ذخیره شد.",
+};
+
 panel.get("/panel/orders/:id{[0-9]+}", async (c) => {
   const order = await shopOrder(c);
   if (!order) return c.notFound();
-  return c.html(<OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} saved={c.req.query("saved") === "1"} />);
+  return c.html(<OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />);
+});
+
+panel.get("/panel/orders/:id{[0-9]+}/receipt", async (c) => {
+  const order = await shopOrder(c);
+  if (!order?.receipt_key) return c.notFound();
+  const obj = await c.env.IMAGES.get(order.receipt_key);
+  if (!obj) return c.notFound();
+  return c.body(obj.body, 200, {
+    "Content-Type": obj.httpMetadata?.contentType ?? "application/octet-stream",
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+});
+
+panel.post("/panel/orders/:id{[0-9]+}/confirm", async (c) => {
+  const id = intParam(c, "id");
+  if (await confirmPayment(c.env.DB, id, shopOf(c).id)) c.executionCtx.waitUntil(sendShopMessage(c, id, "ship"));
+  return c.redirect(`/panel/orders/${id}?done=confirmed`);
+});
+
+panel.post("/panel/orders/:id{[0-9]+}/reject", async (c) => {
+  const id = intParam(c, "id");
+  const reason = ((await form(c)).reason ?? "").slice(0, 200);
+  await rejectPayment(c.env.DB, id, shopOf(c).id, reason);
+  return c.redirect(`/panel/orders/${id}?done=rejected`);
 });
 
 panel.post("/panel/orders/:id{[0-9]+}/ship", async (c) => {
@@ -76,14 +123,14 @@ panel.post("/panel/orders/:id{[0-9]+}/ship", async (c) => {
   await c.env.DB.prepare("UPDATE orders SET status = 'shipped', tracking_code = ?, shipped_at = COALESCE(shipped_at, ?) WHERE id = ?")
     .bind(tracking, now(), order.id)
     .run();
-  return c.redirect(`/panel/orders/${order.id}?saved=1`);
+  return c.redirect(`/panel/orders/${order.id}?done=saved`);
 });
 
 panel.post("/panel/orders/:id{[0-9]+}/delivered", async (c) => {
   const order = await shopOrder(c);
   if (!order || order.status !== "shipped") return c.notFound();
   await c.env.DB.prepare("UPDATE orders SET status = 'delivered' WHERE id = ?").bind(order.id).run();
-  return c.redirect(`/panel/orders/${order.id}?saved=1`);
+  return c.redirect(`/panel/orders/${order.id}?done=saved`);
 });
 
 // ---------- products ----------
@@ -159,8 +206,14 @@ async function saveSettings(c: C) {
   const f = await form(c);
   const chat = (v: string | undefined) => (v ?? "").replace(/[^\d\-]/g, "").slice(0, 40);
   if (!f.name) return { error: "نام فروشگاه لازم است." };
-  await c.env.DB.prepare("UPDATE shops SET name = ?, phone = ?, description = ?, bale_chat_id = ?, telegram_chat_id = ? WHERE id = ?")
-    .bind(f.name, normalizePhone(f.phone ?? ""), f.description ?? "", chat(f.bale_chat_id), chat(f.telegram_chat_id), shopOf(c).id)
+  const card = normalizeDigits(f.card_number ?? "");
+  const cardError = card ? cardNumberError(card) : null;
+  if (cardError) return { error: cardError };
+  if (card && !f.card_holder) return { error: "نام صاحب کارت را وارد کنید." };
+  await c.env.DB.prepare(
+    "UPDATE shops SET name = ?, phone = ?, description = ?, card_number = ?, card_holder = ?, bale_chat_id = ?, telegram_chat_id = ? WHERE id = ?",
+  )
+    .bind(f.name, normalizePhone(f.phone ?? ""), f.description ?? "", card, (f.card_holder ?? "").slice(0, 80), chat(f.bale_chat_id), chat(f.telegram_chat_id), shopOf(c).id)
     .run();
   return { error: "" };
 }

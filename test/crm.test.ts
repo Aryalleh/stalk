@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cleanContact, CONTACT_KEY } from "../src/fields";
-import { buildSnapshot, diffContact, type LogRow } from "../src/history";
+import { cleanContact, CONTACT_KEY } from "../src/crm/fields";
+import { buildSnapshot, diffContact, type LogRow } from "../src/crm/history";
 import { formatJalali, parseJalali, toGregorian, toJalali } from "../lib/jalali";
-import { nationalCodeError, normalizeHandle, normalizePhone } from "../lib/normalize";
+import { cardNumberError, nationalCodeError, normalizeHandle, normalizePhone } from "../lib/normalize";
 
 describe("normalize", () => {
   it("phones", () => {
@@ -22,6 +22,11 @@ describe("normalize", () => {
     expect(nationalCodeError("0499370898")).not.toBeNull();
     expect(nationalCodeError("1111111111")).not.toBeNull();
     expect(nationalCodeError("123")).not.toBeNull();
+  });
+  it("bank card numbers", () => {
+    expect(cardNumberError("6037997599999993")).toBeNull();
+    expect(cardNumberError("6037997599999994")).not.toBeNull();
+    expect(cardNumberError("6037")).not.toBeNull();
   });
   it("cleanContact normalizes before validating", () => {
     const { data, errors } = cleanContact({ national_code: "۰۴۹۹۳۷۰۸۹۹", phone: "۰۹۱۲ ۱۲۳ ۴۵۶۷", postal_code: "12345" });

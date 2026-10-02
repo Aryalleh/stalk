@@ -1,5 +1,5 @@
 import type { Child } from "hono/jsx";
-import type { User } from "../session";
+import { canUseCrm, type User } from "../../session";
 
 const CSS = `
 :root{--bg:#faf7f5;--card:#fff;--text:#2a2230;--muted:#7a7080;--line:#ece6ea;--accent:#d6336c;--accent-2:#f8e1ea;--accent-text:#fff;--ok:#1b7f3b;--ok-bg:#e5f5ea;--warn-bg:#fff4dc;--danger:#c62828}
@@ -68,6 +68,7 @@ export function Layout(props: { title: string; user: User | null; children?: Chi
             <>
               <a href="/panel">پنل فروشگاه</a>
               {u.is_admin ? <a href="/admin">مدیریت</a> : null}
+              {canUseCrm(u) ? <a href="/crm">CRM</a> : null}
               <span class="muted">{u.name}</span>
               <form method="post" action="/logout" style="margin:0">
                 <button class="secondary small">خروج</button>

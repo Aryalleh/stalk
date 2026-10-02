@@ -1,5 +1,10 @@
-export const RESERVATION_MINUTES = 20;
+/** How long a giver has to make the card-to-card transfer and report it. */
+export const RESERVATION_MINUTES = 30;
+/** Orders that count as bought (shop confirmed the money). */
 const SOLD = "('paid', 'shipped', 'delivered')";
+/** SQL condition (alias o, ?now param) for orders that occupy a unit: bought, reported, or a live hold. */
+const HOLDS = (nowParam: string) =>
+  `(o.status IN ('awaiting', 'paid', 'shipped', 'delivered') OR (o.status = 'pending' AND o.expires_at > ${nowParam}))`;
 
 export const now = () => new Date().toISOString();
 
@@ -17,6 +22,8 @@ export interface Shop {
   description: string;
   phone: string;
   status: "pending" | "approved" | "suspended";
+  card_number: string;
+  card_holder: string;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;
@@ -62,9 +69,9 @@ export type ItemView = {
   product_active: number;
   shop_name: string;
   shop_slug: string;
-  shop_ok: number;
+  shop_ok: number; // approved and has a card number to receive transfers
   bought: number;
-  reserved: number;
+  reserved: number; // live holds + transfers waiting for the shop to confirm
 };
 
 /** Products visible to the public: active and from an approved shop. */
@@ -107,9 +114,9 @@ export async function wishlistItems(db: D1Database, wishlistId: number): Promise
     .prepare(
       `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note,
               p.title, p.price, p.image_key, p.is_active AS product_active,
-              s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved') AS shop_ok,
+              s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '') AS shop_ok,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
-              (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status = 'pending' AND o.expires_at > ?1) AS reserved
+              (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved
        FROM wishlist_items i JOIN products p ON p.id = i.product_id JOIN shops s ON s.id = p.shop_id
        WHERE i.wishlist_id = ?2 ORDER BY i.created_at`,
     )
@@ -127,31 +134,33 @@ export interface GiverInput {
 
 /**
  * Atomically create a pending order holding one unit of the item, only if a unit is still free
- * (quantity > sold + unexpired holds). Returns null when the item is fully taken or not buyable.
+ * (quantity > bought + reported + live holds). Returns null when the item is taken or not buyable.
  */
 export async function reserveItem(db: D1Database, itemId: number, giver: GiverInput) {
   const t = now();
   const expires = new Date(Date.now() + RESERVATION_MINUTES * 60_000).toISOString();
   return db
     .prepare(
-      `INSERT INTO orders (item_id, wishlist_id, product_id, shop_id, product_title, amount,
-                           giver_name, giver_phone, gift_message, is_anonymous, status, expires_at, created_at)
-       SELECT i.id, i.wishlist_id, p.id, p.shop_id, p.title, p.price, ?2, ?3, ?4, ?5, 'pending', ?6, ?7
+      `INSERT INTO orders (token, item_id, wishlist_id, product_id, shop_id, product_title, amount, giver_name, giver_phone,
+                           gift_message, is_anonymous, status, expires_at, pay_card_number, created_at)
+       SELECT ?8, i.id, i.wishlist_id, p.id, p.shop_id, p.title, p.price, ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, ?7
        FROM wishlist_items i
        JOIN wishlists w ON w.id = i.wishlist_id
        JOIN products p ON p.id = i.product_id
        JOIN shops s ON s.id = p.shop_id
-       WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND s.status = 'approved'
-         AND i.quantity > (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id
-                           AND (o.status IN ${SOLD} OR (o.status = 'pending' AND o.expires_at > ?7)))
-       RETURNING id, amount`,
+       WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND s.status = 'approved' AND s.card_number <> ''
+         AND i.quantity > (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?7")})
+       RETURNING id, token`,
     )
-    .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t)
-    .first<{ id: number; amount: number }>();
+    .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t, randomSlug(24))
+    .first<{ id: number; token: string }>();
 }
+
+export type OrderStatus = "pending" | "awaiting" | "paid" | "shipped" | "delivered" | "rejected";
 
 export interface Order {
   id: number;
+  token: string;
   item_id: number;
   wishlist_id: number;
   product_id: number;
@@ -162,10 +171,15 @@ export interface Order {
   giver_phone: string;
   gift_message: string;
   is_anonymous: number;
-  status: "pending" | "paid" | "shipped" | "delivered" | "failed" | "expired";
+  status: OrderStatus;
   expires_at: string;
-  pay_authority: string | null;
-  pay_ref_id: string | null;
+  pay_card_number: string;
+  transfer_ref: string;
+  transfer_card_last4: string;
+  transfer_at: string;
+  receipt_key: string;
+  reported_at: string | null;
+  reject_reason: string;
   ship_name: string;
   ship_phone: string;
   ship_address: string;
@@ -178,31 +192,60 @@ export interface Order {
   shipped_at: string | null;
 }
 
+export interface TransferReport {
+  ref: string;
+  last4: string;
+  at: string;
+  receiptKey: string;
+}
+
 /**
- * Mark a pending order paid and snapshot the delivery address. Returns true only for the call that
- * performed the transition, so a reloaded callback never notifies the shop twice.
+ * Giver says they transferred the money. Accepted even after the hold lapsed, since the money may
+ * already have moved; the shop decides when confirming. Returns false if already reported.
  */
-export async function markPaid(db: D1Database, orderId: number, refId: string) {
+export async function reportTransfer(db: D1Database, orderId: number, t: TransferReport) {
   const r = await db
     .prepare(
-      `UPDATE orders SET status = 'paid', pay_ref_id = ?2, paid_at = ?3,
-         ship_name = w.recipient_name, ship_phone = w.recipient_phone,
-         ship_address = w.address, ship_postal_code = w.postal_code
-       FROM wishlists w
-       WHERE orders.id = ?1 AND orders.status IN ('pending', 'expired', 'failed') AND w.id = orders.wishlist_id`,
+      `UPDATE orders SET status = 'awaiting', transfer_ref = ?2, transfer_card_last4 = ?3, transfer_at = ?4,
+         receipt_key = ?5, reported_at = ?6
+       WHERE id = ?1 AND status = 'pending'`,
     )
-    .bind(orderId, refId, now())
+    .bind(orderId, t.ref, t.last4, t.at, t.receiptKey, now())
     .run();
   return r.meta.changes === 1;
 }
 
-export const STATUS_LABEL: Record<Order["status"], string> = {
-  pending: "در انتظار پرداخت",
-  paid: "پرداخت‌شده — آماده ارسال",
+/** Shop confirms the money arrived: mark paid and snapshot the delivery address. */
+export async function confirmPayment(db: D1Database, orderId: number, shopId: number) {
+  const r = await db
+    .prepare(
+      `UPDATE orders SET status = 'paid', paid_at = ?3,
+         ship_name = w.recipient_name, ship_phone = w.recipient_phone,
+         ship_address = w.address, ship_postal_code = w.postal_code
+       FROM wishlists w
+       WHERE orders.id = ?1 AND orders.shop_id = ?2 AND orders.status = 'awaiting' AND w.id = orders.wishlist_id`,
+    )
+    .bind(orderId, shopId, now())
+    .run();
+  return r.meta.changes === 1;
+}
+
+/** Shop says the money never arrived; the unit becomes free again. */
+export async function rejectPayment(db: D1Database, orderId: number, shopId: number, reason: string) {
+  const r = await db
+    .prepare("UPDATE orders SET status = 'rejected', reject_reason = ? WHERE id = ? AND shop_id = ? AND status = 'awaiting'")
+    .bind(reason, orderId, shopId)
+    .run();
+  return r.meta.changes === 1;
+}
+
+export const STATUS_LABEL: Record<OrderStatus, string> = {
+  pending: "در انتظار واریز",
+  awaiting: "واریز اعلام شد — در انتظار تأیید فروشگاه",
+  paid: "پرداخت تأیید شد — آماده ارسال",
   shipped: "ارسال شد",
   delivered: "تحویل شد",
-  failed: "پرداخت ناموفق",
-  expired: "منقضی",
+  rejected: "واریز تأیید نشد",
 };
 
 export const toman = (n: number) => `${n.toLocaleString("fa-IR")} تومان`;
