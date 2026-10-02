@@ -6,6 +6,7 @@ import m0002 from "../migrations/0002_settings.sql";
 import m0003 from "../migrations/0003_bale.sql";
 import m0004 from "../migrations/0004_shop_v2.sql";
 import m0005 from "../migrations/0005_sizes.sql";
+import m0006 from "../migrations/0006_design.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -15,6 +16,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0003_bale.sql", m0003],
   ["0004_shop_v2.sql", m0004],
   ["0005_sizes.sql", m0005],
+  ["0006_design.sql", m0006],
 ];
 
 let done: Promise<void> | null = null;

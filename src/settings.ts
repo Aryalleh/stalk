@@ -12,6 +12,8 @@ export const DEFAULTS = {
   bot_webhook_secret: "", // generated automatically
   safir_api_key: "", // Bale Safir (business panel) api-access-key: OTP and paid messages by phone
   safir_bot_id: "", // numeric id of the bot Safir sends as
+  categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line
+  featured_shop_id: "", // the "shop of the week" banner on the home page
 };
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -53,3 +55,9 @@ export function reservationMinutes(s: Settings) {
 export const mask = (v: string) => (v ? `••••${v.slice(-4)}` : "");
 
 export const safirReady = (s: Settings) => !!(s.safir_api_key && s.safir_bot_id);
+
+export const categoryList = (s: Settings) =>
+  s.categories
+    .split("\n")
+    .map((c) => c.trim())
+    .filter(Boolean);

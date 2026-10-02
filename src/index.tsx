@@ -8,6 +8,7 @@ import type { Env } from "./env";
 import { SESSION_COOKIE, isConnected, sessionUser } from "./session";
 import { activeBots } from "./bale/botapi";
 import { CONNECT_EXEMPT, connect } from "./bale/connect";
+import { appCss } from "./assets";
 import { ensureMigrated } from "./migrate";
 import { loadSettings } from "./settings";
 import { account } from "./shop/routes/account";
@@ -17,6 +18,10 @@ import { store } from "./shop/routes/store";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
+
+app.get("/static/app.css", (c) =>
+  c.body(appCss, 200, { "Content-Type": "text/css; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable" }),
+);
 
 app.use(async (c, next) => {
   await ensureMigrated(c.env.DB);

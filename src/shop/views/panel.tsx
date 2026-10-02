@@ -6,6 +6,7 @@ import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type 
 import { DELIVERY_LABEL } from "../notify";
 import { CLOTHING_TEMPLATE } from "../sizes";
 import type { User } from "../../session";
+import type { Child } from "hono/jsx";
 import { Errors, Layout, Thumb } from "./layout";
 
 const SHOP_STATUS: Record<Shop["status"], string> = { pending: "در انتظار تأیید", approved: "فعال", suspended: "معلق" };
@@ -46,32 +47,58 @@ export function ShopRegisterPage(props: { user: User; values?: Record<string, st
   );
 }
 
-function Tabs(props: { on: string }) {
-  const tabs = [["/panel", "سفارش‌ها"], ["/panel/products", "محصولات"], ["/panel/settings", "تنظیمات و اطلاع‌رسانی"]];
-  return (
-    <nav class="tabs">
-      {tabs.map(([href, label]) => <a href={href} class={props.on === href ? "on" : ""}>{label}</a>)}
-    </nav>
-  );
-}
+export type PanelTab = "dashboard" | "products" | "orders" | "settings";
 
-function ShopHeader(props: { shop: Shop }) {
+/** Shop panel shell from html/shoppanel.html: light theme, shop header and a bottom tab bar. */
+function PanelShell(props: { title: string; user: User; shop: Shop; on: PanelTab; children?: Child }) {
   const s = props.shop;
-  return (
+  const tab = (key: PanelTab, href: string, icon: string, label: string) => (
+    <a href={href} class={`flex flex-col items-center gap-1 ${props.on === key ? "text-blue-600" : "text-slate-400"}`}>
+      <i class={`fa-solid ${icon} text-lg`}></i>
+      <span class="text-[10px] font-bold">{label}</span>
+    </a>
+  );
+  const header = (
     <>
-      <div class="row" style="margin-bottom:12px">
-        <h1 style="margin:0">{s.name}</h1>
-        <span class={`tag ${s.status === "approved" ? "ok" : ""}`}>{SHOP_STATUS[s.status]}</span>
-        <span class="sp" />
-        <a href={`/s/${s.slug}`}>صفحه عمومی فروشگاه</a>
-      </div>
-      {s.status === "pending" && <div class="warnbox">فروشگاه در انتظار تأیید است. می‌توانید محصولات را اضافه کنید؛ بعد از تأیید نمایش داده می‌شوند.</div>}
-      {s.status === "suspended" && <div class="errbox">فروشگاه معلق است و محصولاتش نمایش داده نمی‌شود.</div>}
-      {!s.card_number && (
-        <div class="errbox">تا شماره کارت را در <a href="/panel/settings">تنظیمات</a> وارد نکنید، کسی نمی‌تواند محصولات شما را بخرد.</div>
-      )}
-      {!s.city && <div class="errbox">شهر فروشگاه و روش‌های ارسال را در <a href="/panel/settings">تنظیمات</a> مشخص کنید.</div>}
+      <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <a href="/panel" class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20 overflow-hidden shrink-0">
+              {s.logo_key ? <img src={`/img/${s.logo_key}`} alt="" class="w-full h-full object-cover" /> : <i class="fa-solid fa-store text-lg"></i>}
+            </div>
+            <div class="min-w-0">
+              <h1 class="text-sm font-bold text-slate-900 truncate">{s.name}</h1>
+              <p class="text-[10px] text-slate-500">پنل فروشگاه · <span class={s.status === "approved" ? "text-emerald-600" : "text-amber-600"}>{SHOP_STATUS[s.status]}</span></p>
+            </div>
+          </a>
+          <div class="flex gap-2">
+            <a href={`/s/${s.slug}`} aria-label="صفحه عمومی فروشگاه" title="صفحه عمومی فروشگاه" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-eye"></i></a>
+            <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-house"></i></a>
+          </div>
+        </div>
+      </header>
+      <nav class="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 safe-bottom">
+        <div class="max-w-md mx-auto px-8 pt-3 flex items-center justify-between">
+          {tab("dashboard", "/panel", "fa-chart-pie", "داشبورد")}
+          {tab("products", "/panel/products", "fa-box-open", "محصولات")}
+          {tab("orders", "/panel/orders", "fa-receipt", "سفارش‌ها")}
+          {tab("settings", "/panel/settings", "fa-gear", "تنظیمات")}
+        </div>
+      </nav>
     </>
+  );
+  return (
+    <Layout title={props.title} user={props.user} panel header={header}>
+      <div class="pb-20">
+        {s.status === "pending" && <div class="warnbox">فروشگاه در انتظار تأیید است. می‌توانید محصولات را اضافه کنید؛ بعد از تأیید نمایش داده می‌شوند.</div>}
+        {s.status === "suspended" && <div class="errbox">فروشگاه معلق است و محصولاتش نمایش داده نمی‌شود.</div>}
+        {!s.card_number && (
+          <div class="errbox">تا شماره کارت را در <a href="/panel/settings">تنظیمات</a> وارد نکنید، کسی نمی‌تواند محصولات شما را بخرد.</div>
+        )}
+        {!s.city && <div class="errbox">شهر فروشگاه و روش‌های ارسال را در <a href="/panel/settings">تنظیمات</a> مشخص کنید.</div>}
+        {props.children}
+      </div>
+    </Layout>
   );
 }
 
@@ -82,40 +109,121 @@ export const ORDER_FILTERS: [string, string][] = [
   ["rejected", "ردشده"],
 ];
 
-export function OrdersPage(props: { user: User; shop: Shop; orders: Order[]; filter: string; counts: Record<string, number> }) {
+const STATUS_STYLE: Record<string, string> = {
+  pending: "bg-slate-100 text-slate-500",
+  awaiting: "bg-amber-50 text-amber-600",
+  paid: "bg-blue-50 text-blue-600",
+  shipped: "bg-emerald-50 text-emerald-600",
+  delivered: "bg-emerald-50 text-emerald-600",
+  rejected: "bg-red-50 text-red-600",
+};
+
+const SHORT_STATUS: Record<string, string> = {
+  pending: "در انتظار واریز", awaiting: "بررسی رسید", paid: "آماده ارسال", shipped: "ارسال شد", delivered: "تحویل شد", rejected: "رد شد",
+};
+
+export type PanelOrder = Order & { image_key: string };
+
+function OrderCard(props: { o: PanelOrder }) {
+  const o = props.o;
   return (
-    <Layout title="پنل فروشگاه" user={props.user}>
-      <ShopHeader shop={props.shop} />
-      <Tabs on="/panel" />
-      <div class="row" style="margin-bottom:10px">
-        {ORDER_FILTERS.map(([f, l]) => {
-          const label = `${l}${props.counts[f] ? ` (${props.counts[f]})` : ""}`;
-          return props.filter === f ? <b>{label}</b> : <a href={`/panel?f=${f}`}>{label}</a>;
-        })}
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-12 h-12 rounded-lg bg-slate-50 overflow-hidden border border-slate-100 shrink-0 flex items-center justify-center">
+            {o.image_key ? <img class="w-full h-full object-cover" src={`/img/${o.image_key}`} alt="" loading="lazy" /> : "🎁"}
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-xs font-bold text-slate-900 truncate">{o.product_title}{o.size && <span class="text-slate-500"> · سایز {o.size}</span>}</h3>
+            <p class="text-[10px] text-slate-500">سفارش #{o.id} · <span class="dt">{formatJalali(o.reported_at ?? o.created_at, false)}</span></p>
+            <p class="text-[11px] font-bold text-slate-900 mt-0.5">{toman(o.amount)}</p>
+          </div>
+        </div>
+        <span class={`px-2 py-1 text-[10px] font-bold rounded-md whitespace-nowrap ${STATUS_STYLE[o.status] ?? ""}`}>{SHORT_STATUS[o.status]}</span>
       </div>
-      <div class="card wrap">
-        {props.orders.length === 0 ? (
-          <p class="muted">سفارشی نیست.</p>
-        ) : (
-          <table>
-            <thead><tr><th>#</th><th>محصول</th><th>خریدار</th><th>مبلغ</th><th>ارسال</th><th>وضعیت</th><th>زمان ارسال فیش</th></tr></thead>
-            <tbody>
-              {props.orders.map((o) => (
-                <tr>
-                  <td><a href={`/panel/orders/${o.id}`}>#{o.id}</a></td>
-                  <td>{o.product_title}</td>
-                  <td>{o.giver_name}</td>
-                  <td class="price">{toman(o.amount)}</td>
-                  <td>{DELIVERY_LABEL[o.delivery_method] ?? "—"}</td>
-                  <td><span class={`tag ${o.status === "shipped" || o.status === "delivered" ? "ok" : ""}`}>{STATUS_LABEL[o.status]}</span></td>
-                  <td class="muted"><span class="dt">{formatJalali(o.reported_at)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+        <div class="text-[11px] text-slate-500">
+          خریدار: <span class="text-slate-900 font-medium">{o.giver_name}</span>
+          {o.delivery_method && <> · {DELIVERY_LABEL[o.delivery_method]}</>}
+        </div>
+        <a href={`/panel/orders/${o.id}`} class="text-[11px] font-bold text-blue-600 flex items-center gap-1">
+          مشاهده جزئیات <i class="fa-solid fa-arrow-left text-[9px]"></i>
+        </a>
       </div>
-    </Layout>
+    </div>
+  );
+}
+
+function OrderList(props: { orders: PanelOrder[]; empty: string }) {
+  if (!props.orders.length) return <div class="card text-center text-sm muted py-10">{props.empty}</div>;
+  return <div class="space-y-4">{props.orders.map((o) => <OrderCard o={o} />)}</div>;
+}
+
+function Chip(props: { href: string; on: boolean; children: Child }) {
+  return (
+    <a
+      href={props.href}
+      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-blue-50 !text-blue-600 border-blue-100" : "bg-white !text-slate-500 border-slate-200"}`}
+    >
+      {props.children}
+    </a>
+  );
+}
+
+export function DashboardPage(props: {
+  user: User;
+  shop: Shop;
+  stats: { today: number; awaiting: number; toShip: number; sales: number; products: number };
+  orders: PanelOrder[];
+  onlyAwaiting: boolean;
+}) {
+  const st = props.stats;
+  const stat = (label: string, value: string, note?: Child) => (
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <span class="text-[11px] text-slate-500 block mb-1">{label}</span>
+      <span class="text-lg font-bold text-slate-900">{value}</span>
+      {note}
+    </div>
+  );
+  return (
+    <PanelShell title="پنل فروشگاه" user={props.user} shop={props.shop} on="dashboard">
+      <section class="grid grid-cols-2 gap-4 mb-8">
+        {stat("فروش امروز", toman(st.today))}
+        {stat("فیش‌های جدید", st.awaiting.toLocaleString("fa-IR"), st.awaiting ? <span class="text-[10px] text-amber-600 mr-1 font-bold">منتظر تأیید</span> : null)}
+        {stat("آماده ارسال", st.toShip.toLocaleString("fa-IR"), st.toShip ? <span class="text-[10px] text-blue-600 mr-1 font-bold">فعال</span> : null)}
+        {stat("کل فروش موفق", st.sales.toLocaleString("fa-IR"), <span class="text-[10px] text-slate-500 mr-1">{st.products.toLocaleString("fa-IR")} محصول</span>)}
+      </section>
+      <section>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="!mb-0">آخرین سفارش‌ها</h2>
+          <div class="flex gap-2">
+            <Chip href="/panel" on={!props.onlyAwaiting}>همه</Chip>
+            <Chip href="/panel?only=awaiting" on={props.onlyAwaiting}>تأیید نشده</Chip>
+          </div>
+        </div>
+        <OrderList orders={props.orders} empty={props.onlyAwaiting ? "فیشی منتظر تأیید نیست." : "هنوز سفارشی ثبت نشده."} />
+        <p class="text-center mt-4"><a href="/panel/orders" class="text-xs font-bold">همه سفارش‌ها</a></p>
+      </section>
+      <a href="/panel/products/new" class="mt-6 w-full py-4 bg-slate-900 !text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10">
+        <i class="fa-solid fa-plus text-sm"></i> افزودن محصول جدید
+      </a>
+    </PanelShell>
+  );
+}
+
+export function OrdersPage(props: { user: User; shop: Shop; orders: PanelOrder[]; filter: string; counts: Record<string, number> }) {
+  return (
+    <PanelShell title="سفارش‌ها" user={props.user} shop={props.shop} on="orders">
+      <h1>سفارش‌ها</h1>
+      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4">
+        {ORDER_FILTERS.map(([f, l]) => (
+          <Chip href={`/panel/orders?f=${f}`} on={props.filter === f}>
+            {l}{props.counts[f] ? ` (${props.counts[f].toLocaleString("fa-IR")})` : ""}
+          </Chip>
+        ))}
+      </div>
+      <OrderList orders={props.orders} empty="سفارشی نیست." />
+    </PanelShell>
   );
 }
 
@@ -123,9 +231,8 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
   const o = props.order;
   const confirmed = o.status === "paid" || o.status === "shipped" || o.status === "delivered";
   return (
-    <Layout title={`سفارش #${o.id}`} user={props.user}>
-      <ShopHeader shop={props.shop} />
-      <Tabs on="/panel" />
+    <PanelShell title={`سفارش #${o.id}`} user={props.user} shop={props.shop} on="orders">
+      <p class="mb-3"><a href="/panel/orders" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>سفارش‌ها</a></p>
       {props.saved && <div class="okbox">{props.saved}</div>}
       <div class="two">
         <div class="card">
@@ -190,30 +297,36 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
           )}
         </div>
       </div>
-    </Layout>
+    </PanelShell>
   );
 }
 
 export function ProductsPage(props: { user: User; shop: Shop; products: Product[] }) {
   return (
-    <Layout title="محصولات" user={props.user}>
-      <ShopHeader shop={props.shop} />
-      <Tabs on="/panel/products" />
-      <p><a class="btn" href="/panel/products/new">+ محصول جدید</a></p>
-      <div class="card">
-        {props.products.length === 0 && <p class="muted">هنوز محصولی ثبت نشده.</p>}
+    <PanelShell title="محصولات" user={props.user} shop={props.shop} on="products">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="!mb-0">محصولات</h1>
+        <a class="btn small" href="/panel/products/new"><i class="fa-solid fa-plus"></i> محصول جدید</a>
+      </div>
+      {props.products.length === 0 && <div class="card text-center text-sm muted py-10">هنوز محصولی ثبت نشده.</div>}
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         {props.products.map((p) => (
-          <div class="item">
-            <Thumb imageKey={p.image_key} alt={p.title} />
-            <div class="body">
-              <a href={`/panel/products/${p.id}`}><b>{p.title}</b></a>
-              <div class="price">{toman(p.price)}</div>
+          <a href={`/panel/products/${p.id}`} class="block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden !text-slate-900">
+            <div class="aspect-square bg-slate-50 flex items-center justify-center text-4xl">
+              {p.image_key ? <img src={`/img/${p.image_key}`} alt={p.title} loading="lazy" class="w-full h-full object-cover" /> : "🎁"}
             </div>
-            <span class={`tag ${p.is_active ? "ok" : ""}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
-          </div>
+            <div class="p-3">
+              <h3 class="text-xs font-bold truncate">{p.title}</h3>
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-[11px] font-bold text-blue-600">{toman(p.price)}</span>
+                <span class={`text-[10px] px-1.5 py-0.5 rounded ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
+              </div>
+              {p.category && <div class="text-[10px] text-slate-500 mt-1">{p.category}</div>}
+            </div>
+          </a>
         ))}
       </div>
-    </Layout>
+    </PanelShell>
   );
 }
 
@@ -224,15 +337,15 @@ export function ProductFormPage(props: {
   values: Record<string, string>;
   images?: ProductImage[];
   packages?: ProductPackage[];
+  categories: string[];
   errors?: string[];
 }) {
   const p = props.product;
   const v = props.values;
   const pkgs = [...(props.packages ?? []), ...Array.from({ length: 3 }, () => ({ id: 0, name: "", price: 0 }))];
   return (
-    <Layout title={p ? p.title : "محصول جدید"} user={props.user}>
-      <ShopHeader shop={props.shop} />
-      <Tabs on="/panel/products" />
+    <PanelShell title={p ? p.title : "محصول جدید"} user={props.user} shop={props.shop} on="products">
+      <p class="mb-3"><a href="/panel/products" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>محصولات</a></p>
       {v.saved && <div class="okbox">ذخیره شد.</div>}
       <Errors errors={props.errors} />
       <form method="post" action={p ? `/panel/products/${p.id}` : "/panel/products/new"} enctype="multipart/form-data">
@@ -242,11 +355,18 @@ export function ProductFormPage(props: {
             <input name="title" value={v.title ?? ""} required maxlength={120} />
             <label>قیمت (تومان)</label>
             <input name="price" value={v.price ?? ""} class="ltr" inputmode="numeric" required />
+            <label>دسته‌بندی</label>
+            <select name="category">
+              <option value="">بدون دسته</option>
+              {[...new Set([...props.categories, ...(v.category ? [v.category] : [])])].map((c) => <option value={c} selected={v.category === c}>{c}</option>)}
+            </select>
             <label>توضیحات</label>
             <textarea name="description" maxlength={3000} style="min-height:140px">{v.description ?? ""}</textarea>
+            <label>ویژگی‌های کلیدی (هر خط یک ویژگی، تا ۸ مورد)</label>
+            <textarea name="features" maxlength={800} placeholder={"مثلاً:\nجنس نخ پنبه\nقابل شستشو"}>{v.features ?? ""}</textarea>
             <label>لینک ویدیو (پست اینستاگرام، کانال تلگرام یا بله)</label>
             <input name="video_url" value={v.video_url ?? ""} class="ltr" placeholder="https://instagram.com/p/... یا https://t.me/channel/123" maxlength={300} />
-            <label class="row" style="color:var(--text)">
+            <label class="row" style="color:var(--fg)">
               <input type="checkbox" name="is_active" value="1" style="width:auto" checked={v.is_active !== "0"} /> فعال (نمایش در سایت)
             </label>
           </div>
@@ -281,7 +401,7 @@ export function ProductFormPage(props: {
           {p?.size_guide_image && (
             <div class="row" style="margin-bottom:6px">
               <img src={`/img/${p.size_guide_image}`} alt="راهنمای سایز" style="max-width:220px;border-radius:8px" />
-              <label class="row" style="color:var(--text)"><input type="checkbox" name="remove_size_guide_image" value="1" style="width:auto" /> حذف عکس</label>
+              <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_size_guide_image" value="1" style="width:auto" /> حذف عکس</label>
             </div>
           )}
           <input type="file" name="size_guide_image" accept="image/jpeg,image/png,image/webp" />
@@ -304,7 +424,7 @@ export function ProductFormPage(props: {
         <p><button>{p ? "ذخیره" : "ثبت محصول"}</button></p>
       </form>
       <script dangerouslySetInnerHTML={{ __html: productFormScript(props.images?.length ?? 0) }} />
-    </Layout>
+    </PanelShell>
   );
 }
 
@@ -376,17 +496,37 @@ function productFormScript(existingImages: number) {
 })();`;
 }
 
+const PREVIEW_SCRIPT = `document.querySelectorAll('input[data-preview]').forEach(function(i){i.addEventListener('change',function(){
+  var img=document.getElementById(i.getAttribute('data-preview'));if(i.files[0]){img.src=URL.createObjectURL(i.files[0]);img.classList.remove('hidden');}});});`;
+
 export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok?: string }) {
   const s = props.shop;
   const u = props.user;
   return (
-    <Layout title="تنظیمات" user={props.user}>
-      <ShopHeader shop={s} />
-      <Tabs on="/panel/settings" />
+    <PanelShell title="تنظیمات" user={props.user} shop={s} on="settings">
+      <h1>تنظیمات فروشگاه</h1>
       <Errors errors={[props.error]} />
       {props.ok && <div class="okbox">{props.ok}</div>}
-      <form method="post" action="/panel/settings" class="card">
-        <h2>اطلاع‌رسانی</h2>
+      <form method="post" action="/panel/settings" class="card" enctype="multipart/form-data">
+        <h2>لوگو و عکس کاور</h2>
+        <p class="muted small" style="margin-top:0">در صفحه فروشگاه، کنار محصولات و بنر «فروشگاه هفته» نمایش داده می‌شوند.</p>
+        <div class="flex flex-wrap gap-6 items-start">
+          <div>
+            <label style="margin-top:0">لوگو (مربعی)</label>
+            <img id="logo-preview" src={s.logo_key ? `/img/${s.logo_key}` : ""} alt="" class={`w-20 h-20 rounded-2xl object-cover border border-slate-200 mb-2 ${s.logo_key ? "" : "hidden"}`} />
+            <input type="file" name="logo" accept="image/jpeg,image/png,image/webp" data-preview="logo-preview" />
+            {s.logo_key && <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_logo" value="1" /> حذف لوگو</label>}
+          </div>
+          <div class="flex-1 min-w-[220px]">
+            <label style="margin-top:0">عکس کاور (افقی)</label>
+            <img id="cover-preview" src={s.cover_key ? `/img/${s.cover_key}` : ""} alt="" class={`w-full max-w-sm h-24 rounded-2xl object-cover border border-slate-200 mb-2 ${s.cover_key ? "" : "hidden"}`} />
+            <input type="file" name="cover" accept="image/jpeg,image/png,image/webp" data-preview="cover-preview" />
+            {s.cover_key && <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_cover" value="1" /> حذف کاور</label>}
+          </div>
+        </div>
+        <script dangerouslySetInnerHTML={{ __html: PREVIEW_SCRIPT }} />
+
+        <h2 style="margin-top:20px">اطلاع‌رسانی</h2>
         <p class="muted small" style="margin-top:0">
           فیش‌های واریز (با دکمه تأیید و رد) و سفارش‌ها به بات‌هایی که حسابتان به آن وصل است ارسال می‌شود:{" "}
           {u.bale_chat_id && <span class="tag ok">بله ✓</span>} {u.telegram_chat_id && <span class="tag ok">تلگرام ✓</span>}
@@ -409,14 +549,14 @@ export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok
         <CityInput value={s.city} />
         <div class="two">
           <div>
-            <label class="row" style="color:var(--text)">
+            <label class="row" style="color:var(--fg)">
               <input type="checkbox" name="courier_enabled" value="1" style="width:auto" checked={!!s.courier_enabled} /> ارسال با پیک (فقط داخل شهر خودتان)
             </label>
             <label>هزینه پیک (تومان)</label>
             <input name="courier_fee" value={String(s.courier_fee)} class="ltr" inputmode="numeric" />
           </div>
           <div>
-            <label class="row" style="color:var(--text)">
+            <label class="row" style="color:var(--fg)">
               <input type="checkbox" name="post_enabled" value="1" style="width:auto" checked={!!s.post_enabled} /> ارسال با پست (همه شهرها، از جمله شهر خودتان)
             </label>
             <label>هزینه پست (تومان)</label>
@@ -444,7 +584,7 @@ export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok
           <button class="secondary" formaction="/panel/settings/test">ارسال پیام آزمایشی به بات</button>
         </p>
       </form>
-    </Layout>
+    </PanelShell>
   );
 }
 
@@ -452,6 +592,7 @@ export function AdminPage(props: {
   user: User;
   shops: (Shop & { owner_name: string; owner_phone: string; products: number })[];
   stats: { shop_id: number; name: string; orders: number; total: number; unsent: number }[];
+  featuredId: number;
 }) {
   return (
     <Layout title="مدیریت" user={props.user}>
@@ -474,6 +615,15 @@ export function AdminPage(props: {
                     {s.status !== "approved" && <button class="small" name="status" value="approved">تأیید</button>}
                     {s.status !== "suspended" && <button class="small secondary" name="status" value="suspended">تعلیق</button>}
                   </form>
+                  {s.status === "approved" && (
+                    <form method="post" action="/admin/featured" style="margin-top:6px">
+                      {props.featuredId === s.id ? (
+                        <button class="small secondary" name="shop_id" value="0">⭐ فروشگاه هفته (برداشتن)</button>
+                      ) : (
+                        <button class="small secondary" name="shop_id" value={String(s.id)}>انتخاب به‌عنوان فروشگاه هفته</button>
+                      )}
+                    </form>
+                  )}
                 </td>
               </tr>
             ))}
@@ -571,7 +721,7 @@ export function AdminSettingsPage(props: {
         <label>{token ? "توکن جدید (برای نگه‌داشتن توکن فعلی خالی بگذارید)" : "توکن"}</label>
         <input name={`${kind}_bot_token`} class="ltr" autocomplete="off" placeholder="123456:ABC..." />
         {token && (
-          <label class="row" style="color:var(--text)">
+          <label class="row" style="color:var(--fg)">
             <input type="checkbox" name={`${kind}_bot_remove`} value="1" style="width:auto" /> حذف توکن
           </label>
         )}
@@ -604,6 +754,8 @@ export function AdminSettingsPage(props: {
         <input name="site_url" value={s.site_url} class="ltr" placeholder={props.webhookBase} maxlength={200} />
         <label>مهلت واریز خریدار (دقیقه) — در این مدت آرزو برای او رزرو است</label>
         <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
+        <label>دسته‌بندی محصولات (هر خط یکی؛ در صفحه اول و فرم محصول نمایش داده می‌شود)</label>
+        <textarea name="categories" maxlength={1000} style="min-height:150px">{s.categories}</textarea>
         {bot("bale", "بله", "@BotFather در بله")}
         {bot("telegram", "تلگرام", "@BotFather در تلگرام")}
 

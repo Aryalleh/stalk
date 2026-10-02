@@ -1,3 +1,5 @@
+import type { Child } from "hono/jsx";
+import { bankName } from "../../../lib/banks";
 import { formatJalali } from "../../../lib/jalali";
 import { formatCard } from "../../../lib/normalize";
 import {
@@ -16,113 +18,237 @@ import {
 import { DELIVERY_LABEL } from "../notify";
 import { readSizeGuide, type SizeGuide } from "../sizes";
 import type { User } from "../../session";
-import { Errors, Layout, Thumb } from "./layout";
+import { useSite } from "../../render";
+import { Avatar, Errors, IconButton, Layout, TitleBar } from "./layout";
 
-function ProductGrid(props: { products: ProductWithShop[] }) {
-  if (!props.products.length) return <p class="muted">محصولی پیدا نشد.</p>;
-  return (
-    <div class="products">
-      {props.products.map((p) => (
-        <a class="product" href={`/p/${p.id}`}>
-          <Thumb imageKey={p.image_key} alt={p.title} />
-          <div class="info">
-            <div class="title">{p.title}</div>
-            <div class="price">{toman(p.price)}</div>
-            <div class="muted small">{p.shop_name}</div>
-          </div>
-        </a>
-      ))}
-    </div>
+// Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
+// a Pinterest-like masonry feed of image cards with the title and price over a dark gradient.
+
+const fa = (n: number) => n.toLocaleString("fa-IR");
+
+function ImageOrGift(props: { imageKey: string; alt: string; class?: string }) {
+  return props.imageKey ? (
+    <img src={`/img/${props.imageKey}`} alt={props.alt} loading="lazy" class={props.class ?? "w-full h-auto block"} />
+  ) : (
+    <div class="w-full aspect-square flex items-center justify-center text-5xl bg-plum">🎁</div>
   );
+}
+
+/** One pin: the photo at its natural height, title and price over a gradient. */
+function ProductCard(props: { p: ProductWithShop }) {
+  const p = props.p;
+  return (
+    <a href={`/p/${p.id}`} class="group relative block bg-card rounded-3xl overflow-hidden shadow-lg transition-transform active:scale-95">
+      <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-500" />
+      <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent"></div>
+      <div class="absolute inset-x-0 bottom-0 p-4">
+        <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{p.title}</h3>
+        <div class="text-[11px] text-pink font-bold">{toman(p.price)}</div>
+        <div class="text-[10px] text-muted truncate">{p.shop_name}</div>
+      </div>
+    </a>
+  );
+}
+
+function Masonry(props: { products: ProductWithShop[]; empty?: string }) {
+  if (!props.products.length) {
+    return (
+      <div class="text-center text-muted py-16">
+        <i class="fa-solid fa-box-open text-4xl mb-3 block"></i>
+        {props.empty ?? "محصولی پیدا نشد."}
+      </div>
+    );
+  }
+  return <div class="masonry">{props.products.map((p) => <ProductCard p={p} />)}</div>;
 }
 
 function Pager(props: { page: number; hasNext: boolean; base: string }) {
+  if (props.page <= 1 && !props.hasNext) return null;
   const sep = props.base.includes("?") ? "&" : "?";
+  const cls = "px-5 py-2.5 rounded-xl bg-card text-sm text-fg";
   return (
-    <div class="row" style="margin-top:16px">
-      {props.page > 1 && <a href={`${props.base}${sep}page=${props.page - 1}`}>« قبلی</a>}
-      {props.hasNext && <a href={`${props.base}${sep}page=${props.page + 1}`}>بعدی »</a>}
+    <div class="flex justify-center gap-3 mt-6">
+      {props.page > 1 && <a class={cls} href={`${props.base}${sep}page=${props.page - 1}`}>قبلی</a>}
+      {props.hasNext && <a class={cls} href={`${props.base}${sep}page=${props.page + 1}`}>بیشتر</a>}
     </div>
   );
 }
 
-export function HomePage(props: { user: User | null; q: string; products: ProductWithShop[]; page: number; hasNext: boolean }) {
-  return (
-    <Layout title="کادو بگیر، آرزو بساز" user={props.user}>
-      <div class="card">
-        <h1>لیست آرزوهایت را بساز، لینکش را بفرست، کادو بگیر 🎁</h1>
-        <p class="muted" style="margin-top:0">
-          محصولات دلخواهت را به لیست آرزو اضافه کن و لینکش را برای دوستان و خانواده بفرست. هر کس یکی از آرزوها را بخرد،
-          فروشگاه مستقیم برایت ارسال می‌کند — بدون اینکه آدرست را به کسی بدهی.
-        </p>
-        <form method="get" action="/" class="row">
-          <input name="q" value={props.q} placeholder="جستجوی محصول یا فروشگاه" style="flex:1;min-width:200px" />
-          <button>جستجو</button>
+function feedUrl(path: string, q: string, category: string) {
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  if (category) qs.set("cat", category);
+  const s = qs.toString();
+  return s ? `${path}?${s}` : path;
+}
+
+export type FeaturedShop = Pick<Shop, "name" | "slug" | "description" | "cover_key" | "logo_key">;
+
+export function HomePage(props: {
+  user: User | null;
+  q: string;
+  category: string;
+  categories: string[];
+  products: ProductWithShop[];
+  page: number;
+  hasNext: boolean;
+  featured?: FeaturedShop | null;
+  search?: boolean;
+}) {
+  const site = useSite();
+  const path = props.search ? "/search" : "/";
+  const chip = (label: string, cat: string) => (
+    <a
+      href={feedUrl(path, props.q, cat)}
+      class={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-medium ${props.category === cat ? "bg-pink text-white" : "bg-card text-muted hover:text-fg"}`}
+    >
+      {label}
+    </a>
+  );
+  const header = (
+    <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
+      <div class="max-w-5xl mx-auto px-4 py-4 space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <a href="/" class="text-xl font-bold text-pink">{site.site_name}</a>
+          <div class="flex items-center gap-3">
+            {props.user ? (
+              <>
+                <a href="/me/wishlists" aria-label="آرزوهای من" class="hidden md:flex w-10 h-10 items-center justify-center rounded-full bg-card text-muted"><i class="fa-solid fa-gift"></i></a>
+                <a href="/panel" aria-label="پنل فروشگاه" class="w-10 h-10 flex items-center justify-center rounded-full bg-card text-muted"><i class="fa-solid fa-store"></i></a>
+                <a href="/me" aria-label="پروفایل"><Avatar user={props.user} size="w-10 h-10" /></a>
+              </>
+            ) : (
+              <a href="/login" class="px-4 py-2 rounded-xl bg-pink text-white text-sm font-bold">ورود / ثبت‌نام</a>
+            )}
+          </div>
+        </div>
+        <form method="get" action={path} class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-muted"></i>
+          {props.category && <input type="hidden" name="cat" value={props.category} />}
+          <input
+            type="search"
+            name="q"
+            value={props.q}
+            autofocus={props.search}
+            placeholder="جستجوی هدیه، فروشگاه یا برند..."
+            class="w-full bg-card border-none rounded-2xl py-3 pr-11 pl-4 text-sm text-fg placeholder:text-muted focus:ring-2 focus:ring-pink outline-none"
+          />
         </form>
+        {props.categories.length > 0 && (
+          <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+            {chip("همه", "")}
+            {props.categories.map((c) => chip(c, c))}
+          </div>
+        )}
       </div>
-      <ProductGrid products={props.products} />
-      <Pager page={props.page} hasNext={props.hasNext} base={props.q ? `/?q=${encodeURIComponent(props.q)}` : "/"} />
+    </header>
+  );
+  const f = props.featured;
+  return (
+    <Layout title={props.search ? "جستجو" : "کادو بگیر، آرزو بساز"} user={props.user} nav={props.search ? "search" : "home"} header={header} bare wide>
+      <div class="px-4 py-6">
+        {f && !props.q && !props.category && props.page === 1 && (
+          <a href={`/s/${f.slug}`} class="block mb-8 overflow-hidden rounded-3xl bg-card relative h-48 group">
+            {f.cover_key ? (
+              <img class="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" src={`/img/${f.cover_key}`} alt={f.name} />
+            ) : (
+              <div class="w-full h-full bg-gradient-to-br from-pink/40 to-plum"></div>
+            )}
+            <div class="absolute inset-0 bg-gradient-to-t from-ink to-transparent"></div>
+            <div class="absolute bottom-4 right-5 left-5">
+              <span class="text-[10px] bg-pink text-white px-2 py-0.5 rounded-full mb-2 inline-block">فروشگاه هفته</span>
+              <h2 class="text-xl font-bold text-white mb-1">{f.name}</h2>
+              {f.description && <p class="text-xs text-muted line-clamp-1">{f.description}</p>}
+            </div>
+          </a>
+        )}
+        {!props.user && !props.q && !props.category && props.page === 1 && (
+          <div class="mb-6 rounded-3xl bg-card p-5">
+            <h1 class="text-lg font-bold mb-2">لیست آرزوهایت را بساز، لینکش را بفرست، کادو بگیر 🎁</h1>
+            <p class="text-sm text-muted leading-relaxed">
+              محصولات دلخواهت را به لیست آرزو اضافه کن و لینکش را برای دوستانت بفرست. هر کس یکی را بخرد، فروشگاه مستقیم برایت
+              می‌فرستد — بدون اینکه آدرست را به کسی بدهی.
+            </p>
+          </div>
+        )}
+        {(props.q || props.category) && (
+          <p class="text-sm text-muted mb-4">
+            {props.q && <>نتیجه جستجوی «<b class="text-fg">{props.q}</b>»</>} {props.category && <>در دسته <b class="text-fg">{props.category}</b></>}
+          </p>
+        )}
+        <Masonry products={props.products} empty={props.search && !props.q && !props.category ? "دنبال چه هدیه‌ای می‌گردی؟" : undefined} />
+        <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(path, props.q, props.category)} />
+      </div>
     </Layout>
   );
 }
 
 /** Turn a pasted Instagram / Telegram / Bale link into a label for the video button. */
-function videoLabel(url: string) {
-  if (/instagram\.com/i.test(url)) return "▶ ویدیو در اینستاگرام";
-  if (/(t\.me|telegram\.me)/i.test(url)) return "▶ ویدیو در تلگرام";
-  if (/ble\.ir/i.test(url)) return "▶ ویدیو در بله";
-  return "▶ مشاهده ویدیو";
+function videoLink(url: string): [string, string] {
+  if (/instagram\.com/i.test(url)) return ["fa-brands fa-instagram", "ویدیو در اینستاگرام"];
+  if (/(t\.me|telegram\.me)/i.test(url)) return ["fa-brands fa-telegram", "ویدیو در تلگرام"];
+  if (/ble\.ir/i.test(url)) return ["fa-solid fa-circle-play", "ویدیو در بله"];
+  return ["fa-solid fa-circle-play", "مشاهده ویدیو"];
 }
 
-function Gallery(props: { images: ProductImage[]; title: string }) {
-  if (!props.images.length) return <Thumb imageKey="" alt={props.title} />;
+/** Swipeable photos (scroll-snap) with dots that follow the scroll. */
+function Gallery(props: { images: ProductImage[]; title: string; overlay: Child }) {
+  const imgs = props.images;
+  const script = `(function(){var g=document.getElementById('gallery-track');if(!g)return;var d=document.querySelectorAll('#gallery-dots span');
+    g.addEventListener('scroll',function(){var i=Math.round(Math.abs(g.scrollLeft)/g.clientWidth);d.forEach(function(x,k){x.className=k===i?'w-2 h-2 rounded-full bg-pink':'w-2 h-2 rounded-full bg-fg/30';});},{passive:true});})();`;
   return (
-    <div>
-      <div class="thumb" style="border-radius:12px">
-        <img id="gallery-main" src={`/img/${props.images[0].image_key}`} alt={props.title} />
-      </div>
-      {props.images.length > 1 && (
-        <div class="row" style="margin-top:8px">
-          {props.images.map((img) => (
-            <img
-              src={`/img/${img.image_key}`}
-              alt=""
-              loading="lazy"
-              style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--line)"
-              onclick="document.getElementById('gallery-main').src=this.src"
-            />
+    <section class="relative w-full aspect-[4/5] md:aspect-[16/10] max-h-[80vh] bg-card overflow-hidden">
+      {imgs.length ? (
+        <div id="gallery-track" class="flex h-full overflow-x-auto snap-x snap-mandatory no-scrollbar">
+          {imgs.map((img, i) => (
+            <img src={`/img/${img.image_key}`} alt={props.title} loading={i ? "lazy" : "eager"} class="w-full h-full object-cover shrink-0 snap-center" />
           ))}
         </div>
+      ) : (
+        <div class="w-full h-full flex items-center justify-center text-7xl">🎁</div>
       )}
-    </div>
+      <div class="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-transparent pointer-events-none"></div>
+      <div class="absolute bottom-10 inset-x-6 pointer-events-none">{props.overlay}</div>
+      {imgs.length > 1 && (
+        <div id="gallery-dots" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {imgs.map((_, i) => <span class={`w-2 h-2 rounded-full ${i ? "bg-fg/30" : "bg-pink"}`}></span>)}
+        </div>
+      )}
+      <script dangerouslySetInnerHTML={{ __html: script }} />
+    </section>
   );
 }
 
 function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
   if (!props.guide && !props.image) return null;
   return (
-    <details class="card" style="background:var(--bg)" open>
-      <summary style="cursor:pointer"><b>📏 راهنمای سایز</b></summary>
+    <details class="bg-card rounded-2xl p-4" open>
+      <summary class="cursor-pointer text-sm font-bold"><i class="fa-solid fa-ruler text-pink ml-2"></i>راهنمای سایز</summary>
       {props.guide && (
-        <div class="wrap" style="margin-top:8px">
-          <table>
-            <thead><tr>{props.guide.columns.map((c) => <th>{c}</th>)}</tr></thead>
+        <div class="overflow-x-auto mt-3">
+          <table class="w-full text-xs text-center">
+            <thead>
+              <tr class="text-muted">{props.guide.columns.map((c) => <th class="p-2 font-medium whitespace-nowrap">{c}</th>)}</tr>
+            </thead>
             <tbody>
               {props.guide.rows.map((r) => (
-                <tr>{r.map((v, i) => (i === 0 ? <td><b>{v}</b></td> : <td>{v || "—"}</td>))}</tr>
+                <tr class="border-t border-ink">{r.map((v, i) => (i === 0 ? <td class="p-2 font-bold text-fg">{v}</td> : <td class="p-2 text-muted">{v || "—"}</td>))}</tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {props.image && <img src={`/img/${props.image}`} alt="جدول سایز" loading="lazy" style="max-width:100%;border-radius:8px;margin-top:8px" />}
+      {props.image && <img src={`/img/${props.image}`} alt="جدول سایز" loading="lazy" class="max-w-full rounded-xl mt-3" />}
     </details>
   );
 }
 
+const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-none focus:border-pink";
+
 export function ProductPage(props: {
   user: User | null;
   product: ProductWithShop;
+  shop: { logo_key: string; sales: number };
   wishlists: Wishlist[];
   images: ProductImage[];
   packages: ProductPackage[];
@@ -132,174 +258,313 @@ export function ProductPage(props: {
   const p = props.product;
   const guide = readSizeGuide(p.size_guide);
   const sizes = guide?.rows.map((r) => r[0]) ?? [];
+  const features = p.features.split("\n").map((s) => s.trim()).filter(Boolean);
+  const loginHref = `/login?next=/p/${p.id}`;
+  const wishHref = !props.user ? loginHref : props.wishlists.length ? "#wish" : `/me/wishlists/new?product=${p.id}`;
+  const sheetOpen = !!props.error;
+  const header = (
+    <header class="fixed top-0 inset-x-0 z-50 px-4 py-4 flex items-center justify-between pointer-events-none">
+      <div class="pointer-events-auto"><IconButton icon="fa-chevron-right" label="بازگشت" glass attrs={{ "data-back": "/" }} /></div>
+      <div class="flex gap-2 pointer-events-auto">
+        <IconButton icon="fa-heart" label="افزودن به آرزوها" glass href={wishHref} />
+        <IconButton icon="fa-share-nodes" label="اشتراک" glass attrs={{ "data-share": "" }} />
+      </div>
+    </header>
+  );
+  const overlay = (
+    <>
+      <div class="flex items-center gap-2 mb-2">
+        {p.category && <span class="text-[10px] font-bold text-pink bg-pink/10 backdrop-blur-md px-2 py-1 rounded-lg">{p.category}</span>}
+        <span class="text-[10px] text-fg/60">• {p.shop_name}</span>
+      </div>
+      <h1 class="text-2xl font-black text-fg mb-2 leading-tight">{p.title}</h1>
+      <div class="flex items-baseline gap-2">
+        <span class="text-2xl font-black text-pink">{fa(p.price)}</span>
+        <span class="text-xs text-fg/60">تومان</span>
+      </div>
+    </>
+  );
   return (
-    <Layout title={p.title} user={props.user}>
-      <div class="card two">
-        <Gallery images={props.images} title={p.title} />
-        <div>
-          <h1>{p.title}</h1>
-          <div class="price" style="font-size:20px">{toman(p.price)}</div>
-          <p>
-            فروشگاه: <a href={`/s/${p.shop_slug}`}>{p.shop_name}</a>
-          </p>
-          {p.video_url && (
-            <p><a class="btn secondary" href={p.video_url} target="_blank" rel="noopener nofollow">{videoLabel(p.video_url)}</a></p>
-          )}
-          <p style="white-space:pre-wrap">{p.description}</p>
-          <SizeGuideBox guide={guide} image={p.size_guide_image} />
-          {props.packages.length > 0 && (
-            <div class="card" style="background:var(--bg)">
-              <b>بسته‌بندی‌های کادویی</b>
-              {props.packages.map((k) => (
-                <div class="row small"><span>{k.name}</span><span class="sp" /><span>{k.price ? toman(k.price) : "رایگان"}</span></div>
+    <Layout title={p.title} user={props.user} nav="none" header={header} bare>
+      <Gallery images={props.images} title={p.title} overlay={overlay} />
+      <div class="px-6 py-8 pb-36 space-y-6">
+        {props.added && (
+          <div class="rounded-2xl bg-ok/15 text-green-300 px-4 py-3 text-sm">
+            <i class="fa-solid fa-circle-check ml-1"></i> به لیست «{props.added}» اضافه شد. <a class="underline" href="/me/wishlists">مشاهده لیست‌ها</a>
+          </div>
+        )}
+        {p.description && (
+          <div>
+            <h2 class="text-sm font-bold text-fg mb-2">توضیحات محصول</h2>
+            <p class="text-sm text-muted leading-relaxed whitespace-pre-wrap">{p.description}</p>
+          </div>
+        )}
+        {features.length > 0 && (
+          <div>
+            <h2 class="text-sm font-bold text-fg mb-3">ویژگی‌های کلیدی</h2>
+            <ul class="grid grid-cols-2 gap-3">
+              {features.map((x) => (
+                <li class="flex items-center gap-2 text-xs text-muted"><i class="fa-solid fa-circle-check text-pink"></i><span>{x}</span></li>
               ))}
-              <div class="muted small">خریدار کادو هنگام خرید بسته‌بندی را انتخاب می‌کند.</div>
+            </ul>
+          </div>
+        )}
+        {p.video_url && (() => {
+          const [icon, label] = videoLink(p.video_url);
+          return (
+            <a href={p.video_url} target="_blank" rel="noopener nofollow" class="flex items-center gap-3 p-4 bg-card rounded-2xl text-sm font-bold">
+              <i class={`${icon} text-pink text-xl`}></i> {label} <i class="fa-solid fa-arrow-up-left-from-square text-muted text-xs mr-auto"></i>
+            </a>
+          );
+        })()}
+        <SizeGuideBox guide={guide} image={p.size_guide_image} />
+        {props.packages.length > 0 && (
+          <div class="bg-card rounded-2xl p-4">
+            <h2 class="text-sm font-bold mb-3"><i class="fa-solid fa-gift text-pink ml-2"></i>بسته‌بندی‌های کادویی</h2>
+            {props.packages.map((k) => (
+              <div class="flex justify-between text-xs text-muted py-1.5"><span>{k.name}</span><span>{k.price ? toman(k.price) : "رایگان"}</span></div>
+            ))}
+            <p class="text-[10px] text-muted/70 mt-2">خریدار کادو هنگام خرید بسته‌بندی را انتخاب می‌کند.</p>
+          </div>
+        )}
+        <div class="p-4 bg-card rounded-2xl flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-ink flex items-center justify-center overflow-hidden text-pink font-bold">
+              {props.shop.logo_key ? <img class="w-full h-full object-cover" src={`/img/${props.shop.logo_key}`} alt={p.shop_name} /> : p.shop_name.charAt(0)}
             </div>
-          )}
-          {props.added && <div class="okbox">به لیست «{props.added}» اضافه شد. <a href="/me/wishlists">مشاهده لیست‌ها</a></div>}
-          <Errors errors={[props.error]} />
-          {!props.user ? (
-            <a class="btn" href={`/login?next=/p/${p.id}`}>برای افزودن به لیست آرزو وارد شوید</a>
-          ) : props.wishlists.length === 0 ? (
-            <a class="btn" href={`/me/wishlists/new?product=${p.id}`}>ساخت لیست آرزو و افزودن این محصول</a>
-          ) : (
-            <form method="post" action={`/p/${p.id}/wish`} class="card" style="background:var(--bg)">
-              <h2>افزودن به لیست آرزو</h2>
-              <label>لیست</label>
-              <select name="wishlist_id">
-                {props.wishlists.map((w) => <option value={String(w.id)}>{w.title}</option>)}
-              </select>
-              {sizes.length > 0 && (
-                <>
-                  <label>سایز</label>
-                  <select name="size" required>
-                    <option value="">انتخاب سایز…</option>
-                    {sizes.map((z) => <option value={z}>{z}</option>)}
-                  </select>
-                </>
-              )}
-              <div class="row">
-                <div style="width:110px"><label>تعداد</label><input name="quantity" type="number" min="1" max="20" value="1" /></div>
-                <div style="flex:1"><label>یادداشت ({sizes.length ? "رنگ، ..." : "رنگ، سایز، ..."})</label><input name="note" maxlength={200} /></div>
+            <div>
+              <h3 class="text-sm font-bold text-fg">{p.shop_name}</h3>
+              <p class="text-[10px] text-muted">{props.shop.sales ? `${fa(props.shop.sales)} فروش موفق` : "فروشگاه تازه"}</p>
+            </div>
+          </div>
+          <a href={`/s/${p.shop_slug}`} class="px-4 py-2 bg-ink text-xs font-bold text-fg rounded-xl">مشاهده</a>
+        </div>
+      </div>
+
+      {/* Add-to-wishlist sheet, opened by #wish (no JS needed). */}
+      {props.user && props.wishlists.length > 0 && (
+        <div id="wish" class={`${sheetOpen ? "flex" : "hidden"} target:flex fixed inset-0 z-[60] bg-black/60 items-end md:items-center justify-center`}>
+          <a href="#" class="absolute inset-0" aria-label="بستن"></a>
+          <form method="post" action={`/p/${p.id}/wish`} class="relative w-full max-w-md bg-card rounded-t-3xl md:rounded-3xl p-6 space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="font-bold">افزودن به لیست آرزو</h2>
+              <a href="#" class="text-muted" aria-label="بستن"><i class="fa-solid fa-xmark"></i></a>
+            </div>
+            <Errors errors={[props.error]} />
+            <label class="block text-xs text-muted">لیست</label>
+            <select name="wishlist_id" class={field}>
+              {props.wishlists.map((w) => <option value={String(w.id)}>{w.title}</option>)}
+            </select>
+            {sizes.length > 0 && (
+              <>
+                <label class="block text-xs text-muted">سایز</label>
+                <select name="size" required class={field}>
+                  <option value="">انتخاب سایز…</option>
+                  {sizes.map((z) => <option value={z}>{z}</option>)}
+                </select>
+              </>
+            )}
+            <div class="flex gap-3">
+              <div class="w-24">
+                <label class="block text-xs text-muted mb-1">تعداد</label>
+                <input name="quantity" type="number" min="1" max="20" value="1" class={field} />
               </div>
-              <p><button>❤ افزودن به آرزوها</button> <a class="small" href={`/me/wishlists/new?product=${p.id}`}>یا لیست جدید</a></p>
-            </form>
-          )}
+              <div class="flex-1">
+                <label class="block text-xs text-muted mb-1">یادداشت ({sizes.length ? "رنگ، ..." : "رنگ، سایز، ..."})</label>
+                <input name="note" maxlength={200} class={field} />
+              </div>
+            </div>
+            <button class="w-full py-3.5 bg-pink text-white rounded-2xl font-bold">❤ افزودن به آرزوها</button>
+            <a href={`/me/wishlists/new?product=${p.id}`} class="block text-center text-xs text-muted">یا ساخت لیست جدید</a>
+          </form>
+        </div>
+      )}
+
+      <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+        <div class="max-w-3xl mx-auto p-4 safe-bottom flex gap-3">
+          <a href={wishHref} class="flex-[2] py-4 bg-pink text-white text-center rounded-2xl font-bold shadow-lg shadow-pink/20 active:scale-95 transition-transform">
+            {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
+          </a>
+          <button type="button" data-share="" class="flex-1 py-4 bg-card text-fg rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform">
+            <i class="fa-solid fa-share-nodes ml-1"></i> اشتراک
+          </button>
         </div>
       </div>
     </Layout>
   );
 }
 
-const SOCIALS: [keyof Shop, string, (v: string) => string][] = [
-  ["instagram", "اینستاگرام", (v) => (v.startsWith("http") ? v : `https://instagram.com/${v.replace(/^@/, "")}`)],
-  ["telegram", "تلگرام", (v) => (v.startsWith("http") ? v : `https://t.me/${v.replace(/^@/, "")}`)],
-  ["bale", "بله", (v) => (v.startsWith("http") ? v : `https://ble.ir/${v.replace(/^@/, "")}`)],
-  ["website", "وب‌سایت", (v) => (v.startsWith("http") ? v : `https://${v}`)],
+const SOCIALS: [keyof Shop, string, string, (v: string) => string][] = [
+  ["instagram", "اینستاگرام", "fa-brands fa-instagram", (v) => (v.startsWith("http") ? v : `https://instagram.com/${v.replace(/^@/, "")}`)],
+  ["telegram", "تلگرام", "fa-brands fa-telegram", (v) => (v.startsWith("http") ? v : `https://t.me/${v.replace(/^@/, "")}`)],
+  ["bale", "بله", "fa-solid fa-comment-dots", (v) => (v.startsWith("http") ? v : `https://ble.ir/${v.replace(/^@/, "")}`)],
+  ["website", "وب‌سایت", "fa-solid fa-globe", (v) => (v.startsWith("http") ? v : `https://${v}`)],
 ];
 
 export function ShopPage(props: { user: User | null; shop: Shop; products: ProductWithShop[]; preview?: boolean }) {
   const shop = props.shop;
   return (
-    <Layout title={shop.name} user={props.user}>
+    <Layout title={shop.name} user={props.user} bare wide>
       {props.preview && (
-        <div class="warnbox">
+        <div class="bg-amber-400/10 text-amber-200 text-sm px-4 py-3 text-center">
           پیش‌نمایش: این فروشگاه هنوز تأیید نشده و فقط شما (و مدیر سایت) این صفحه را می‌بینید.
         </div>
       )}
-      <div class="card">
-        <h1>{shop.name}</h1>
-        {shop.city && <p class="muted" style="margin:0">📍 {shop.city}</p>}
-        <p class="muted" style="white-space:pre-wrap">{shop.description}</p>
-        <div class="row">
-          {SOCIALS.filter(([k]) => shop[k]).map(([k, label, url]) => (
-            <a class="btn secondary small" href={url(String(shop[k]))} target="_blank" rel="noopener nofollow">{label}</a>
+      <section class="relative">
+        <div class="h-40 md:h-56 bg-card overflow-hidden">
+          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover opacity-70" /> : <div class="w-full h-full bg-gradient-to-br from-pink/30 to-plum"></div>}
+        </div>
+        <div class="px-6 -mt-10 relative flex items-end gap-4">
+          <div class="w-20 h-20 rounded-2xl bg-card border-4 border-ink overflow-hidden flex items-center justify-center text-3xl font-bold text-pink shrink-0">
+            {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
+          </div>
+          <div class="pb-1 min-w-0">
+            <h1 class="text-xl font-bold truncate">{shop.name}</h1>
+            {shop.city && <p class="text-xs text-muted"><i class="fa-solid fa-location-dot ml-1"></i>{shop.city}</p>}
+          </div>
+        </div>
+      </section>
+      <div class="px-6 pt-4 pb-2 space-y-4">
+        {shop.description && <p class="text-sm text-muted leading-relaxed whitespace-pre-wrap">{shop.description}</p>}
+        <div class="flex flex-wrap gap-2">
+          {SOCIALS.filter(([k]) => shop[k]).map(([k, label, icon, url]) => (
+            <a class="px-3 py-2 rounded-xl bg-card text-xs text-fg flex items-center gap-2" href={url(String(shop[k]))} target="_blank" rel="noopener nofollow">
+              <i class={`${icon} text-pink`}></i>{label}
+            </a>
           ))}
         </div>
       </div>
-      <ProductGrid products={props.products} />
+      <div class="px-4 py-4">
+        <Masonry products={props.products} empty="این فروشگاه هنوز محصولی ندارد." />
+      </div>
     </Layout>
-  );
-}
-
-function ItemProgress(props: { it: ItemView }) {
-  const { quantity, bought } = props.it;
-  const pct = Math.min(100, Math.round((bought / quantity) * 100));
-  return (
-    <div>
-      <span class="small muted">{bought} از {quantity} خریده شده</span>
-      <div class="bar"><span style={`width:${pct}%`} /></div>
-    </div>
   );
 }
 
 export function WishlistPublicPage(props: {
   user: User | null;
   wishlist: Wishlist;
-  ownerName: string;
+  owner: { name: string; avatar_key: string };
   items: ItemView[];
   isOwner: boolean;
   shareUrl: string;
 }) {
+  const site = useSite();
   const w = props.wishlist;
+  const header = (
+    <header class="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-card">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+        <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": "/" }} />
+        <a href="/" class="text-lg font-medium text-pink">{site.site_name}</a>
+        <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": props.shareUrl }} />
+      </div>
+    </header>
+  );
+  const done = props.items.filter((it) => it.bought >= it.quantity).length;
   return (
-    <Layout title={w.title} user={props.user}>
-      <div class="card">
-        <h1>{w.title}</h1>
-        <p class="muted" style="margin:0">
-          لیست آرزوی <b>{props.ownerName}</b>
-          {w.occasion_date && <> · مناسبت: {w.occasion_date}</>}
+    <Layout title={w.title} user={props.user} nav={props.isOwner ? "wishes" : "home"} header={header} bare wide>
+      <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">
+        <div class="relative inline-block mb-4">
+          <Avatar user={props.owner} size="w-24 h-24" ring />
+          <div class="absolute -bottom-1 -left-1 bg-pink text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] border-2 border-ink">
+            <i class="fa-solid fa-gift"></i>
+          </div>
+        </div>
+        <h1 class="text-2xl font-bold mb-1">{w.title}</h1>
+        <p class="text-sm text-muted">
+          آرزوهای <b class="text-fg">{props.owner.name}</b>
+          {w.occasion_date && <> · {w.occasion_date}</>}
         </p>
-        {w.description && <p style="white-space:pre-wrap">{w.description}</p>}
+        {w.description && <p class="text-sm text-muted max-w-sm mx-auto leading-relaxed mt-2 whitespace-pre-wrap">{w.description}</p>}
+        {props.items.length > 0 && <p class="text-xs text-muted mt-3">{fa(done)} از {fa(props.items.length)} آرزو برآورده شده</p>}
         {props.isOwner && (
-          <div class="warnbox" style="margin-top:12px">
-            این لیست خودتان است. لینک اشتراک:
-            <div class="share" style="margin-top:6px">
-              <input readonly value={props.shareUrl} onclick="this.select()" />
-              <a class="btn small" href={`/me/wishlists/${w.id}`}>ویرایش</a>
+          <div class="mt-5 max-w-md mx-auto bg-ink/60 rounded-2xl p-3 text-right">
+            <p class="text-xs text-muted mb-2">این لیست خودتان است؛ این لینک را بفرستید:</p>
+            <div class="flex gap-2">
+              <input readonly value={props.shareUrl} class="flex-1 min-w-0 bg-card rounded-xl px-3 py-2 text-xs ltr text-fg" onclick="this.select()" />
+              <button type="button" data-copy={props.shareUrl} data-copied="کپی شد ✓" class="px-3 py-2 bg-pink text-white rounded-xl text-xs font-bold">کپی</button>
+              <a href={`/me/wishlists/${w.id}`} class="px-3 py-2 bg-card text-fg rounded-xl text-xs">ویرایش</a>
             </div>
           </div>
         )}
-        {!w.is_open && <div class="warnbox">این لیست بسته شده و فعلاً امکان خرید ندارد.</div>}
-      </div>
-      <div class="card">
-        {props.items.length === 0 && <p class="muted">هنوز آرزویی اضافه نشده.</p>}
-        {props.items.map((it) => {
-          const done = it.bought >= it.quantity;
-          const free = it.quantity - it.bought - it.reserved;
-          const ships = deliveryOptions(
-            { city: it.shop_city, courier_enabled: it.courier_enabled, courier_fee: it.courier_fee, post_enabled: it.post_enabled, post_fee: it.post_fee },
-            w.city,
-          ).length > 0;
-          const buyable = w.is_open && it.product_active && it.shop_ok && ships && free > 0;
-          return (
-            <div class="item">
-              <Thumb imageKey={it.image_key} alt={it.title} />
-              <div class="body">
-                <div><b>{it.title}</b> <span class="muted small">· {it.shop_name}</span></div>
-                <div class="price">{toman(it.price)}</div>
-                {it.size && <div class="small">سایز: <b>{it.size}</b></div>}
-                {it.note && <div class="small muted">یادداشت: {it.note}</div>}
-                <ItemProgress it={it} />
+        {!w.is_open && <p class="mt-4 text-sm text-amber-200">این لیست بسته شده و فعلاً امکان خرید ندارد.</p>}
+      </section>
+      <section class="px-4">
+        {props.items.length === 0 && <p class="text-center text-muted py-10">هنوز آرزویی اضافه نشده.</p>}
+        <div class="masonry">
+          {props.items.map((it) => {
+            const fulfilled = it.bought >= it.quantity;
+            const free = it.quantity - it.bought - it.reserved;
+            const ships = deliveryOptions(
+              { city: it.shop_city, courier_enabled: it.courier_enabled, courier_fee: it.courier_fee, post_enabled: it.post_enabled, post_fee: it.post_fee },
+              w.city,
+            ).length > 0;
+            const buyable = w.is_open && it.product_active && it.shop_ok && ships && free > 0;
+            const status = fulfilled
+              ? "تمام شد"
+              : props.isOwner
+                ? null
+                : it.reserved > 0 && free <= 0
+                  ? "در حال خرید توسط شخص دیگر"
+                  : !ships && it.shop_ok
+                    ? "فروشگاه به شهر گیرنده ارسال ندارد"
+                    : "فعلاً موجود نیست";
+            return (
+              <div class="item-card group relative bg-card rounded-3xl overflow-hidden shadow-lg">
+                <a href={`/p/${it.product_id}`}>
+                  <ImageOrGift imageKey={it.image_key} alt={it.title} class={`w-full h-auto block min-h-[160px] object-cover ${fulfilled ? "opacity-60" : ""}`} />
+                </a>
+                <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent pointer-events-none"></div>
+                {fulfilled ? (
+                  <div class="absolute top-3 right-3 bg-ok px-2 py-1 rounded-lg text-[10px] text-white">✓ برآورده شد</div>
+                ) : it.quantity > 1 && it.bought > 0 ? (
+                  <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-pink border border-pink/20">
+                    {fa(it.bought)} از {fa(it.quantity)} خریده شده
+                  </div>
+                ) : it.quantity > 1 ? (
+                  <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-fg">{fa(it.quantity)} عدد</div>
+                ) : null}
+                <div class="absolute inset-x-0 bottom-0 p-4">
+                  <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{it.title}</h3>
+                  <div class={`text-[11px] font-bold ${fulfilled ? "text-muted" : "text-pink"}`}>{toman(it.price)}</div>
+                  {it.size && <div class="text-[10px] text-fg/80">سایز: {it.size}</div>}
+                  {it.note && <div class="text-[10px] text-muted truncate">{it.note}</div>}
+                  {buyable && !fulfilled && !props.isOwner ? (
+                    <a href={`/gift/${it.id}`} class="mt-3 block w-full py-2 bg-pink text-white text-center rounded-xl text-[11px] font-bold shadow-lg shadow-pink/20">
+                      🎁 کادو بده
+                    </a>
+                  ) : status ? (
+                    <span class="mt-3 block w-full py-2 bg-plum text-muted text-center rounded-xl text-[10px] font-bold">{status}</span>
+                  ) : null}
+                </div>
               </div>
-              <div>
-                {done ? (
-                  <span class="tag ok">✓ برآورده شد</span>
-                ) : props.isOwner ? null : buyable ? (
-                  <a class="btn" href={`/gift/${it.id}`}>🎁 این را می‌خرم</a>
-                ) : it.reserved > 0 && free <= 0 ? (
-                  <span class="tag">در حال خرید توسط شخص دیگر</span>
-                ) : !ships && it.shop_ok ? (
-                  <span class="tag">فروشگاه به شهر گیرنده ارسال ندارد</span>
-                ) : (
-                  <span class="tag">فعلاً موجود نیست</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </section>
     </Layout>
+  );
+}
+
+function Row(props: { label: Child; value: Child; strong?: boolean }) {
+  return (
+    <div class={`flex justify-between ${props.strong ? "text-sm font-bold text-pink pt-2" : "text-xs text-muted"}`}>
+      <span>{props.label}</span>
+      <span>{props.value}</span>
+    </div>
+  );
+}
+
+function Option(props: { name: string; value: string; price: number; checked: boolean; title: Child; hint?: Child }) {
+  return (
+    <label class="flex items-center gap-3 p-4 bg-card rounded-2xl border border-muted/10 cursor-pointer has-[:checked]:border-pink has-[:checked]:bg-pink/5">
+      <input type="radio" name={props.name} value={props.value} data-price={String(props.price)} checked={props.checked} class="accent-pink w-4 h-4" />
+      <span class="flex-1 text-sm text-fg">
+        {props.title}
+        {props.hint && <span class="block text-[10px] text-muted">{props.hint}</span>}
+      </span>
+      <span class="text-xs font-bold text-pink">{props.price ? toman(props.price) : "رایگان"}</span>
+    </label>
   );
 }
 
@@ -317,148 +582,292 @@ export function CheckoutPage(props: {
   const it = props.item;
   const pkgDefault = v.package ?? (props.packages[0] ? String(props.packages[0].id) : "");
   const shipDefault = v.delivery ?? props.delivery[0]?.method ?? "";
-  // Live total as the giver picks options (server recomputes the real amount).
-  const script = `
-    (function(){
-      var f=document.getElementById('checkout'); if(!f) return;
-      function upd(){
-        var t=${it.price};
-        var p=f.querySelector('input[name=package]:checked'); if(p) t+=Number(p.dataset.price);
-        var d=f.querySelector('input[name=delivery]:checked'); if(d) t+=Number(d.dataset.price);
-        document.getElementById('total').textContent=t.toLocaleString('fa-IR')+' تومان';
-      }
-      f.addEventListener('change',upd); upd();
-    })();`;
+  // Live total as the giver picks options (the server recomputes the real amount).
+  const script = `(function(){var f=document.getElementById('checkout');if(!f)return;
+    function fa(n){return n.toLocaleString('fa-IR')+' تومان';}
+    function upd(){var t=${it.price},p=f.querySelector('input[name=package]:checked'),d=f.querySelector('input[name=delivery]:checked');
+      var pp=p?Number(p.dataset.price):0,dd=d?Number(d.dataset.price):0;t+=pp+dd;
+      document.getElementById('total').textContent=fa(t);
+      var a=document.getElementById('pkg-fee');if(a)a.textContent=pp?fa(pp):'رایگان';
+      var b=document.getElementById('ship-fee');if(b)b.textContent=dd?fa(dd):'رایگان';}
+    f.addEventListener('change',upd);upd();})();`;
+  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
   return (
-    <Layout title="خرید کادو" user={props.user}>
-      <div class="card two">
-        <div>
-          <h1>خرید کادو برای {props.ownerName}</h1>
-          <div class="item">
-            <Thumb imageKey={it.image_key} alt={it.title} />
-            <div class="body">
-              <b>{it.title}</b>
-              <div class="price">{toman(it.price)}</div>
-              {it.size && <div class="small">سایز: <b>{it.size}</b></div>}
-              <div class="muted small">{it.shop_name} · از لیست «{props.wishlist.title}»</div>
+    <Layout title="خرید کادو" user={props.user} nav="none" header={<TitleBar title="خرید کادو" back={`/w/${props.wishlist.slug}`} />} bare>
+      <form method="post" action={`/gift/${it.id}`} id="checkout" class="px-6 pb-36 space-y-8">
+        <section class="p-4 bg-card rounded-2xl border border-muted/10">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0">
+              <ImageOrGift imageKey={it.image_key} alt={it.title} class="w-full h-full object-cover" />
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-sm font-bold text-fg truncate">{it.title}</h2>
+              <p class="text-[10px] text-muted">برای: لیست «{props.wishlist.title}» {props.ownerName}</p>
+              <p class="text-[10px] text-muted">{it.shop_name}{it.size && <> · سایز: <b class="text-fg">{it.size}</b></>}</p>
             </div>
           </div>
-          <p class="muted small">
-            پرداخت کارت به کارت مستقیم به حساب فروشگاه است. در مرحله بعد شماره کارت را می‌بینید، مبلغ را واریز می‌کنید و فقط عکس فیش را
-            می‌فرستید. فروشگاه بعد از تأیید، کادو را مستقیم به آدرس گیرنده می‌فرستد؛ آدرس گیرنده محرمانه است و به شما نمایش داده نمی‌شود.
-          </p>
-        </div>
-        <form method="post" action={`/gift/${it.id}`} id="checkout">
-          <Errors errors={props.errors} />
-          {props.packages.length > 0 && (
-            <>
-              <label>بسته‌بندی کادو</label>
-              {props.packages.map((k) => (
-                <label class="row" style="color:var(--text);margin:4px 0">
-                  <input type="radio" name="package" value={String(k.id)} data-price={String(k.price)} style="width:auto" checked={pkgDefault === String(k.id)} />
-                  {k.name} — {k.price ? toman(k.price) : "رایگان"}
-                </label>
-              ))}
-            </>
-          )}
-          <label>روش ارسال</label>
+          <div class="space-y-3 pt-4 border-t border-ink">
+            <Row label="قیمت کالا" value={toman(it.price)} />
+            {props.packages.length > 0 && <Row label="بسته‌بندی" value={<span id="pkg-fee">—</span>} />}
+            <Row label="ارسال" value={<span id="ship-fee">—</span>} />
+            <Row strong label="مبلغ قابل پرداخت" value={<span id="total">{toman(it.price)}</span>} />
+          </div>
+        </section>
+
+        <Errors errors={props.errors} />
+
+        {props.packages.length > 0 && (
+          <section class="space-y-3">
+            <h3 class="text-sm font-bold px-1">بسته‌بندی کادو</h3>
+            {props.packages.map((k) => <Option name="package" value={String(k.id)} price={k.price} checked={pkgDefault === String(k.id)} title={k.name} />)}
+          </section>
+        )}
+
+        <section class="space-y-3">
+          <h3 class="text-sm font-bold px-1">روش ارسال</h3>
           {props.delivery.length === 0 ? (
-            <div class="errbox">این فروشگاه به شهر گیرنده ارسال ندارد.</div>
+            <div class="rounded-2xl bg-red-500/10 text-red-300 px-4 py-3 text-sm">این فروشگاه به شهر گیرنده ارسال ندارد.</div>
           ) : (
             props.delivery.map((d) => (
-              <label class="row" style="color:var(--text);margin:4px 0">
-                <input type="radio" name="delivery" value={d.method} data-price={String(d.fee)} style="width:auto" checked={shipDefault === d.method} />
-                {DELIVERY_LABEL[d.method]} — {d.fee ? toman(d.fee) : "رایگان"}
-              </label>
+              <Option
+                name="delivery"
+                value={d.method}
+                price={d.fee}
+                checked={shipDefault === d.method}
+                title={<><i class={`fa-solid ${d.method === "courier" ? "fa-motorcycle" : "fa-box"} text-pink ml-2`}></i>{DELIVERY_LABEL[d.method]}</>}
+                hint={`به ${props.wishlist.city || "شهر گیرنده"}`}
+              />
             ))
           )}
-          <label>نام شما</label>
-          <input name="name" value={v.name ?? props.user?.name ?? ""} required maxlength={80} />
-          <label>شماره موبایل شما</label>
-          <input name="phone" value={v.phone ?? props.user?.phone ?? ""} class="ltr" inputmode="tel" required />
-          <label>پیام روی کارت هدیه (اختیاری)</label>
-          <textarea name="message" maxlength={300}>{v.message ?? ""}</textarea>
-          <label class="row" style="color:var(--text)">
-            <input type="checkbox" name="anonymous" value="1" style="width:auto" checked={v.anonymous === "1"} /> نامم به گیرنده نمایش داده نشود
+        </section>
+
+        <section class="space-y-3">
+          <h3 class="text-sm font-bold px-1">مشخصات شما</h3>
+          <input name="name" value={v.name ?? props.user?.name ?? ""} required maxlength={80} placeholder="نام شما" class={input} />
+          <input name="phone" value={v.phone ?? props.user?.phone ?? ""} inputmode="tel" required placeholder="شماره موبایل" class={`${input} ltr text-left`} />
+          <textarea name="message" maxlength={300} rows={3} placeholder="پیام روی کارت هدیه (اختیاری)" class={input}>{v.message ?? ""}</textarea>
+          <label class="flex items-center gap-2 text-xs text-muted px-1">
+            <input type="checkbox" name="anonymous" value="1" checked={v.anonymous === "1"} class="accent-pink" /> نامم به گیرنده نمایش داده نشود
           </label>
-          <p>جمع قابل پرداخت: <b class="price" id="total">{toman(it.price)}</b></p>
-          <p><button disabled={props.delivery.length === 0}>ادامه و دریافت شماره کارت</button></p>
-        </form>
+        </section>
+
+        <p class="text-[11px] text-muted leading-relaxed px-1">
+          <i class="fa-solid fa-lock ml-1"></i>
+          پرداخت کارت به کارت مستقیم به حساب فروشگاه است: در مرحله بعد شماره کارت را می‌بینید و فقط عکس فیش را می‌فرستید. آدرس گیرنده
+          محرمانه است و به شما نمایش داده نمی‌شود.
+        </p>
+      </form>
+      <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+        <div class="max-w-3xl mx-auto p-4 safe-bottom">
+          <button form="checkout" disabled={props.delivery.length === 0} class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40">
+            ادامه و دریافت شماره کارت <i class="fa-solid fa-arrow-left"></i>
+          </button>
+        </div>
       </div>
       <script dangerouslySetInnerHTML={{ __html: script }} />
     </Layout>
   );
 }
 
-export function OrderPage(props: {
-  user: User | null;
-  order: Order & { wishlist_slug: string; owner_name: string; card_holder: string; shop_name: string };
-  errors?: string[];
-}) {
+export type OrderView = Order & {
+  wishlist_slug: string;
+  owner_name: string;
+  card_holder: string;
+  shop_name: string;
+  image_key: string;
+};
+
+const RECEIPT_PREVIEW = `(function(){var i=document.getElementById('receipt-input'),z=document.getElementById('dropzone'),p=document.getElementById('receipt-preview');if(!i)return;
+  function show(){var f=i.files&&i.files[0];if(!f){p.classList.add('hidden');return;}p.src=URL.createObjectURL(f);p.classList.remove('hidden');document.getElementById('dz-text').textContent=f.name;}
+  i.addEventListener('change',show);
+  ['dragover','dragenter'].forEach(function(e){z.addEventListener(e,function(ev){ev.preventDefault();z.classList.add('border-pink');});});
+  ['dragleave','drop'].forEach(function(e){z.addEventListener(e,function(){z.classList.remove('border-pink');});});
+  z.addEventListener('drop',function(ev){ev.preventDefault();if(ev.dataTransfer.files.length){i.files=ev.dataTransfer.files;show();}});})();`;
+
+function Step(props: { done: boolean; active?: boolean; title: string; hint: string }) {
+  return (
+    <div class="relative flex gap-4">
+      <div class={`w-4 h-4 rounded-full z-10 shrink-0 ${props.done ? "bg-pink shadow-[0_0_10px_#ff5c93]" : "bg-ink border-2 border-card"}`}></div>
+      <div class={`flex-1 -mt-1 ${props.done || props.active ? "" : "opacity-40"}`}>
+        <h3 class="text-xs font-bold text-fg">{props.title}</h3>
+        <p class="text-[10px] text-muted">{props.hint}</p>
+      </div>
+    </div>
+  );
+}
+
+export function OrderPage(props: { user: User | null; order: OrderView; errors?: string[] }) {
   const o = props.order;
   const expired = o.status === "pending" && o.expires_at <= new Date().toISOString();
-  const back = <a class="btn secondary" href={`/w/${o.wishlist_slug}`}>بازگشت به لیست آرزو</a>;
-  return (
-    <Layout title={`کادو برای ${o.owner_name}`} user={props.user}>
-      <div class="card" style="max-width:640px;margin:20px auto">
-        <h1>🎁 {o.product_title} برای {o.owner_name}</h1>
-        <p class="muted" style="margin-top:0">
-          سفارش #{o.id} · فروشگاه {o.shop_name} · <span class="tag">{STATUS_LABEL[o.status]}</span>
-        </p>
-        <p class="small muted">این صفحه مخصوص شماست؛ لینکش را نگه دارید تا وضعیت سفارش را ببینید.</p>
+  const bank = bankName(o.pay_card_number);
+  const header = (
+    <TitleBar
+      title={o.status === "pending" ? "پرداخت کارت به کارت" : "جزئیات هدیه"}
+      back={`/w/${o.wishlist_slug}`}
+      end={<IconButton icon="fa-print" label="چاپ" attrs={{ onclick: "event.preventDefault();print()" }} />}
+    />
+  );
+  const giftCard = (
+    <section>
+      <h2 class="text-xs font-bold text-muted mb-4 px-1">محتوای کادو</h2>
+      <div class="p-4 bg-card rounded-2xl border border-muted/5 flex items-center gap-4">
+        <div class="w-20 h-20 rounded-xl overflow-hidden bg-ink shrink-0">
+          <ImageOrGift imageKey={o.image_key} alt={o.product_title} class="w-full h-full object-cover" />
+        </div>
+        <div class="min-w-0">
+          <h3 class="text-sm font-bold text-fg mb-1">{o.product_title}</h3>
+          <p class="text-[10px] text-muted mb-1">فروشگاه: {o.shop_name} · برای {o.owner_name}</p>
+          {o.size && <p class="text-[10px] text-muted mb-1">سایز: <b class="text-fg">{o.size}</b></p>}
+          <span class="text-xs font-bold text-pink">{toman(o.amount)}</span>
+        </div>
+      </div>
+    </section>
+  );
 
-        {o.status === "pending" && (
-          <>
-            {expired && (
-              <div class="warnbox">
-                زمان رزرو تمام شده. اگر هنوز واریز نکرده‌اید، ممکن است شخص دیگری این آرزو را بخرد؛ اگر واریز کرده‌اید، عکس فیش را بفرستید.
+  if (o.status === "pending") {
+    return (
+      <Layout title={`کادو برای ${o.owner_name}`} user={props.user} nav="none" header={header} bare>
+        <form method="post" action={`/order/${o.token}/receipt`} enctype="multipart/form-data" id="receipt-form" class="px-6 pb-36 space-y-8">
+          <section class="p-4 bg-card rounded-2xl border border-muted/10">
+            <div class="flex items-center gap-4 mb-4">
+              <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0">
+                <ImageOrGift imageKey={o.image_key} alt={o.product_title} class="w-full h-full object-cover" />
               </div>
-            )}
-            <div class="card" style="background:var(--bg)">
-              <h2>۱. مبلغ را کارت به کارت کنید</h2>
-              <p>مبلغ: <b class="price" style="font-size:20px">{toman(o.amount)}</b></p>
-              <p class="small muted" style="margin-top:0">
-                {toman(o.item_price)} محصول{o.size && <> (سایز {o.size})</>}
-                {o.package_name && <> + {toman(o.package_price)} بسته‌بندی ({o.package_name})</>}
-                {o.delivery_method && <> + {toman(o.delivery_fee)} ارسال با {DELIVERY_LABEL[o.delivery_method]}</>}
-              </p>
-              <p>
-                به کارت:
-                <br />
-                <b class="dt" style="font-size:22px;letter-spacing:1px">{formatCard(o.pay_card_number)}</b>
-                <br />
-                به نام: <b>{o.card_holder}</b>
-              </p>
-              {!expired && <p class="small muted">این آرزو تا <span class="dt">{formatJalali(o.expires_at)}</span> برای شما رزرو است.</p>}
+              <div class="min-w-0">
+                <h2 class="text-sm font-bold text-fg truncate">{o.product_title}</h2>
+                <p class="text-[10px] text-muted">برای: {o.owner_name} · سفارش #{fa(o.id)}</p>
+              </div>
             </div>
-            <form method="post" action={`/order/${o.token}/receipt`} enctype="multipart/form-data">
-              <h2>۲. عکس فیش واریز را بفرستید</h2>
-              <Errors errors={props.errors} />
-              <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp" required />
-              <p><button>ارسال فیش</button></p>
-            </form>
-          </>
-        )}
+            <div class="space-y-3 pt-4 border-t border-ink">
+              <Row label={<>قیمت کالا{o.size && <> (سایز {o.size})</>}</>} value={toman(o.item_price)} />
+              {o.package_name && <Row label={`بسته‌بندی (${o.package_name})`} value={o.package_price ? toman(o.package_price) : "رایگان"} />}
+              {o.delivery_method && <Row label={`ارسال با ${DELIVERY_LABEL[o.delivery_method]}`} value={o.delivery_fee ? toman(o.delivery_fee) : "رایگان"} />}
+              <Row strong label="مبلغ قابل پرداخت" value={toman(o.amount)} />
+            </div>
+          </section>
 
-        {o.status === "awaiting" && (
-          <div class="okbox">
-            فیش شما برای فروشگاه ارسال شد. بعد از اینکه فروشگاه دریافت مبلغ را تأیید کند، کادو برای {o.owner_name} ارسال می‌شود.
-          </div>
-        )}
+          {expired && (
+            <div class="rounded-2xl bg-amber-400/10 text-amber-200 px-4 py-3 text-sm">
+              زمان رزرو تمام شده. اگر هنوز واریز نکرده‌اید، ممکن است شخص دیگری این آرزو را بخرد؛ اگر واریز کرده‌اید، عکس فیش را بفرستید.
+            </div>
+          )}
 
-        {(o.status === "paid" || o.status === "shipped" || o.status === "delivered") && (
-          <div class="okbox">
-            🎉 فروشگاه پرداخت را تأیید کرد{o.status === "paid" ? " و کادو به‌زودی ارسال می‌شود" : ""}. ممنون از مهربانی‌تان!
-          </div>
-        )}
+          <section class="bg-pink/5 border border-pink/20 p-5 rounded-2xl">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-8 h-8 rounded-full bg-pink flex items-center justify-center text-white"><i class="fa-solid fa-credit-card text-sm"></i></div>
+              <h3 class="text-sm font-bold text-pink">۱. مبلغ را کارت به کارت کنید</h3>
+            </div>
+            <p class="text-xs text-muted leading-relaxed mb-5">
+              مبلغ <b class="text-fg">{toman(o.amount)}</b> را به کارت زیر (مستقیم به حساب فروشگاه) واریز کنید و تصویر رسید را پایین بفرستید.
+            </p>
+            <div class="bg-card p-4 rounded-xl space-y-4 border border-muted/5">
+              <div>
+                <span class="text-[10px] text-muted block mb-1">شماره کارت مقصد</span>
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-base sm:text-lg font-mono tracking-wider whitespace-nowrap text-fg dt">{formatCard(o.pay_card_number)}</span>
+                  <button type="button" data-copy={o.pay_card_number} data-copied='<i class="fa-solid fa-check"></i>' class="text-pink w-9 h-9" aria-label="کپی شماره کارت">
+                    <i class="fa-regular fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <span class="text-[10px] text-muted block mb-1">نام صاحب حساب</span>
+                <span class="text-sm font-medium text-fg">{o.card_holder}</span>
+              </div>
+              {bank && (
+                <div>
+                  <span class="text-[10px] text-muted block mb-1">بانک</span>
+                  <span class="text-sm font-medium text-fg">{bank}</span>
+                </div>
+              )}
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-[10px] text-muted block mb-1">مبلغ به ریال</span>
+                  <span class="text-sm font-medium text-fg">{fa(o.amount * 10)} ریال</span>
+                </div>
+                <button type="button" data-copy={String(o.amount * 10)} data-copied="کپی شد ✓" class="text-[11px] text-pink">کپی مبلغ</button>
+              </div>
+            </div>
+            {!expired && <p class="text-[10px] text-muted mt-3">این آرزو تا <span class="dt">{formatJalali(o.expires_at)}</span> برای شما رزرو است.</p>}
+          </section>
 
-        {o.status === "rejected" && (
-          <div class="errbox">
-            فروشگاه دریافت این واریز را تأیید نکرد{o.reject_reason ? `: ${o.reject_reason}` : "."} اگر مبلغ از حساب شما کم شده، با رسید با
-            فروشگاه {o.shop_name} تماس بگیرید.
+          <section>
+            <h3 class="text-sm font-bold text-fg mb-3 px-1">۲. عکس فیش واریز را بفرستید</h3>
+            <Errors errors={props.errors} />
+            <label id="dropzone" class="border-2 border-dashed border-card rounded-2xl p-8 flex flex-col items-center justify-center gap-3 bg-card/30 cursor-pointer hover:border-pink/40 transition-colors">
+              <img id="receipt-preview" class="hidden max-h-64 rounded-xl" alt="پیش‌نمایش فیش" />
+              <div class="w-12 h-12 rounded-full bg-card flex items-center justify-center text-muted"><i class="fa-solid fa-cloud-arrow-up text-xl"></i></div>
+              <p id="dz-text" class="text-xs text-muted">تصویر رسید را اینجا رها کنید یا انتخاب کنید</p>
+              <span class="text-[10px] text-muted/60">JPG، PNG یا WebP — حداکثر ۵ مگابایت</span>
+              <input id="receipt-input" type="file" name="receipt" accept="image/jpeg,image/png,image/webp" required class="sr-only" />
+            </label>
+          </section>
+          <p class="text-[11px] text-muted px-1">این صفحه مخصوص شماست؛ لینکش را نگه دارید تا وضعیت سفارش را ببینید.</p>
+        </form>
+        <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+          <div class="max-w-3xl mx-auto p-4 safe-bottom">
+            <button form="receipt-form" class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+              ارسال فیش <i class="fa-solid fa-arrow-left"></i>
+            </button>
           </div>
+        </div>
+        <script dangerouslySetInnerHTML={{ __html: RECEIPT_PREVIEW }} />
+      </Layout>
+    );
+  }
+
+  const paid = o.status === "paid" || o.status === "shipped" || o.status === "delivered";
+  const shipped = o.status === "shipped" || o.status === "delivered";
+  const icon = o.status === "rejected" ? "fa-circle-xmark" : paid ? (shipped ? "fa-truck-fast" : "fa-circle-check") : "fa-clock-rotate-left";
+  return (
+    <Layout title={`کادو برای ${o.owner_name}`} user={props.user} nav="none" header={header} bare>
+      <div class="px-6 pb-12 space-y-8">
+        <section class="p-6 bg-card rounded-3xl border border-muted/5">
+          <div class="flex items-center justify-between mb-8">
+            <div>
+              <p class="text-[10px] text-muted mb-1">شماره سفارش: #{fa(o.id)}</p>
+              <h2 class={`text-sm font-black ${o.status === "rejected" ? "text-red-300" : "text-pink"}`}>{STATUS_LABEL[o.status]}</h2>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-pink/10 text-pink flex items-center justify-center text-xl"><i class={`fa-solid ${icon}`}></i></div>
+          </div>
+          {o.status === "rejected" ? (
+            <p class="text-sm text-red-300 leading-relaxed">
+              فروشگاه دریافت این واریز را تأیید نکرد{o.reject_reason ? `: ${o.reject_reason}` : "."} اگر مبلغ از حساب شما کم شده، با رسید با
+              فروشگاه {o.shop_name} تماس بگیرید.
+            </p>
+          ) : (
+            <div class="space-y-6 relative pr-4">
+              <div class="absolute right-[7px] top-2 bottom-2 w-[2px] bg-ink"></div>
+              <Step done title={`پرداخت توسط ${o.giver_name}`} hint="فیش برای فروشگاه ارسال شد" />
+              <Step done={paid} active={!paid} title="تأیید واریز توسط فروشگاه" hint={paid ? "مبلغ دریافت شد" : "در حال بررسی رسید..."} />
+              <Step
+                done={shipped}
+                title="ارسال کادو"
+                hint={shipped ? (o.tracking_code ? `کد رهگیری: ${o.tracking_code}` : "ارسال شد") : "پس از تأیید واریز"}
+              />
+            </div>
+          )}
+        </section>
+        {paid && <p class="text-center text-sm">🎉 ممنون از مهربانی‌تان!</p>}
+        {giftCard}
+        {o.gift_message && (
+          <section>
+            <h2 class="text-xs font-bold text-muted mb-4 px-1">پیام شما برای {o.owner_name}</h2>
+            <div class="p-5 bg-pink/5 border border-pink/20 rounded-3xl relative">
+              <i class="fa-solid fa-quote-right absolute -top-3 -right-3 w-8 h-8 bg-pink text-white rounded-full flex items-center justify-center text-xs"></i>
+              <p class="text-sm text-fg leading-relaxed whitespace-pre-wrap">{o.gift_message}</p>
+            </div>
+          </section>
         )}
-        <p>{back}</p>
+        {o.receipt_key && (
+          <section>
+            <h2 class="text-xs font-bold text-muted mb-4 px-1">رسید بانکی</h2>
+            <a href={`/order/${o.token}/receipt`} target="_blank" class="block p-2 bg-card rounded-2xl border border-muted/5 overflow-hidden">
+              <img class="w-full max-h-[480px] object-contain rounded-xl" src={`/order/${o.token}/receipt`} alt="رسید واریز" loading="lazy" />
+            </a>
+          </section>
+        )}
+        <a href={`/w/${o.wishlist_slug}`} class="block text-center py-3 rounded-2xl bg-card text-sm">بازگشت به لیست آرزو</a>
       </div>
     </Layout>
   );

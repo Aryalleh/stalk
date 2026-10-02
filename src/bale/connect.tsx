@@ -5,7 +5,7 @@ import { isConnected, type User } from "../session";
 import { randomSlug } from "../shop/db";
 import { safeNext } from "../shop/routes/helpers";
 import { ConnectPage } from "../shop/views/account";
-import { activeBots, botLink, type BotKind } from "./botapi";
+import { activeBots, botLink, botUsername, type BotKind } from "./botapi";
 
 // Every account must connect the site's Bale or Telegram bot right after signing up: that is how
 // shops get orders and receipts, and how people get notified. The bot link carries a one-time token.
@@ -55,7 +55,7 @@ connect.get("/connect", async (c) => {
   if (isConnected(user) || (!bots.length && user.is_admin)) return c.redirect(next);
   if (!bots.length) return render(c, <ConnectPage user={user} next={next} links={[]} />);
   const token = await connectToken(c.env.DB, user.id);
-  return render(c, <ConnectPage user={user} next={next} links={bots.map((k) => ({ kind: k, url: botLink(s, k, token) }))} />);
+  return render(c, <ConnectPage user={user} next={next} links={bots.map((k) => ({ kind: k, url: botLink(s, k, token), username: botUsername(s, k) }))} />);
 });
 
 connect.get("/connect/status", (c) => {

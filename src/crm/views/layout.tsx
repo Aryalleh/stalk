@@ -5,16 +5,16 @@ const CSS = `
 :root{--bg:#f5f6f8;--card:#fff;--text:#1d2330;--muted:#6b7280;--line:#e3e6eb;--accent:#2563eb;--accent-text:#fff;--danger:#c62828;--ok:#1b7f3b;--hl:#eef3ff}
 @media (prefers-color-scheme:dark){:root{--bg:#14171c;--card:#1d2128;--text:#e6e8ec;--muted:#9aa3af;--line:#2e333c;--accent:#4f8cff;--hl:#1e2a44}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 Vazirmatn,Tahoma,sans-serif}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 Vazirmatn,Tahoma,sans-serif}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-header .brand{font-weight:700;font-size:17px;color:var(--text)}header .sp{flex:1}
+header .brand{font-weight:700;font-size:17px;color:var(--fg)}header .sp{flex:1}
 main{max-width:1100px;margin:20px auto;padding:0 16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
 h1{font-size:20px;margin:0 0 14px}h2{font-size:16px;margin:0 0 12px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px 16px}
 label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
-input,textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}
+input,textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);font:inherit}
 textarea{min-height:80px}.ltr{direction:ltr;text-align:left}
 button,.btn{display:inline-block;padding:8px 16px;border:0;border-radius:7px;background:var(--accent);color:var(--accent-text);font:inherit;cursor:pointer}
 .btn.secondary,button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}

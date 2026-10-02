@@ -3,12 +3,13 @@ import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { normCity, now, productImages, productPackages, randomSlug, type Order, type Product, type Shop } from "../db";
 import type { C, Env } from "../../env";
-import { loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
+import { categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
+import { fileField, imageError, storeImage } from "../images";
 import { sendSafirText } from "../../bale/safir";
 import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { confirmOrder, rejectOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminPage, AdminSettingsPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
+import { AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 
 export const panel = new Hono<Env>();
@@ -77,7 +78,39 @@ const FILTER_STATUSES: Record<string, string> = {
   rejected: "('rejected')",
 };
 
+const PANEL_ORDER = "SELECT o.*, COALESCE(p.image_key, '') AS image_key FROM orders o LEFT JOIN products p ON p.id = o.product_id";
+
+/** Start of today in Iran (UTC+3:30, no DST since 2022) as an ISO timestamp. */
+function startOfTodayIran() {
+  const offset = 3.5 * 3600_000;
+  const local = new Date(Date.now() + offset);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - offset).toISOString();
+}
+
 panel.get("/panel", async (c) => {
+  const shop = shopOf(c);
+  // Old links (bot messages) used /panel?f=...
+  if (c.req.query("f")) return c.redirect(`/panel/orders?f=${encodeURIComponent(c.req.query("f")!)}`);
+  const onlyAwaiting = c.req.query("only") === "awaiting";
+  const db = c.env.DB;
+  const [stats, orders] = await db.batch([
+    db.prepare(
+      `SELECT
+         (SELECT COALESCE(SUM(amount), 0) FROM orders WHERE shop_id = ?1 AND status IN ('paid','shipped','delivered') AND paid_at >= ?2) AS today,
+         (SELECT COUNT(*) FROM orders WHERE shop_id = ?1 AND status = 'awaiting') AS awaiting,
+         (SELECT COUNT(*) FROM orders WHERE shop_id = ?1 AND status = 'paid') AS toShip,
+         (SELECT COUNT(*) FROM orders WHERE shop_id = ?1 AND status IN ('paid','shipped','delivered')) AS sales,
+         (SELECT COUNT(*) FROM products WHERE shop_id = ?1) AS products`,
+    ).bind(shop.id, startOfTodayIran()),
+    db.prepare(`${PANEL_ORDER} WHERE o.shop_id = ? AND o.status ${onlyAwaiting ? "= 'awaiting'" : "<> 'pending'"} ORDER BY o.reported_at DESC LIMIT 10`).bind(shop.id),
+  ]);
+  return render(
+    c,
+    <DashboardPage user={currentUser(c)} shop={shop} stats={stats.results[0] as never} orders={orders.results as PanelOrder[]} onlyAwaiting={onlyAwaiting} />,
+  );
+});
+
+panel.get("/panel/orders", async (c) => {
   const shop = shopOf(c);
   const { results: countRows } = await c.env.DB.prepare("SELECT status, COUNT(*) AS n FROM orders WHERE shop_id = ? GROUP BY status")
     .bind(shop.id)
@@ -87,9 +120,9 @@ panel.get("/panel", async (c) => {
   // Default to whatever needs action first.
   const filter = c.req.query("f") ?? (counts.awaiting ? "awaiting" : "todo");
   const statuses = FILTER_STATUSES[filter] ?? FILTER_STATUSES.todo;
-  const { results } = await c.env.DB.prepare(`SELECT * FROM orders WHERE shop_id = ? AND status IN ${statuses} ORDER BY reported_at DESC LIMIT 200`)
+  const { results } = await c.env.DB.prepare(`${PANEL_ORDER} WHERE o.shop_id = ? AND o.status IN ${statuses} ORDER BY o.reported_at DESC LIMIT 200`)
     .bind(shop.id)
-    .all<Order>();
+    .all<PanelOrder>();
   return render(c, <OrdersPage user={currentUser(c)} shop={shop} orders={results} filter={ORDER_FILTERS.some(([f]) => f === filter) ? filter : "todo"} counts={counts} />);
 });
 
@@ -171,7 +204,7 @@ const VIDEO_URL = /^https:\/\/(www\.)?(instagram\.com|t\.me|telegram\.me|ble\.ir
 
 async function productFormPage(c: C, product: Product | null, values: Record<string, string>, errors?: string[], status: 200 | 400 = 200) {
   const [images, packages] = product ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id)]) : [[], []];
-  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} errors={errors} />, status);
+  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} categories={categoryList(c.get("settings"))} errors={errors} />, status);
 }
 
 async function saveProduct(c: C, product: Product | null) {
@@ -191,12 +224,15 @@ async function saveProduct(c: C, product: Product | null) {
     price: normalizeDigits(str("price")).replace(/[,٬]/g, ""),
     video_url: str("video_url"),
     size_guide: str("size_guide"),
+    category: str("category").slice(0, 40),
+    features: str("features").split("\n").map((x) => x.trim().slice(0, 80)).filter(Boolean).slice(0, 8).join("\n"),
     is_active: str("is_active") === "1" ? "1" : "0",
   };
   const errors: string[] = [];
   if (!values.title) errors.push("عنوان لازم است.");
   const price = Number(values.price);
   if (!Number.isInteger(price) || price < 1000) errors.push("قیمت باید عدد صحیح و حداقل ۱۰۰۰ تومان باشد.");
+  if (values.category && !categoryList(c.get("settings")).includes(values.category) && values.category !== product?.category) errors.push("دسته‌بندی نامعتبر است.");
   if (values.video_url && !VIDEO_URL.test(values.video_url)) errors.push("لینک ویدیو باید لینک پست اینستاگرام، تلگرام یا بله باشد (با https).");
   const parsedGuide = parseSizeGuide(values.size_guide);
   if ("error" in parsedGuide) errors.push(parsedGuide.error);
@@ -245,15 +281,15 @@ async function saveProduct(c: C, product: Product | null) {
   let productId = product?.id ?? 0;
   if (product) {
     await db.prepare(
-      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, is_active = ?, updated_at = ? WHERE id = ?",
+      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, is_active = ?, updated_at = ? WHERE id = ?",
     )
-      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, Number(values.is_active), t, product.id)
+      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.is_active), t, product.id)
       .run();
   } else {
     const row = await db.prepare(
-      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
-      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, Number(values.is_active), t, t)
+      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.is_active), t, t)
       .first<{ id: number }>();
     productId = row!.id;
   }
@@ -289,6 +325,7 @@ panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   if (!p) return c.notFound();
   const values = {
     title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, size_guide: p.size_guide,
+    category: p.category, features: p.features,
     is_active: String(p.is_active), saved: c.req.query("saved") ?? "",
   };
   return productFormPage(c, p, values);
@@ -305,7 +342,9 @@ panel.post("/panel/products/:id{[0-9]+}", async (c) => {
 const HANDLE = /^[@\w.\-\/:?=&%]{0,200}$/;
 
 async function saveSettings(c: C) {
-  const f = await form(c);
+  const body = await c.req.parseBody();
+  const f: Record<string, string> = {};
+  for (const [k, v] of Object.entries(body)) if (typeof v === "string") f[k] = v.trim();
   if (!f.name) return { error: "نام فروشگاه لازم است." };
   const card = normalizeDigits(f.card_number ?? "");
   const cardError = card ? cardNumberError(card) : null;
@@ -322,13 +361,25 @@ async function saveSettings(c: C) {
   if (!courier && !post) return { error: "حداقل یک روش ارسال (پیک یا پست) را فعال کنید." };
   const socials = ["instagram", "telegram", "bale", "website"].map((k) => (f[k] ?? "").trim());
   if (socials.some((v) => !HANDLE.test(v))) return { error: "لینک شبکه‌های اجتماعی نامعتبر است." };
+  const shop = shopOf(c);
+  const logo = fileField(body.logo);
+  const cover = fileField(body.cover);
+  const fileError = (logo && imageError(logo, 2, "لوگو")) || (cover && imageError(cover, 3, "عکس کاور"));
+  if (fileError) return { error: fileError };
+  let logoKey = f.remove_logo === "1" ? "" : shop.logo_key;
+  let coverKey = f.remove_cover === "1" ? "" : shop.cover_key;
+  if (logo) logoKey = await storeImage(c.env.IMAGES, logo, `s/${shop.id}`);
+  if (cover) coverKey = await storeImage(c.env.IMAGES, cover, `s/${shop.id}`);
+  const stale = [shop.logo_key, shop.cover_key].filter((k) => k && k !== logoKey && k !== coverKey);
+  if (stale.length) c.executionCtx.waitUntil(c.env.IMAGES.delete(stale));
   await c.env.DB.prepare(
     `UPDATE shops SET name = ?, phone = ?, description = ?, card_number = ?, card_holder = ?, city = ?,
-       courier_enabled = ?, courier_fee = ?, post_enabled = ?, post_fee = ?, instagram = ?, telegram = ?, bale = ?, website = ?
+       courier_enabled = ?, courier_fee = ?, post_enabled = ?, post_fee = ?, instagram = ?, telegram = ?, bale = ?, website = ?,
+       logo_key = ?, cover_key = ?
      WHERE id = ?`,
   )
     .bind(f.name, normalizePhone(f.phone ?? ""), f.description ?? "", card, (f.card_holder ?? "").slice(0, 80), city,
-      courier, courierFee, post, postFee, ...socials, shopOf(c).id)
+      courier, courierFee, post, postFee, ...socials, logoKey, coverKey, shop.id)
     .run();
   return { error: "" };
 }
@@ -372,7 +423,7 @@ admin.get("/admin", async (c) => {
        GROUP BY s.id ORDER BY total DESC`,
     ),
   ]);
-  return render(c, <AdminPage user={currentUser(c)} shops={shops.results as never} stats={stats.results as never} />);
+  return render(c, <AdminPage user={currentUser(c)} shops={shops.results as never} stats={stats.results as never} featuredId={Number(c.get("settings").featured_shop_id) || 0} />);
 });
 
 admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
@@ -390,6 +441,13 @@ admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
       c.executionCtx.waitUntil(sendToChats(c.get("settings"), chats, text).catch((e) => console.error(e)));
     }
   }
+  return c.redirect("/admin");
+});
+
+// "Shop of the week" banner on the home page (0 removes it).
+admin.post("/admin/featured", async (c) => {
+  const id = Number((await form(c)).shop_id) || 0;
+  await saveSiteSettings(c.env.DB, { featured_shop_id: id ? String(id) : "" });
   return c.redirect("/admin");
 });
 
@@ -414,6 +472,11 @@ async function saveAdminSettings(c: C): Promise<string> {
   const minutes = Math.floor(Number(normalizeDigits(f.reservation_minutes ?? "")));
   if (!(minutes >= 5 && minutes <= 1440)) return "مهلت واریز باید بین ۵ تا ۱۴۴۰ دقیقه باشد.";
   const values: Partial<Settings> = { site_name: f.site_name.slice(0, 40), site_url: siteUrl, reservation_minutes: String(minutes) };
+  if (f.categories !== undefined) {
+    const cats = [...new Set(f.categories.split(/\r?\n/).map((x) => x.trim().slice(0, 40)).filter(Boolean))];
+    if (cats.length > 30) return "حداکثر ۳۰ دسته‌بندی.";
+    values.categories = cats.join("\n");
+  }
   for (const kind of ["bale", "telegram"] as const) {
     const token = (f[`${kind}_bot_token`] ?? "").trim();
     if (f[`${kind}_bot_remove`] === "1") {

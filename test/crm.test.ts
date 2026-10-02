@@ -97,3 +97,12 @@ describe("history", () => {
     expect([gone.exists, gone.deleted, phone(gone)]).toEqual([false, true, "0935"]);
   });
 });
+
+describe("bank names", async () => {
+  const { bankName } = await import("../lib/banks");
+  it("finds the bank from the card prefix", () => {
+    expect(bankName("6037997599999993")).toBe("بانک ملی ایران");
+    expect(bankName("6104-3377-1234-5678")).toBe("بانک ملت");
+    expect(bankName("1234567812345678")).toBe("");
+  });
+});

@@ -3,7 +3,7 @@ import { normalizePhone } from "../../../lib/normalize";
 import { upsertCustomer } from "../../crm/sync";
 import type { C, Env } from "../../env";
 import { render } from "../../render";
-import { reservationMinutes } from "../../settings";
+import { categoryList, reservationMinutes } from "../../settings";
 import {
   deliveryOptions,
   getPublicProduct,
@@ -15,35 +15,67 @@ import {
   reserveItem,
   wishlistItems,
   type ItemView,
-  type Order,
   type Shop,
   type Wishlist,
 } from "../db";
+import { PUBLIC_IMAGE } from "../images";
 import { sendReceiptToShop } from "../orders";
-import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage } from "../views/store";
+import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage, type FeaturedShop, type OrderView } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
 export const store = new Hono<Env>();
 
-store.get("/", async (c) => {
-  const q = (c.req.query("q") ?? "").trim();
+// Home feed and /search share one view: search box, category chips and a masonry of products.
+async function feed(c: C, search: boolean) {
+  const q = (c.req.query("q") ?? "").trim().slice(0, 100);
+  const categories = categoryList(c.get("settings"));
+  const cat = c.req.query("cat") ?? "";
+  const category = categories.includes(cat) ? cat : "";
   const page = pageParam(c);
-  const products = await listProducts(c.env.DB, { q, limit: PAGE + 1, offset: (page - 1) * PAGE });
-  return render(c, <HomePage user={c.get("user")} q={q} products={products.slice(0, PAGE)} page={page} hasNext={products.length > PAGE} />);
-});
+  const featuredId = Number(c.get("settings").featured_shop_id) || 0;
+  const [products, featured] = await Promise.all([
+    search && !q && !category ? [] : listProducts(c.env.DB, { q, category, limit: PAGE + 1, offset: (page - 1) * PAGE }),
+    !search && featuredId
+      ? c.env.DB.prepare("SELECT name, slug, description, cover_key, logo_key FROM shops WHERE id = ? AND status = 'approved'").bind(featuredId).first<FeaturedShop>()
+      : null,
+  ]);
+  return render(
+    c,
+    <HomePage
+      user={c.get("user")}
+      q={q}
+      category={category}
+      categories={categories}
+      products={products.slice(0, PAGE)}
+      page={page}
+      hasNext={products.length > PAGE}
+      featured={featured}
+      search={search}
+    />,
+  );
+}
+
+store.get("/", (c) => feed(c, false));
+store.get("/search", (c) => feed(c, true));
 
 store.get("/p/:id{[0-9]+}", async (c) => {
   const id = intParam(c, "id");
   const product = await getPublicProduct(c.env.DB, id);
   if (!product) return c.notFound();
   const user = c.get("user");
-  const [wishlists, images, packages] = await Promise.all([
+  const [wishlists, images, packages, shop] = await Promise.all([
     user ? c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all<Wishlist>().then((r) => r.results) : [],
     productImages(c.env.DB, id),
     productPackages(c.env.DB, id),
+    c.env.DB.prepare(
+      `SELECT s.logo_key, (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('paid','shipped','delivered')) AS sales
+       FROM shops s WHERE s.id = ?`,
+    )
+      .bind(product.shop_id)
+      .first<{ logo_key: string; sales: number }>(),
   ]);
   const error = c.req.query("err") === "size" ? "لطفاً سایز را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
-  return render(c, <ProductPage user={user} product={product} wishlists={wishlists} images={images} packages={packages} added={c.req.query("added")} error={error} />);
+  return render(c, <ProductPage user={user} product={product} shop={shop ?? { logo_key: "", sales: 0 }} wishlists={wishlists} images={images} packages={packages} added={c.req.query("added")} error={error} />);
 });
 
 store.get("/s/:slug", async (c) => {
@@ -67,9 +99,9 @@ store.get("/s/:slug", async (c) => {
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {
   return db
-    .prepare(`SELECT w.*, u.name AS owner_name FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
+    .prepare(`SELECT w.*, u.name AS owner_name, u.avatar_key AS owner_avatar FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
     .bind(value)
-    .first<Wishlist & { owner_name: string }>();
+    .first<Wishlist & { owner_name: string; owner_avatar: string }>();
 }
 
 store.get("/w/:slug", async (c) => {
@@ -81,7 +113,7 @@ store.get("/w/:slug", async (c) => {
     <WishlistPublicPage
       user={user}
       wishlist={w}
-      ownerName={w.owner_name}
+      owner={{ name: w.owner_name, avatar_key: w.owner_avatar }}
       items={await wishlistItems(c.env.DB, w.id)}
       isOwner={user?.id === w.user_id}
       shareUrl={`${siteUrl(c)}/w/${w.slug}`}
@@ -153,12 +185,12 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
 
 // ---------- the giver's private order page (card-to-card) ----------
 
-type OrderView = Order & { wishlist_slug: string; owner_name: string; card_holder: string; shop_name: string };
-
 async function orderByToken(c: C) {
   return c.env.DB.prepare(
-    `SELECT o.*, w.slug AS wishlist_slug, u.name AS owner_name, s.card_holder, s.name AS shop_name
+    `SELECT o.*, w.slug AS wishlist_slug, u.name AS owner_name, s.card_holder, s.name AS shop_name,
+            COALESCE(p.image_key, '') AS image_key
      FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id JOIN shops s ON s.id = o.shop_id
+     LEFT JOIN products p ON p.id = o.product_id
      WHERE o.token = ?`,
   )
     .bind(c.req.param("token"))
@@ -193,8 +225,23 @@ store.post("/order/:token/receipt", async (c) => {
   return c.redirect(`/order/${order.token}`);
 });
 
-// Product images are public; receipts (r/...) are only served through /panel.
-store.get("/img/:key{p/.+}", async (c) => {
+// The giver can look at the receipt they sent (the order token is the secret, like the order page itself).
+store.get("/order/:token/receipt", async (c) => {
+  const order = await orderByToken(c);
+  if (!order?.receipt_key) return c.notFound();
+  const obj = await c.env.IMAGES.get(order.receipt_key);
+  if (!obj) return c.notFound();
+  return c.body(obj.body, 200, {
+    "Content-Type": obj.httpMetadata?.contentType ?? "application/octet-stream",
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+  });
+});
+
+// Product, avatar and shop images are public; receipts (r/...) are only served through /panel.
+store.get("/img/:key{[pas]/.+}", async (c) => {
+  if (!PUBLIC_IMAGE.test(c.req.param("key"))) return c.notFound();
   const obj = await c.env.IMAGES.get(c.req.param("key"));
   if (!obj) return c.notFound();
   return c.body(obj.body, 200, {

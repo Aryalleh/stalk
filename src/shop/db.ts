@@ -31,6 +31,8 @@ export interface Shop {
   telegram: string;
   bale: string;
   website: string;
+  logo_key: string;
+  cover_key: string;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;
@@ -46,6 +48,8 @@ export interface Product {
   video_url: string;
   size_guide: string; // JSON, see sizes.ts
   size_guide_image: string;
+  category: string;
+  features: string; // one per line
   is_active: number;
   created_at: string;
 }
@@ -94,7 +98,7 @@ export type ItemView = {
 /** Products visible to the public: active and from an approved shop. */
 const PUBLIC_PRODUCT = "p.is_active = 1 AND s.status = 'approved'";
 
-export async function listProducts(db: D1Database, opts: { q?: string; shopId?: number; limit: number; offset: number }) {
+export async function listProducts(db: D1Database, opts: { q?: string; shopId?: number; category?: string; limit: number; offset: number }) {
   const where = [PUBLIC_PRODUCT];
   const binds: unknown[] = [];
   if (opts.q) {
@@ -105,6 +109,10 @@ export async function listProducts(db: D1Database, opts: { q?: string; shopId?: 
   if (opts.shopId) {
     where.push("p.shop_id = ?");
     binds.push(opts.shopId);
+  }
+  if (opts.category) {
+    where.push("p.category = ?");
+    binds.push(opts.category);
   }
   const { results } = await db
     .prepare(

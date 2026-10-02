@@ -11,7 +11,14 @@ import { SESSION_COOKIE } from "../../session";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
-import { CodeLoginPage, MyWishlistsPage, WishlistFormPage } from "../views/account";
+import { activeBots, botLink } from "../../bale/botapi";
+import { connectToken } from "../../bale/connect";
+import type { User } from "../../session";
+import { fileField, imageError, storeImage } from "../images";
+import { CodeLoginPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type ProfileItem } from "../views/account";
+
+const sessionUserById = (db: D1Database, id: number) =>
+  db.prepare("SELECT id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key FROM users WHERE id = ?").bind(id).first<User>();
 import { SetupPage } from "../views/panel";
 import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
 
@@ -143,14 +150,81 @@ account.post("/setup/verify", async (c) => {
 
 // ---------- my wishlists (login required; enforced in index) ----------
 
+// ---------- profile (html/profile.html) ----------
+
+account.get("/me", async (c) => {
+  const user = currentUser(c);
+  const db = c.env.DB;
+  const SOLD = "('paid', 'shipped', 'delivered')";
+  const [items, stats, latest] = await Promise.all([
+    db
+      .prepare(
+        `SELECT i.id, i.wishlist_id, i.quantity, p.title, p.image_key,
+                (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
+                (SELECT COUNT(DISTINCT o.giver_phone) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS givers
+         FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id JOIN products p ON p.id = i.product_id
+         WHERE w.user_id = ? AND w.is_open = 1 ORDER BY i.created_at DESC LIMIT 30`,
+      )
+      .bind(user.id)
+      .all<ProfileItem>(),
+    db
+      .prepare(
+        `SELECT (SELECT COUNT(*) FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE w.user_id = ?1) AS wishes,
+                (SELECT COUNT(*) FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ?1 AND o.status IN ${SOLD}) AS gifts`,
+      )
+      .bind(user.id)
+      .first<{ wishes: number; gifts: number }>(),
+    db.prepare("SELECT slug FROM wishlists WHERE user_id = ? ORDER BY created_at DESC LIMIT 1").bind(user.id).first<{ slug: string }>(),
+  ]);
+  const s = c.get("settings");
+  const bots = activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id) }));
+  return render(
+    c,
+    <ProfilePage user={user} stats={stats ?? { wishes: 0, gifts: 0 }} items={items.results} shareUrl={latest ? `${siteUrl(c)}/w/${latest.slug}` : ""} bots={bots} />,
+  );
+});
+
+async function settingsView(c: C, extra: { error?: string; saved?: boolean } = {}, status: 200 | 400 = 200) {
+  const user = (await sessionUserById(c.env.DB, currentUser(c).id))!;
+  const s = c.get("settings");
+  const token = await connectToken(c.env.DB, user.id);
+  const bots = activeBots(s).map((k) => ({
+    kind: k,
+    connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id),
+    link: botLink(s, k, token),
+  }));
+  return render(c, <ProfileSettingsPage user={user} bots={bots} {...extra} />, status);
+}
+
+account.get("/me/settings", (c) => settingsView(c, { saved: c.req.query("saved") === "1" }));
+
+account.post("/me/settings", async (c) => {
+  const user = currentUser(c);
+  const body = await c.req.parseBody();
+  const name = (typeof body.name === "string" ? body.name : "").trim().slice(0, 80);
+  if (!name) return settingsView(c, { error: "نام لازم است." }, 400);
+  let avatar = user.avatar_key;
+  const file = fileField(body.avatar);
+  if (file) {
+    const err = imageError(file, 2, "عکس پروفایل");
+    if (err) return settingsView(c, { error: err }, 400);
+    avatar = await storeImage(c.env.IMAGES, file, "a");
+  } else if (body.remove_avatar === "1") avatar = "";
+  await c.env.DB.prepare("UPDATE users SET name = ?, avatar_key = ? WHERE id = ?").bind(name, avatar, user.id).run();
+  if (user.avatar_key && user.avatar_key !== avatar) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.avatar_key));
+  return c.redirect("/me/settings?saved=1");
+});
+
 account.get("/me/wishlists", async (c) => {
   const user = currentUser(c);
   const { results } = await c.env.DB.prepare(
-    `SELECT w.*, (SELECT COUNT(*) FROM wishlist_items i WHERE i.wishlist_id = w.id) AS items
+    `SELECT w.*, (SELECT COUNT(*) FROM wishlist_items i WHERE i.wishlist_id = w.id) AS items,
+            COALESCE((SELECT p.image_key FROM wishlist_items i JOIN products p ON p.id = i.product_id
+                      WHERE i.wishlist_id = w.id ORDER BY i.created_at LIMIT 1), '') AS cover
      FROM wishlists w WHERE w.user_id = ? ORDER BY w.created_at DESC`,
   )
     .bind(user.id)
-    .all<Wishlist & { items: number }>();
+    .all<Wishlist & { items: number; cover: string }>();
   return render(c, <MyWishlistsPage user={user} lists={results} siteUrl={siteUrl(c)} />);
 });
 
