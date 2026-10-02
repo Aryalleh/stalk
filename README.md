@@ -57,9 +57,11 @@ npm install
 npx wrangler login
 npx wrangler d1 create app                    # database_id را در wrangler.jsonc بگذارید
 npx wrangler r2 bucket create gift-shop-images
-npm run db:migrate:remote
 npm run deploy
 ```
+جدول‌های دیتابیس را خود Worker در اولین درخواست بعد از هر دیپلوی به‌روز می‌کند (`src/migrate.ts`)؛ اجرای دستی
+`npm run db:migrate:remote` لازم نیست ولی ضرری هم ندارد. migration جدید: فایل را در `migrations/` بسازید و در `src/migrate.ts` اضافه کنید
+(تست بررسی می‌کند چیزی جا نیفتاده باشد).
 هیچ secret یا متغیری لازم نیست. بعد از دیپلوی:
 1. **فوراً** `/setup` را باز کنید و مدیر پلتفرم را بسازید (اولین کسی که این فرم را پر کند مدیر می‌شود؛ بعد صفحه بسته می‌شود).
 2. در **`/admin/settings`** همه تنظیمات از داخل سایت عوض می‌شود:
@@ -73,7 +75,6 @@ npm run deploy
 ## اجرای محلی
 ```bash
 npm install
-npm run db:migrate:local
 npm run dev                                   # http://localhost:8787 ← /setup
 ```
 تست‌ها: `npm test` — بررسی تایپ: `npm run typecheck`

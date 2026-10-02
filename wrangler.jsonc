@@ -3,6 +3,8 @@
   "name": "gift-shop",
   "main": "src/index.tsx",
   "compatibility_date": "2026-09-01",
+  // Migrations are bundled as text and applied automatically on startup (src/migrate.ts).
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "d1_databases": [
     {
       "binding": "DB",
