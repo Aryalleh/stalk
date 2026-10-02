@@ -5,6 +5,7 @@ import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { normCity, now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import { upsertCustomer } from "../../crm/sync";
+import { sizeNames } from "../sizes";
 import type { C, Env } from "../../env";
 import { SESSION_COOKIE } from "../../session";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
@@ -178,16 +179,19 @@ async function ownWishlist(c: C) {
   return c.env.DB.prepare("SELECT * FROM wishlists WHERE id = ? AND user_id = ?").bind(intParam(c, "id"), currentUser(c).id).first<Wishlist>();
 }
 
-async function addItem(db: D1Database, wishlistId: number, productId: number, quantity = 1, note = "") {
+async function addItem(db: D1Database, wishlistId: number, productId: number, quantity = 1, note = "", size = "") {
   await db
     .prepare(
-      `INSERT INTO wishlist_items (wishlist_id, product_id, quantity, note, created_at)
-       SELECT ?, p.id, ?, ?, ? FROM products p WHERE p.id = ? AND p.is_active = 1
-       ON CONFLICT (wishlist_id, product_id) DO UPDATE SET quantity = excluded.quantity, note = excluded.note`,
+      `INSERT INTO wishlist_items (wishlist_id, product_id, quantity, note, size, created_at)
+       SELECT ?, p.id, ?, ?, ?, ? FROM products p WHERE p.id = ? AND p.is_active = 1
+       ON CONFLICT (wishlist_id, product_id) DO UPDATE SET quantity = excluded.quantity, note = excluded.note, size = excluded.size`,
     )
-    .bind(wishlistId, quantity, note, now(), productId)
+    .bind(wishlistId, quantity, note, size, now(), productId)
     .run();
 }
+
+const productSizes = async (db: D1Database, productId: number) =>
+  sizeNames((await db.prepare("SELECT size_guide FROM products WHERE id = ?").bind(productId).first<{ size_guide: string }>())?.size_guide ?? "");
 
 account.get("/me/wishlists/new", async (c) => {
   const user = currentUser(c);
@@ -210,7 +214,11 @@ account.post("/me/wishlists/new", async (c) => {
   )
     .bind(user.id, randomSlug(), values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, now())
     .first<{ id: number }>();
-  if (f.product) await addItem(c.env.DB, row!.id, Number(f.product));
+  if (f.product) {
+    // A product with sizes needs the owner to pick one, so send them back to the product page for it.
+    if ((await productSizes(c.env.DB, Number(f.product))).length) return c.redirect(`/p/${Number(f.product)}?pick=1`);
+    await addItem(c.env.DB, row!.id, Number(f.product));
+  }
   return c.redirect(`/me/wishlists/${row!.id}?saved=1`);
 });
 
@@ -266,6 +274,9 @@ account.post("/p/:id{[0-9]+}/wish", async (c) => {
   const w = await c.env.DB.prepare("SELECT id, title FROM wishlists WHERE id = ? AND user_id = ?").bind(Number(f.wishlist_id), user.id).first<{ id: number; title: string }>();
   if (!w) return c.text("لیست پیدا نشد", 404);
   const qty = Math.min(20, Math.max(1, Math.floor(Number(f.quantity) || 1)));
-  await addItem(c.env.DB, w.id, intParam(c, "id"), qty, (f.note ?? "").slice(0, 200));
+  const sizes = await productSizes(c.env.DB, intParam(c, "id"));
+  const size = f.size ?? "";
+  if (sizes.length && !sizes.includes(size)) return c.redirect(`/p/${intParam(c, "id")}?err=size`);
+  await addItem(c.env.DB, w.id, intParam(c, "id"), qty, (f.note ?? "").slice(0, 200), sizes.length ? size : "");
   return c.redirect(`/p/${intParam(c, "id")}?added=${encodeURIComponent(w.title)}`);
 });

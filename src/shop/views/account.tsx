@@ -189,7 +189,7 @@ export function WishlistFormPage(props: {
               <div class="body">
                 <a href={`/p/${it.product_id}`}><b>{it.title}</b></a> <span class="muted small">· {it.shop_name}</span>
                 <div class="price">{toman(it.price)}</div>
-                <div class="small muted">{it.bought} از {it.quantity} خریده شده{it.note && ` · یادداشت: ${it.note}`}</div>
+                <div class="small muted">{it.bought} از {it.quantity} خریده شده{it.size && ` · سایز: ${it.size}`}{it.note && ` · یادداشت: ${it.note}`}</div>
               </div>
               {it.bought === 0 && it.reserved === 0 ? (
                 <form method="post" action={`/me/items/${it.id}/delete`}>

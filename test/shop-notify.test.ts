@@ -5,7 +5,7 @@ import { deliveryOptions, normCity } from "../src/shop/db";
 import { receiptButtons, receiptCaption, shipMessage } from "../src/shop/notify";
 
 const order = {
-  id: 7, product_title: "دسته گل رز", amount: 1_000_000, item_price: 850_000, package_name: "جعبه کادو", package_price: 50_000,
+  id: 7, product_title: "دسته گل رز", size: "M", amount: 1_000_000, item_price: 850_000, package_name: "جعبه کادو", package_price: 50_000,
   delivery_method: "courier", delivery_fee: 100_000, gift_message: "تولدت مبارک", giver_name: "علی", giver_phone: "09124444444",
   is_anonymous: 0, ship_name: "سارا", ship_phone: "09123333333", ship_city: "تهران", ship_address: "تهران، آزادی ۱۲", ship_postal_code: "1234567890",
 };
@@ -26,7 +26,7 @@ describe("order messages", () => {
   });
   it("ship message has delivery details and hides an anonymous giver", () => {
     const text = shipMessage(order, "https://gift.example");
-    for (const x of ["سارا", "09123333333", "شهر: تهران", "تهران، آزادی ۱۲", "1234567890", "علی", "تولدت مبارک", "/panel/orders/7"]) expect(text).toContain(x);
+    for (const x of ["سایز M", "سارا", "09123333333", "شهر: تهران", "تهران، آزادی ۱۲", "1234567890", "علی", "تولدت مبارک", "/panel/orders/7"]) expect(text).toContain(x);
     const anon = shipMessage({ ...order, is_anonymous: 1, gift_message: "" }, "https://x");
     expect(anon).toContain("ناشناس");
     expect(anon).not.toContain("علی");

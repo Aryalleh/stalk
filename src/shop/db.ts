@@ -44,6 +44,8 @@ export interface Product {
   price: number;
   image_key: string; // cover (first photo)
   video_url: string;
+  size_guide: string; // JSON, see sizes.ts
+  size_guide_image: string;
   is_active: number;
   created_at: string;
 }
@@ -72,6 +74,7 @@ export type ItemView = {
   product_id: number;
   quantity: number;
   note: string;
+  size: string;
   title: string;
   price: number;
   image_key: string;
@@ -126,7 +129,7 @@ export async function getPublicProduct(db: D1Database, id: number) {
 export async function wishlistItems(db: D1Database, wishlistId: number): Promise<ItemView[]> {
   const { results } = await db
     .prepare(
-      `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note,
+      `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note, i.size,
               p.title, p.price, p.image_key, p.is_active AS product_active,
               s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '') AS shop_ok,
               s.city AS shop_city, s.courier_enabled, s.courier_fee, s.post_enabled, s.post_fee,
@@ -166,9 +169,9 @@ export async function reserveItem(db: D1Database, itemId: number, giver: GiverIn
     .prepare(
       `INSERT INTO orders (token, item_id, wishlist_id, product_id, shop_id, product_title, item_price, package_name, package_price,
                            delivery_method, delivery_fee, amount, giver_name, giver_phone, gift_message, is_anonymous,
-                           status, expires_at, pay_card_number, created_at)
+                           status, expires_at, pay_card_number, size, created_at)
        SELECT ?8, i.id, i.wishlist_id, p.id, p.shop_id, p.title, p.price, ?9, ?10, ?11, ?12, p.price + ?10 + ?12,
-              ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, ?7
+              ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, i.size, ?7
        FROM wishlist_items i
        JOIN wishlists w ON w.id = i.wishlist_id
        JOIN products p ON p.id = i.product_id
@@ -237,6 +240,7 @@ export interface Order {
   status: OrderStatus;
   expires_at: string;
   pay_card_number: string;
+  size: string;
   item_price: number;
   package_name: string;
   package_price: number;

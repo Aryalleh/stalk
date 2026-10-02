@@ -14,6 +14,7 @@ import {
   type Wishlist,
 } from "../db";
 import { DELIVERY_LABEL } from "../notify";
+import { readSizeGuide, type SizeGuide } from "../sizes";
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
@@ -97,6 +98,28 @@ function Gallery(props: { images: ProductImage[]; title: string }) {
   );
 }
 
+function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
+  if (!props.guide && !props.image) return null;
+  return (
+    <details class="card" style="background:var(--bg)" open>
+      <summary style="cursor:pointer"><b>📏 راهنمای سایز</b></summary>
+      {props.guide && (
+        <div class="wrap" style="margin-top:8px">
+          <table>
+            <thead><tr>{props.guide.columns.map((c) => <th>{c}</th>)}</tr></thead>
+            <tbody>
+              {props.guide.rows.map((r) => (
+                <tr>{r.map((v, i) => (i === 0 ? <td><b>{v}</b></td> : <td>{v || "—"}</td>))}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {props.image && <img src={`/img/${props.image}`} alt="جدول سایز" loading="lazy" style="max-width:100%;border-radius:8px;margin-top:8px" />}
+    </details>
+  );
+}
+
 export function ProductPage(props: {
   user: User | null;
   product: ProductWithShop;
@@ -107,6 +130,8 @@ export function ProductPage(props: {
   error?: string;
 }) {
   const p = props.product;
+  const guide = readSizeGuide(p.size_guide);
+  const sizes = guide?.rows.map((r) => r[0]) ?? [];
   return (
     <Layout title={p.title} user={props.user}>
       <div class="card two">
@@ -121,6 +146,7 @@ export function ProductPage(props: {
             <p><a class="btn secondary" href={p.video_url} target="_blank" rel="noopener nofollow">{videoLabel(p.video_url)}</a></p>
           )}
           <p style="white-space:pre-wrap">{p.description}</p>
+          <SizeGuideBox guide={guide} image={p.size_guide_image} />
           {props.packages.length > 0 && (
             <div class="card" style="background:var(--bg)">
               <b>بسته‌بندی‌های کادویی</b>
@@ -143,9 +169,18 @@ export function ProductPage(props: {
               <select name="wishlist_id">
                 {props.wishlists.map((w) => <option value={String(w.id)}>{w.title}</option>)}
               </select>
+              {sizes.length > 0 && (
+                <>
+                  <label>سایز</label>
+                  <select name="size" required>
+                    <option value="">انتخاب سایز…</option>
+                    {sizes.map((z) => <option value={z}>{z}</option>)}
+                  </select>
+                </>
+              )}
               <div class="row">
                 <div style="width:110px"><label>تعداد</label><input name="quantity" type="number" min="1" max="20" value="1" /></div>
-                <div style="flex:1"><label>یادداشت (رنگ، سایز، ...)</label><input name="note" maxlength={200} /></div>
+                <div style="flex:1"><label>یادداشت ({sizes.length ? "رنگ، ..." : "رنگ، سایز، ..."})</label><input name="note" maxlength={200} /></div>
               </div>
               <p><button>❤ افزودن به آرزوها</button> <a class="small" href={`/me/wishlists/new?product=${p.id}`}>یا لیست جدید</a></p>
             </form>
@@ -243,6 +278,7 @@ export function WishlistPublicPage(props: {
               <div class="body">
                 <div><b>{it.title}</b> <span class="muted small">· {it.shop_name}</span></div>
                 <div class="price">{toman(it.price)}</div>
+                {it.size && <div class="small">سایز: <b>{it.size}</b></div>}
                 {it.note && <div class="small muted">یادداشت: {it.note}</div>}
                 <ItemProgress it={it} />
               </div>
@@ -303,6 +339,7 @@ export function CheckoutPage(props: {
             <div class="body">
               <b>{it.title}</b>
               <div class="price">{toman(it.price)}</div>
+              {it.size && <div class="small">سایز: <b>{it.size}</b></div>}
               <div class="muted small">{it.shop_name} · از لیست «{props.wishlist.title}»</div>
             </div>
           </div>
@@ -381,7 +418,7 @@ export function OrderPage(props: {
               <h2>۱. مبلغ را کارت به کارت کنید</h2>
               <p>مبلغ: <b class="price" style="font-size:20px">{toman(o.amount)}</b></p>
               <p class="small muted" style="margin-top:0">
-                {toman(o.item_price)} محصول
+                {toman(o.item_price)} محصول{o.size && <> (سایز {o.size})</>}
                 {o.package_name && <> + {toman(o.package_price)} بسته‌بندی ({o.package_name})</>}
                 {o.delivery_method && <> + {toman(o.delivery_fee)} ارسال با {DELIVERY_LABEL[o.delivery_method]}</>}
               </p>

@@ -4,6 +4,7 @@ import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
 import { DELIVERY_LABEL } from "../notify";
+import { CLOTHING_TEMPLATE } from "../sizes";
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
@@ -130,7 +131,7 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
         <div class="card">
           <h2>سفارش #{o.id} <span class="tag">{STATUS_LABEL[o.status]}</span></h2>
           <p>
-            محصول: <b>{o.product_title}</b> — {toman(o.item_price)}
+            محصول: <b>{o.product_title}</b>{o.size && <> — سایز <b>{o.size}</b></>} — {toman(o.item_price)}
             {o.package_name && <><br />بسته‌بندی: <b>{o.package_name}</b> — {toman(o.package_price)}</>}
             {o.delivery_method && <><br />ارسال با <b>{DELIVERY_LABEL[o.delivery_method]}</b> — {toman(o.delivery_fee)}</>}
             <br />جمع کل: <span class="price">{toman(o.amount)}</span>
@@ -253,17 +254,39 @@ export function ProductFormPage(props: {
             <label style="margin-top:0">عکس‌ها (تا ۸ عکس، هر کدام حداکثر ۳ مگابایت؛ اولی عکس اصلی است)</label>
             {!!props.images?.length && (
               <div class="row" style="margin-bottom:8px">
-                {props.images.map((img) => (
+                {props.images.map((img, n) => (
                   <label style="text-align:center;margin:0">
                     <img src={`/img/${img.image_key}`} alt="" style="width:84px;height:84px;object-fit:cover;border-radius:8px;display:block" />
-                    <input type="checkbox" name="delete_image" value={String(img.id)} style="width:auto" /> حذف
+                    <input type="checkbox" name="delete_image" value={String(img.id)} class="del-img" style="width:auto" /> حذف
+                    {n === 0 && <div class="small muted">عکس اصلی</div>}
                   </label>
                 ))}
               </div>
             )}
-            <input type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple />
+            <input type="file" id="images" name="images" accept="image/jpeg,image/png,image/webp" multiple />
+            <div class="small muted" id="img-count"></div>
+            <div class="row" id="img-preview" style="margin-top:8px"></div>
           </div>
         </div>
+        <div class="card">
+          <h2>📏 راهنمای سایز (برای لباس و هر محصول سایزدار)</h2>
+          <p class="muted small" style="margin-top:0">
+            ستون اول نام سایز است (S، M، 38، ...). اگر جدول داشته باشد، صاحب لیست آرزو موقع افزودن محصول باید سایزش را انتخاب کند و همان
+            سایز در سفارش برای شما می‌آید. برای محصول بدون سایز، جدول را خالی بگذارید.
+          </p>
+          <input type="hidden" name="size_guide" id="size-guide" value={v.size_guide ?? ""} />
+          <div id="sg-editor" class="wrap"></div>
+          <noscript><p class="errbox">برای ویرایش جدول سایز، جاوااسکریپت مرورگر را فعال کنید.</p></noscript>
+          <label>عکس جدول سایز (اختیاری)</label>
+          {p?.size_guide_image && (
+            <div class="row" style="margin-bottom:6px">
+              <img src={`/img/${p.size_guide_image}`} alt="راهنمای سایز" style="max-width:220px;border-radius:8px" />
+              <label class="row" style="color:var(--text)"><input type="checkbox" name="remove_size_guide_image" value="1" style="width:auto" /> حذف عکس</label>
+            </div>
+          )}
+          <input type="file" name="size_guide_image" accept="image/jpeg,image/png,image/webp" />
+        </div>
+
         <div class="card">
           <h2>بسته‌بندی‌های کادویی</h2>
           <p class="muted small" style="margin-top:0">
@@ -280,8 +303,77 @@ export function ProductFormPage(props: {
         </div>
         <p><button>{p ? "ذخیره" : "ثبت محصول"}</button></p>
       </form>
+      <script dangerouslySetInnerHTML={{ __html: productFormScript(props.images?.length ?? 0) }} />
     </Layout>
   );
+}
+
+/** Client side of the product form: photo previews before upload and the size-table editor. */
+function productFormScript(existingImages: number) {
+  return `
+(function () {
+  var MAX = 8, form = document.querySelector('form[enctype]');
+  // ---- photos: keep every picked file (several rounds of picking add up) and preview them ----
+  var input = document.getElementById('images'), box = document.getElementById('img-preview'), count = document.getElementById('img-count');
+  var dt = new DataTransfer();
+  function kept() { return ${existingImages} - document.querySelectorAll('.del-img:checked').length; }
+  function drawPhotos() {
+    box.innerHTML = '';
+    Array.prototype.forEach.call(dt.files, function (f, i) {
+      var cell = document.createElement('div'); cell.style.cssText = 'position:relative';
+      var img = document.createElement('img'); img.src = URL.createObjectURL(f);
+      img.style.cssText = 'width:84px;height:84px;object-fit:cover;border-radius:8px;display:block;border:2px solid var(--accent)';
+      var x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.title = 'حذف';
+      x.style.cssText = 'position:absolute;top:2px;left:2px;padding:0 7px;border-radius:50%;line-height:1.5';
+      x.onclick = function () { var n = new DataTransfer(); Array.prototype.forEach.call(dt.files, function (g, j) { if (j !== i) n.items.add(g); }); dt = n; input.files = dt.files; drawPhotos(); };
+      cell.appendChild(img); cell.appendChild(x); box.appendChild(cell);
+    });
+    var total = kept() + dt.files.length;
+    count.textContent = dt.files.length ? (dt.files.length + ' عکس جدید انتخاب شد — مجموع ' + total + ' از ' + MAX) : '';
+    count.style.color = total > MAX ? 'var(--danger)' : '';
+  }
+  input.addEventListener('change', function () {
+    Array.prototype.forEach.call(input.files, function (f) { if (kept() + dt.files.length < MAX) dt.items.add(f); });
+    input.files = dt.files; drawPhotos();
+  });
+  document.querySelectorAll('.del-img').forEach(function (c) { c.addEventListener('change', drawPhotos); });
+
+  // ---- size table editor (stored as JSON in #size-guide) ----
+  var hidden = document.getElementById('size-guide'), ed = document.getElementById('sg-editor');
+  var TEMPLATE = ${JSON.stringify(CLOTHING_TEMPLATE)};
+  var g = null; try { g = hidden.value ? JSON.parse(hidden.value) : null; } catch (e) { g = null; }
+  function btn(label, fn, cls) { var b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.className = cls || 'secondary small'; b.onclick = fn; return b; }
+  function cellInput(val, set, w) { var i = document.createElement('input'); i.value = val || ''; i.maxLength = 30; i.style.cssText = 'min-width:' + (w || 80) + 'px'; i.oninput = function () { set(i.value); }; return i; }
+  function draw() {
+    ed.innerHTML = '';
+    var bar = document.createElement('div'); bar.className = 'row'; bar.style.marginBottom = '8px';
+    if (!g) {
+      bar.appendChild(btn('استفاده از قالب لباس', function () { g = JSON.parse(JSON.stringify(TEMPLATE)); draw(); }, 'small'));
+      bar.appendChild(btn('جدول خالی', function () { g = { columns: ['سایز', ''], rows: [['', '']] }; draw(); }));
+      ed.appendChild(bar); return;
+    }
+    var t = document.createElement('table'), head = document.createElement('tr');
+    g.columns.forEach(function (c, ci) {
+      var th = document.createElement('th'); th.appendChild(cellInput(c, function (v) { g.columns[ci] = v; }, 90));
+      if (ci > 0) th.appendChild(btn('×', function () { g.columns.splice(ci, 1); g.rows.forEach(function (r) { r.splice(ci, 1); }); draw(); }));
+      head.appendChild(th);
+    });
+    head.appendChild(document.createElement('th')); t.appendChild(head);
+    g.rows.forEach(function (r, ri) {
+      var tr = document.createElement('tr');
+      g.columns.forEach(function (_, ci) { var td = document.createElement('td'); td.appendChild(cellInput(r[ci], function (v) { g.rows[ri][ci] = v; })); tr.appendChild(td); });
+      var td = document.createElement('td'); td.appendChild(btn('حذف ردیف', function () { g.rows.splice(ri, 1); draw(); })); tr.appendChild(td);
+      t.appendChild(tr);
+    });
+    ed.appendChild(t);
+    bar.appendChild(btn('+ ردیف (سایز)', function () { g.rows.push(g.columns.map(function () { return ''; })); draw(); }));
+    bar.appendChild(btn('+ ستون (اندازه)', function () { if (g.columns.length >= 10) return; g.columns.push(''); g.rows.forEach(function (r) { r.push(''); }); draw(); }));
+    bar.appendChild(btn('حذف کل جدول', function () { if (confirm('جدول سایز حذف شود؟')) { g = null; draw(); } }));
+    bar.style.marginTop = '8px'; ed.appendChild(bar);
+  }
+  draw();
+  form.addEventListener('submit', function () { hidden.value = g ? JSON.stringify(g) : ''; });
+})();`;
 }
 
 export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok?: string }) {

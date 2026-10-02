@@ -7,6 +7,7 @@ import { loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Set
 import { sendSafirText } from "../../bale/safir";
 import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { confirmOrder, rejectOrder, shopOwnerChats, type Deps } from "../orders";
+import { parseSizeGuide } from "../sizes";
 import { AdminPage, AdminSettingsPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 
@@ -189,6 +190,7 @@ async function saveProduct(c: C, product: Product | null) {
     description: str("description"),
     price: normalizeDigits(str("price")).replace(/[,٬]/g, ""),
     video_url: str("video_url"),
+    size_guide: str("size_guide"),
     is_active: str("is_active") === "1" ? "1" : "0",
   };
   const errors: string[] = [];
@@ -196,6 +198,12 @@ async function saveProduct(c: C, product: Product | null) {
   const price = Number(values.price);
   if (!Number.isInteger(price) || price < 1000) errors.push("قیمت باید عدد صحیح و حداقل ۱۰۰۰ تومان باشد.");
   if (values.video_url && !VIDEO_URL.test(values.video_url)) errors.push("لینک ویدیو باید لینک پست اینستاگرام، تلگرام یا بله باشد (با https).");
+  const parsedGuide = parseSizeGuide(values.size_guide);
+  if ("error" in parsedGuide) errors.push(parsedGuide.error);
+  const sizeGuide = "guide" in parsedGuide && parsedGuide.guide ? JSON.stringify(parsedGuide.guide) : "";
+  const chartFile = body.size_guide_image instanceof File && body.size_guide_image.size > 0 ? body.size_guide_image : null;
+  if (chartFile && !IMAGE_TYPES[chartFile.type]) errors.push("عکس راهنمای سایز باید JPG، PNG یا WebP باشد.");
+  else if (chartFile && chartFile.size > MAX_IMAGE) errors.push("حجم عکس راهنمای سایز بیشتر از ۳ مگابایت است.");
 
   // Packages: rows pkg_id_N / pkg_name_N / pkg_price_N; an empty name deletes the row.
   const packages: { id: number | null; name: string; price: number }[] = [];
@@ -227,18 +235,25 @@ async function saveProduct(c: C, product: Product | null) {
     newKeys.push(key);
   }
   const cover = kept[0]?.image_key ?? newKeys[0] ?? "";
+  let chartKey = str("remove_size_guide_image") === "1" ? "" : product?.size_guide_image ?? "";
+  if (chartFile) {
+    chartKey = `p/${shop.id}/${randomSlug(16)}.${IMAGE_TYPES[chartFile.type]}`;
+    await c.env.IMAGES.put(chartKey, await chartFile.arrayBuffer(), { httpMetadata: { contentType: chartFile.type } });
+  }
   const t = now();
   const db = c.env.DB;
   let productId = product?.id ?? 0;
   if (product) {
-    await db.prepare("UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, is_active = ?, updated_at = ? WHERE id = ?")
-      .bind(values.title, values.description, price, values.video_url, cover, Number(values.is_active), t, product.id)
+    await db.prepare(
+      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, is_active = ?, updated_at = ? WHERE id = ?",
+    )
+      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, Number(values.is_active), t, product.id)
       .run();
   } else {
     const row = await db.prepare(
-      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
-      .bind(shop.id, values.title, values.description, price, values.video_url, cover, Number(values.is_active), t, t)
+      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, Number(values.is_active), t, t)
       .first<{ id: number }>();
     productId = row!.id;
   }
@@ -258,6 +273,7 @@ async function saveProduct(c: C, product: Product | null) {
   );
   await db.batch(stmts);
   const removedKeys = existing.filter((i) => removeIds.has(i.id)).map((i) => i.image_key);
+  if (product?.size_guide_image && product.size_guide_image !== chartKey) removedKeys.push(product.size_guide_image);
   if (removedKeys.length) c.executionCtx.waitUntil(c.env.IMAGES.delete(removedKeys));
   return c.redirect(`/panel/products/${productId}?saved=1`);
 }
@@ -271,7 +287,10 @@ const ownProduct = (c: C) =>
 panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   const p = await ownProduct(c);
   if (!p) return c.notFound();
-  const values = { title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, is_active: String(p.is_active), saved: c.req.query("saved") ?? "" };
+  const values = {
+    title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, size_guide: p.size_guide,
+    is_active: String(p.is_active), saved: c.req.query("saved") ?? "",
+  };
   return productFormPage(c, p, values);
 });
 

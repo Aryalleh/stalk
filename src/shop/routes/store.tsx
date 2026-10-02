@@ -42,7 +42,8 @@ store.get("/p/:id{[0-9]+}", async (c) => {
     productImages(c.env.DB, id),
     productPackages(c.env.DB, id),
   ]);
-  return render(c, <ProductPage user={user} product={product} wishlists={wishlists} images={images} packages={packages} added={c.req.query("added")} />);
+  const error = c.req.query("err") === "size" ? "لطفاً سایز را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
+  return render(c, <ProductPage user={user} product={product} wishlists={wishlists} images={images} packages={packages} added={c.req.query("added")} error={error} />);
 });
 
 store.get("/s/:slug", async (c) => {
