@@ -3,11 +3,12 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { availableBySize, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
+import { availableByVariant, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import { upsertCustomer } from "../../crm/sync";
-import { sizeNames } from "../sizes";
+import { hasChoice, pickVariant } from "../variants";
 import type { C, Env } from "../../env";
-import { SESSION_COOKIE } from "../../session";
+import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile } from "../../session";
+import { birthDate, fullName, usernameError } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
@@ -15,12 +16,11 @@ import { activeBots, botLink } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, MyOrdersPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, profileValues, MyOrdersPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange } from "../orders";
 
-const sessionUserById = (db: D1Database, id: number) =>
-  db.prepare("SELECT id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key FROM users WHERE id = ?").bind(id).first<User>();
+const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
 import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
 
@@ -78,24 +78,76 @@ account.get("/login/verify", async (c) => {
   return render(c, <CodeLoginPage next={safeNext(c.req.query("next"))} step="code" phone={phone} isNew={isNew} />);
 });
 
+/** Name and birth date from a form (signup, profile completion, settings). */
+function readProfile(f: Record<string, string>) {
+  const first = (f.first_name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const last = (f.last_name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const birth = birthDate(f.birth_year, f.birth_month, f.birth_day);
+  const error = !first || !last ? "نام و نام خانوادگی را وارد کنید." : !birth ? "تاریخ تولد را درست انتخاب کنید." : "";
+  return { first, last, birth: birth ?? "", error };
+}
+
 account.post("/login/verify", async (c) => {
   const f = await form(c);
   const next = safeNext(f.next);
   const phone = normalizePhone(f.phone ?? "");
   if (!MOBILE.test(phone)) return c.redirect("/login");
   const existing = await userByPhone(c, phone);
-  const fail = (error: string) => render(c, <CodeLoginPage next={next} step="code" phone={phone} isNew={!existing} name={f.name} error={error} />, 400);
-  if (!existing && !f.name) return fail("نام و نام خانوادگی را وارد کنید.");
+  const fail = (error: string) => render(c, <CodeLoginPage next={next} step="code" phone={phone} isNew={!existing} values={f} error={error} />, 400);
+  const profile = readProfile(f);
+  if (!existing && profile.error) return fail(profile.error);
   const ok = await verifyCode(c.env.DB, phone, normalizeDigits(f.code ?? ""));
   if (ok !== true) return fail(ok);
   if (existing) return startSession(c, existing.id, next);
-  const row = await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, created_at) VALUES (?, ?, '!', ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
-    .bind(phone, f.name.slice(0, 80), now())
+  const name = fullName(profile.first, profile.last);
+  const row = await c.env.DB.prepare(
+    `INSERT INTO users (phone, name, first_name, last_name, birth_date, password_hash, created_at) VALUES (?, ?, ?, ?, ?, '!', ?)
+     ON CONFLICT (phone) DO NOTHING RETURNING id`,
+  )
+    .bind(phone, name, profile.first, profile.last, profile.birth, now())
     .first<{ id: number }>();
   const id = row?.id ?? (await userByPhone(c, phone))!.id;
-  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "ثبت‌نام در سایت" }));
+  await assignUsername(c.env.DB, id);
+  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name, phone, source: "ثبت‌نام در سایت" }));
   return startSession(c, id, next);
 });
+
+// ---------- completing the profile (accounts from before names/birth date/username were required) ----------
+
+account.get("/me/complete", async (c) => {
+  const user = currentUser(c);
+  const next = safeNext(c.req.query("next"));
+  if (!needsProfile(user)) return c.redirect(next);
+  return render(c, <CompleteProfilePage user={user} next={next} values={profileValues(user)} origin={siteUrl(c)} />);
+});
+
+account.post("/me/complete", async (c) => {
+  const user = currentUser(c);
+  const f = await form(c);
+  const next = safeNext(f.next);
+  const error = await saveProfile(c, user.id, f);
+  if (error) return render(c, <CompleteProfilePage user={user} next={next} values={f} origin={siteUrl(c)} error={error} />, 400);
+  return c.redirect(next);
+});
+
+/** Validate and store names, birth date and username. Returns an error message or "". */
+async function saveProfile(c: C, userId: number, f: Record<string, string>, extra: Record<string, number | string> = {}) {
+  const p = readProfile(f);
+  if (p.error) return p.error;
+  const username = (f.username ?? "").trim().toLowerCase();
+  const uErr = usernameError(username);
+  const current = await c.env.DB.prepare("SELECT username FROM users WHERE id = ?").bind(userId).first<{ username: string | null }>();
+  if (uErr && username !== current?.username) return uErr; // keeping the generated user<id> is fine
+  const taken = await c.env.DB.prepare("SELECT 1 FROM users WHERE username = ? AND id <> ?").bind(username, userId).first();
+  if (taken) return "این نام کاربری قبلاً گرفته شده است.";
+  const cols = Object.keys(extra);
+  await c.env.DB.prepare(
+    `UPDATE users SET first_name = ?, last_name = ?, name = ?, birth_date = ?, username = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
+  )
+    .bind(p.first, p.last, fullName(p.first, p.last), p.birth, username, ...Object.values(extra), userId)
+    .run();
+  return "";
+}
 
 // Old addresses.
 account.get("/register", (c) => c.redirect(`/login${new URL(c.req.url).search}`));
@@ -141,11 +193,12 @@ account.post("/setup/verify", async (c) => {
   const ok = await verifyCode(c.env.DB, phone, normalizeDigits(f.code ?? ""));
   if (ok !== true) return render(c, <SetupPage step="code" values={{ name: f.name, phone }} error={ok} />, 400);
   const row = await c.env.DB.prepare(
-    "INSERT INTO users (phone, name, password_hash, is_admin, created_at) VALUES (?, ?, '!', 1, ?) ON CONFLICT (phone) DO NOTHING RETURNING id",
+    "INSERT INTO users (phone, name, first_name, password_hash, is_admin, created_at) VALUES (?, ?, ?, '!', 1, ?) ON CONFLICT (phone) DO NOTHING RETURNING id",
   )
-    .bind(phone, f.name.slice(0, 80), now())
+    .bind(phone, f.name.slice(0, 80), f.name.slice(0, 40), now())
     .first<{ id: number }>();
   if (!row) return c.redirect("/setup");
+  await assignUsername(c.env.DB, row.id); // the rest of the profile is asked for right after
   c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "مدیر سایت" }));
   return startSession(c, row.id, "/admin/settings");
 });
@@ -186,11 +239,11 @@ account.get("/me", async (c) => {
     .all<{ id: number; product_title: string }>();
   return render(
     c,
-    <ProfilePage changes={changes} user={user} stats={stats ?? { wishes: 0, gifts: 0 }} items={items.results} shareUrl={latest ? `${siteUrl(c)}/w/${latest.slug}` : ""} bots={bots} />,
+    <ProfilePage changes={changes} user={user} stats={stats ?? { wishes: 0, gifts: 0 }} items={items.results} shareUrl={user.username ? `${siteUrl(c)}/u/${user.username}` : latest ? `${siteUrl(c)}/w/${latest.slug}` : ""} bots={bots} />,
   );
 });
 
-async function settingsView(c: C, extra: { error?: string; saved?: boolean } = {}, status: 200 | 400 = 200) {
+async function settingsView(c: C, extra: { error?: string; saved?: boolean; values?: Record<string, string> } = {}, status: 200 | 400 = 200) {
   const user = (await sessionUserById(c.env.DB, currentUser(c).id))!;
   const s = c.get("settings");
   const token = await connectToken(c.env.DB, user.id);
@@ -199,7 +252,7 @@ async function settingsView(c: C, extra: { error?: string; saved?: boolean } = {
     connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id),
     link: botLink(s, k, token),
   }));
-  return render(c, <ProfileSettingsPage user={user} bots={bots} {...extra} />, status);
+  return render(c, <ProfileSettingsPage user={user} bots={bots} origin={siteUrl(c)} {...extra} />, status);
 }
 
 account.get("/me/settings", (c) => settingsView(c, { saved: c.req.query("saved") === "1" }));
@@ -207,16 +260,23 @@ account.get("/me/settings", (c) => settingsView(c, { saved: c.req.query("saved")
 account.post("/me/settings", async (c) => {
   const user = currentUser(c);
   const body = await c.req.parseBody();
-  const name = (typeof body.name === "string" ? body.name : "").trim().slice(0, 80);
-  if (!name) return settingsView(c, { error: "نام لازم است." }, 400);
+  const f: Record<string, string> = {};
+  for (const [k, v] of Object.entries(body)) if (typeof v === "string") f[k] = v.trim();
   let avatar = user.avatar_key;
   const file = fileField(body.avatar);
   if (file) {
     const err = imageError(file, 2, "عکس پروفایل");
-    if (err) return settingsView(c, { error: err }, 400);
-    avatar = await storeImage(c.env.IMAGES, file, "a");
-  } else if (body.remove_avatar === "1") avatar = "";
-  await c.env.DB.prepare("UPDATE users SET name = ?, avatar_key = ? WHERE id = ?").bind(name, avatar, user.id).run();
+    if (err) return settingsView(c, { error: err, values: f }, 400);
+  }
+  const error = await saveProfile(c, user.id, f, {
+    show_received: f.show_received === "1" ? 1 : 0,
+    show_givers: f.show_givers === "1" ? 1 : 0,
+    show_birthday: f.show_birthday === "1" ? 1 : 0,
+  });
+  if (error) return settingsView(c, { error, values: f }, 400);
+  if (file) avatar = await storeImage(c.env.IMAGES, file, "a");
+  else if (f.remove_avatar === "1") avatar = "";
+  await c.env.DB.prepare("UPDATE users SET avatar_key = ? WHERE id = ?").bind(avatar, user.id).run();
   if (user.avatar_key && user.avatar_key !== avatar) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.avatar_key));
   return c.redirect("/me/settings?saved=1");
 });
@@ -259,19 +319,23 @@ async function ownWishlist(c: C) {
   return c.env.DB.prepare("SELECT * FROM wishlists WHERE id = ? AND user_id = ? AND is_direct = 0").bind(intParam(c, "id"), currentUser(c).id).first<Wishlist>();
 }
 
-async function addItem(db: D1Database, wishlistId: number, productId: number, quantity = 1, note = "", size = "") {
+async function addItem(db: D1Database, wishlistId: number, productId: number, quantity = 1, note = "", size = "", color = "") {
   await db
     .prepare(
-      `INSERT INTO wishlist_items (wishlist_id, product_id, quantity, note, size, created_at)
-       SELECT ?, p.id, ?, ?, ?, ? FROM products p WHERE p.id = ? AND p.is_active = 1
-       ON CONFLICT (wishlist_id, product_id) DO UPDATE SET quantity = excluded.quantity, note = excluded.note, size = excluded.size`,
+      `INSERT INTO wishlist_items (wishlist_id, product_id, quantity, note, size, color, created_at)
+       SELECT ?, p.id, ?, ?, ?, ?, ? FROM products p WHERE p.id = ? AND p.is_active = 1
+       ON CONFLICT (wishlist_id, product_id) DO UPDATE SET quantity = excluded.quantity, note = excluded.note, size = excluded.size, color = excluded.color`,
     )
-    .bind(wishlistId, quantity, note, size, now(), productId)
+    .bind(wishlistId, quantity, note, size, color, now(), productId)
     .run();
 }
 
-const productSizes = async (db: D1Database, productId: number) =>
-  sizeNames((await db.prepare("SELECT size_guide FROM products WHERE id = ?").bind(productId).first<{ size_guide: string }>())?.size_guide ?? "");
+/** A product's size table and colors (to validate the variant a form picked). */
+const productOptions = async (db: D1Database, productId: number) =>
+  (await db.prepare("SELECT size_guide, colors FROM products WHERE id = ?").bind(productId).first<{ size_guide: string; colors: string }>()) ?? {
+    size_guide: "",
+    colors: "",
+  };
 
 account.get("/me/wishlists/new", async (c) => {
   const user = currentUser(c);
@@ -296,7 +360,7 @@ account.post("/me/wishlists/new", async (c) => {
     .first<{ id: number }>();
   if (f.product) {
     // A product with sizes needs the owner to pick one, so send them back to the product page for it.
-    if ((await productSizes(c.env.DB, Number(f.product))).length) return c.redirect(`/p/${Number(f.product)}?pick=1`);
+    if (hasChoice(await productOptions(c.env.DB, Number(f.product)))) return c.redirect(`/p/${Number(f.product)}?pick=1`);
     await addItem(c.env.DB, row!.id, Number(f.product));
   }
   return c.redirect(`/me/wishlists/${row!.id}?saved=1`);
@@ -354,10 +418,10 @@ account.post("/p/:id{[0-9]+}/wish", async (c) => {
   const w = await c.env.DB.prepare("SELECT id, title FROM wishlists WHERE id = ? AND user_id = ? AND is_direct = 0").bind(Number(f.wishlist_id), user.id).first<{ id: number; title: string }>();
   if (!w) return c.text("لیست پیدا نشد", 404);
   const qty = Math.min(20, Math.max(1, Math.floor(Number(f.quantity) || 1)));
-  const sizes = await productSizes(c.env.DB, intParam(c, "id"));
-  const size = f.size ?? "";
-  if (sizes.length && !sizes.includes(size)) return c.redirect(`/p/${intParam(c, "id")}?err=size`);
-  await addItem(c.env.DB, w.id, intParam(c, "id"), qty, (f.note ?? "").slice(0, 200), sizes.length ? size : "");
+  const options = await productOptions(c.env.DB, intParam(c, "id"));
+  const v = pickVariant(options, hasChoice(options) ? f.variant : "|");
+  if (!v) return c.redirect(`/p/${intParam(c, "id")}?err=size`);
+  await addItem(c.env.DB, w.id, intParam(c, "id"), qty, (f.note ?? "").slice(0, 200), v.size, v.color);
   return c.redirect(`/p/${intParam(c, "id")}?added=${encodeURIComponent(w.title)}`);
 });
 
@@ -369,7 +433,7 @@ async function directBuyPage(c: C, values: Record<string, string>, errors?: stri
   const product = await getPublicProduct(c.env.DB, intParam(c, "id"));
   if (!product) return c.notFound();
   const image = (await productImages(c.env.DB, product.id))[0]?.image_key ?? product.image_key;
-  const available = await availableBySize(c.env.DB, product, sizeNames(product.size_guide));
+  const available = await availableByVariant(c.env.DB, product);
   return render(c, <DirectBuyPage user={currentUser(c)} product={product} image={image} available={available} values={values} errors={errors} />, status);
 }
 
@@ -390,11 +454,10 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
   if (!product) return c.notFound();
   const f = await form(c);
   const { values, errors } = cleanWishlist({ ...f, title: `خرید مستقیم: ${product.title}`.slice(0, 120), is_open: "1" });
-  const sizes = await productSizes(c.env.DB, productId);
-  const size = f.size ?? "";
-  if (sizes.length && !sizes.includes(size)) errors.push("سایز را انتخاب کنید.");
-  const available = await availableBySize(c.env.DB, product, sizes);
-  if (available && !errors.length && !available[sizes.length ? size : ""]) errors.push(sizes.length ? `سایز ${size} ناموجود است.` : "این محصول ناموجود است.");
+  const v = pickVariant(product, hasChoice(product) ? f.variant : "|");
+  if (!v) errors.push("سایز / رنگ را انتخاب کنید.");
+  const available = await availableByVariant(c.env.DB, product);
+  if (v && available && !errors.length && !available[v.key]) errors.push(v.label ? `${v.label} ناموجود است.` : "این محصول ناموجود است.");
   if (errors.length) return directBuyPage(c, { ...f, ...values }, errors, 400);
   const db = c.env.DB;
   const w = await db
@@ -404,7 +467,7 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
     )
     .bind(user.id, randomSlug(), values.title, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, now())
     .first<{ id: number }>();
-  await addItem(db, w!.id, productId, 1, (f.note ?? "").slice(0, 200), sizes.length ? size : "");
+  await addItem(db, w!.id, productId, 1, (f.note ?? "").slice(0, 200), v!.size, v!.color);
   const item = await db.prepare("SELECT id FROM wishlist_items WHERE wishlist_id = ?").bind(w!.id).first<{ id: number }>();
   if (!item) return directBuyPage(c, { ...f, ...values }, ["این محصول دیگر قابل خرید نیست."], 400);
   return c.redirect(`/gift/${item.id}`);

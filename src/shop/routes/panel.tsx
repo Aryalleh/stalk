@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { adjustStock, availableBySize, normCity, now, productImages, productPackages, productStock, randomSlug, type Order, type Product, type Shop } from "../db";
+import { adjustStock, availableByVariant, normCity, now, productImages, productPackages, productStock, randomSlug, type Order, type Product, type Shop } from "../db";
 import { sizeNames } from "../sizes";
+import { colorList, pickVariant, variantKey, variants, type Variant } from "../variants";
 import type { C, Env } from "../../env";
 import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
@@ -145,12 +146,14 @@ const SAVED_MESSAGES: Record<string, string> = {
 panel.get("/panel/orders/:id{[0-9]+}", async (c) => {
   const order = await shopOrder(c);
   if (!order) return c.notFound();
-  const product = await c.env.DB.prepare("SELECT id, track_stock, size_guide FROM products WHERE id = ?").bind(order.product_id).first<Pick<Product, "id" | "track_stock" | "size_guide">>();
-  const sizes = product ? sizeNames(product.size_guide) : [];
-  const available = product ? await availableBySize(c.env.DB, product, sizes) : null;
+  const product = await c.env.DB.prepare("SELECT id, track_stock, size_guide, colors FROM products WHERE id = ?")
+    .bind(order.product_id)
+    .first<Pick<Product, "id" | "track_stock" | "size_guide" | "colors">>();
+  const options: Variant[] = product ? variants(product).filter((v) => v.label) : [];
+  const available = product ? await availableByVariant(c.env.DB, product) : null;
   return render(
     c,
-    <OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} sizes={sizes} available={available} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />,
+    <OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} variants={options} available={available} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />,
   );
 });
 
@@ -193,9 +196,11 @@ panel.post("/panel/orders/:id{[0-9]+}/change", async (c) => {
   const id = intParam(c, "id");
   const f = await form(c);
   const message = (f.message ?? "").slice(0, 300);
-  const size = (f.size ?? "").slice(0, 30);
-  if (!message && !size) return c.redirect(`/panel/orders/${id}`);
-  await requestChange(deps(c), id, shopOf(c).id, message, size);
+  const order = await shopOrder(c);
+  const product = order ? await c.env.DB.prepare("SELECT size_guide, colors FROM products WHERE id = ?").bind(order.product_id).first<Pick<Product, "size_guide" | "colors">>() : null;
+  const v = product && f.variant ? pickVariant(product, f.variant) : null;
+  if (!message && !v) return c.redirect(`/panel/orders/${id}`);
+  await requestChange(deps(c), id, shopOf(c).id, message, v?.size ?? "", v?.color ?? "");
   return c.redirect(`/panel/orders/${id}?done=change`);
 });
 
@@ -228,7 +233,7 @@ panel.post("/panel/orders/:id{[0-9]+}/delivered", async (c) => {
 panel.get("/panel/products", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT p.*, (SELECT COALESCE(SUM(quantity), 0) FROM product_stock s WHERE s.product_id = p.id) AS stock_total,
-            (p.size_guide <> '') AS has_sizes
+            (p.size_guide <> '' OR p.colors <> '') AS has_sizes
      FROM products p WHERE p.shop_id = ? ORDER BY p.created_at DESC`,
   )
     .bind(shopOf(c).id)
@@ -243,7 +248,7 @@ panel.post("/panel/products/:id{[0-9]+}/stock", async (c) => {
   const delta = Math.max(-1000, Math.min(1000, Math.trunc(Number((await form(c)).delta) || 0)));
   if (delta) {
     await c.env.DB.prepare("UPDATE products SET track_stock = 1 WHERE id = ?").bind(p.id).run();
-    await adjustStock(c.env.DB, p.id, "", delta);
+    await adjustStock(c.env.DB, p.id, "", "", delta);
   }
   return c.redirect("/panel/products");
 });
@@ -279,6 +284,7 @@ async function saveProduct(c: C, product: Product | null) {
     video_url: str("video_url"),
     size_guide: str("size_guide"),
     category: str("category").slice(0, 40),
+    colors: colorList(str("colors")).join("\n"),
     track_stock: str("track_stock") === "1" ? "1" : "0",
     features: str("features").split("\n").map((x) => x.trim().slice(0, 80)).filter(Boolean).slice(0, 8).join("\n"),
     is_active: str("is_active") === "1" ? "1" : "0",
@@ -292,19 +298,19 @@ async function saveProduct(c: C, product: Product | null) {
   const parsedGuide = parseSizeGuide(values.size_guide);
   if ("error" in parsedGuide) errors.push(parsedGuide.error);
   const sizeGuide = "guide" in parsedGuide && parsedGuide.guide ? JSON.stringify(parsedGuide.guide) : "";
-  // Stock: one number per size (stock_name_N / stock_N), or a single "stock" for products without sizes.
-  const stockRows: { size: string; quantity: number }[] = [];
+  // Stock: one number per variant (stock_key_N = "size|color", stock_N = quantity). Variants added
+  // since the form was drawn (new sizes or colors) start at 0 and are listed again after saving.
+  const stockRows: { size: string; color: string; quantity: number }[] = [];
   const stockValue = (raw: string, label: string) => {
     const n = Number(normalizeDigits(raw).replace(/[,٬]/g, "") || "0");
-    if (!Number.isInteger(n) || n < 0 || n > 1_000_000) errors.push(`موجودی ${label} باید عدد صحیح و مثبت باشد.`);
+    if (!Number.isInteger(n) || n < 0 || n > 1_000_000) errors.push(`موجودی ${label || "محصول"} باید عدد صحیح و مثبت باشد.`);
     return Math.max(0, Math.trunc(n) || 0);
   };
-  const newSizes = sizeNames(sizeGuide);
-  if (newSizes.length) {
-    const typed: Record<string, string> = {};
-    for (let n = 0; n < 40; n++) if (str(`stock_name_${n}`)) typed[str(`stock_name_${n}`)] = str(`stock_${n}`);
-    for (const size of newSizes) stockRows.push({ size, quantity: stockValue(typed[size] ?? "0", `سایز ${size}`) });
-  } else stockRows.push({ size: "", quantity: stockValue(str("stock"), "") });
+  const typed: Record<string, string> = {};
+  for (let n = 0; n < 400; n++) if (body[`stock_key_${n}`] !== undefined) typed[str(`stock_key_${n}`)] = str(`stock_${n}`);
+  for (const v of variants({ size_guide: sizeGuide, colors: values.colors })) {
+    stockRows.push({ size: v.size, color: v.color, quantity: stockValue(typed[v.key] ?? "0", v.label) });
+  }
   const chartFile = body.size_guide_image instanceof File && body.size_guide_image.size > 0 ? body.size_guide_image : null;
   if (chartFile && !IMAGE_TYPES[chartFile.type]) errors.push("عکس راهنمای سایز باید JPG، PNG یا WebP باشد.");
   else if (chartFile && chartFile.size > MAX_IMAGE) errors.push("حجم عکس راهنمای سایز بیشتر از ۳ مگابایت است.");
@@ -349,15 +355,15 @@ async function saveProduct(c: C, product: Product | null) {
   let productId = product?.id ?? 0;
   if (product) {
     await db.prepare(
-      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, track_stock = ?, is_active = ?, updated_at = ? WHERE id = ?",
+      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, colors = ?, track_stock = ?, is_active = ?, updated_at = ? WHERE id = ?",
     )
-      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.track_stock), Number(values.is_active), t, product.id)
+      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, values.colors, Number(values.track_stock), Number(values.is_active), t, product.id)
       .run();
   } else {
     const row = await db.prepare(
-      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, track_stock, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, colors, track_stock, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
-      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.track_stock), Number(values.is_active), t, t)
+      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, values.colors, Number(values.track_stock), Number(values.is_active), t, t)
       .first<{ id: number }>();
     productId = row!.id;
   }
@@ -367,7 +373,9 @@ async function saveProduct(c: C, product: Product | null) {
   if (values.track_stock === "1") {
     // Replace the stock table with the sizes the product has now.
     stmts.push(db.prepare("DELETE FROM product_stock WHERE product_id = ?").bind(productId));
-    for (const r of stockRows) stmts.push(db.prepare("INSERT INTO product_stock (product_id, size, quantity) VALUES (?, ?, ?)").bind(productId, r.size, r.quantity));
+    for (const r of stockRows) {
+      stmts.push(db.prepare("INSERT INTO product_stock (product_id, size, color, quantity) VALUES (?, ?, ?, ?)").bind(productId, r.size, r.color, r.quantity));
+    }
   }
   const keepPkgIds = packages.map((p) => p.id).filter(Boolean);
   stmts.push(
@@ -398,7 +406,7 @@ panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   if (!p) return c.notFound();
   const values = {
     title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, size_guide: p.size_guide,
-    category: p.category, features: p.features, track_stock: String(p.track_stock),
+    category: p.category, features: p.features, colors: p.colors, track_stock: String(p.track_stock),
     is_active: String(p.is_active), saved: c.req.query("saved") ?? "",
   };
   return productFormPage(c, p, values);

@@ -4,9 +4,8 @@ import { upsertCustomer } from "../../crm/sync";
 import type { C, Env } from "../../env";
 import { render } from "../../render";
 import { categoryList, reservationMinutes } from "../../settings";
-import { sizeNames } from "../sizes";
 import {
-  availableBySize,
+  availableByVariant,
   deliveryOptions,
   getPublicProduct,
   listProducts,
@@ -21,6 +20,7 @@ import {
   type Wishlist,
 } from "../db";
 import { PUBLIC_IMAGE } from "../images";
+import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGift } from "../views/profile";
 import { sendReceiptToShop } from "../orders";
 import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
@@ -87,8 +87,8 @@ store.get("/p/:id{[0-9]+}", async (c) => {
       .bind(product.shop_id)
       .first<{ logo_key: string; sales: number }>(),
   ]);
-  const error = c.req.query("err") === "size" ? "لطفاً سایز را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
-  const available = await availableBySize(c.env.DB, product, sizeNames(product.size_guide));
+  const error = c.req.query("err") === "size" ? "لطفاً سایز / رنگ را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز / رنگ را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
+  const available = await availableByVariant(c.env.DB, product);
   return render(
     c,
     <ProductPage
@@ -126,9 +126,9 @@ store.get("/s/:slug", async (c) => {
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {
   return db
-    .prepare(`SELECT w.*, u.name AS owner_name, u.avatar_key AS owner_avatar FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
+    .prepare(`SELECT w.*, u.name AS owner_name, u.avatar_key AS owner_avatar, u.username AS owner_username FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
     .bind(value)
-    .first<Wishlist & { owner_name: string; owner_avatar: string }>();
+    .first<Wishlist & { owner_name: string; owner_avatar: string; owner_username: string | null }>();
 }
 
 store.get("/w/:slug", async (c) => {
@@ -140,10 +140,55 @@ store.get("/w/:slug", async (c) => {
     <WishlistPublicPage
       user={user}
       wishlist={w}
-      owner={{ name: w.owner_name, avatar_key: w.owner_avatar }}
+      owner={{ name: w.owner_name, avatar_key: w.owner_avatar, username: w.owner_username ?? "" }}
       items={await wishlistItems(c.env.DB, w.id)}
       isOwner={user?.id === w.user_id}
       shareUrl={`${siteUrl(c)}/w/${w.slug}`}
+    />,
+  );
+});
+
+// ---------- public profile ----------
+
+store.get("/u/:username", async (c) => {
+  const db = c.env.DB;
+  const person = await db
+    .prepare("SELECT id, name, username, avatar_key, birth_date, show_received, show_givers, show_birthday FROM users WHERE username = ?")
+    .bind(c.req.param("username").toLowerCase())
+    .first<PublicPerson>();
+  if (!person) return c.notFound();
+  const SOLD = "('paid', 'shipped', 'delivered')";
+  const [lists, gifts] = await db.batch([
+    db
+      .prepare(
+        `SELECT w.slug, w.title, w.description, w.occasion_date,
+                (SELECT COUNT(*) FROM wishlist_items i WHERE i.wishlist_id = w.id) AS items,
+                (SELECT COUNT(*) FROM wishlist_items i WHERE i.wishlist_id = w.id
+                   AND i.quantity <= (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD})) AS fulfilled,
+                COALESCE((SELECT p.image_key FROM wishlist_items i JOIN products p ON p.id = i.product_id
+                          WHERE i.wishlist_id = w.id ORDER BY i.created_at LIMIT 1), '') AS cover
+         FROM wishlists w WHERE w.user_id = ? AND w.is_open = 1 AND w.is_direct = 0 ORDER BY w.created_at DESC`,
+      )
+      .bind(person.id),
+    db
+      .prepare(
+        // A giver's name appears only if they chose to be named on the profile and the owner shows givers.
+        `SELECT o.product_id, o.product_title, COALESCE(p.image_key, '') AS image_key,
+                CASE WHEN ?2 = 1 AND o.show_on_profile = 1 AND o.is_anonymous = 0 THEN o.giver_name ELSE '' END AS giver
+         FROM orders o JOIN wishlists w ON w.id = o.wishlist_id LEFT JOIN products p ON p.id = o.product_id
+         WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD} ORDER BY o.paid_at DESC LIMIT 60`,
+      )
+      .bind(person.id, person.show_givers),
+  ]);
+  const viewer = c.get("user");
+  return render(
+    c,
+    <PublicProfilePage
+      viewer={viewer}
+      person={person}
+      lists={lists.results as PublicList[]}
+      gifts={person.show_received ? (gifts.results as ReceivedGift[]) : null}
+      isMe={viewer?.id === person.id}
     />,
   );
 });
@@ -201,7 +246,13 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
   const order = await reserveItem(
     c.env.DB,
     item.id,
-    { name: f.name.slice(0, 80), phone, message: (f.message ?? "").slice(0, 300), anonymous: f.anonymous === "1" },
+    {
+      name: f.name.slice(0, 80),
+      phone,
+      message: (f.message ?? "").slice(0, 300),
+      anonymous: f.visibility === "anonymous" || f.anonymous === "1",
+      showOnProfile: f.show_on_profile === "1",
+    },
     reservationMinutes(c.get("settings")),
     { packageName: pkg?.name ?? "", packagePrice: pkg?.price ?? 0, method: ship!.method, fee: ship!.fee },
   );

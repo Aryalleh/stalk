@@ -18,6 +18,7 @@ import {
 import { CITIES } from "../cities";
 import { DELIVERY_LABEL } from "../notify";
 import { readSizeGuide, type SizeGuide } from "../sizes";
+import { colorList, variantLabel, variants } from "../variants";
 import type { User } from "../../session";
 import { useSite } from "../../render";
 import { siteDescription } from "../../settings";
@@ -327,14 +328,15 @@ export function ProductPage(props: {
   wishlists: Wishlist[];
   images: ProductImage[];
   packages: ProductPackage[];
-  /** Units free to sell per size ('' without sizes); null = stock not tracked. */
+  /** Units free to sell per variant ("size|color"); null = stock not tracked. */
   available?: Record<string, number> | null;
   added?: string;
   error?: string;
 }) {
   const p = props.product;
   const guide = readSizeGuide(p.size_guide);
-  const sizes = guide?.rows.map((r) => r[0]) ?? [];
+  const opts = variants(p).filter((x) => x.label); // the size/color combinations to choose from
+  const colors = colorList(p.colors);
   const avail = props.available ?? null;
   const totalLeft = avail ? Object.values(avail).reduce((a, b) => a + b, 0) : Infinity;
   const soldOut = totalLeft <= 0;
@@ -445,11 +447,17 @@ export function ProductPage(props: {
             </a>
           );
         })()}
-        {avail && sizes.length > 0 && (
+        {colors.length > 0 && (
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="text-muted">رنگ‌ها:</span>
+            {colors.map((c) => <span class="px-2.5 py-1 rounded-lg bg-card text-fg">{c}</span>)}
+          </div>
+        )}
+        {avail && opts.length > 0 && (
           <div class="flex flex-wrap gap-2 text-xs">
-            <span class="text-muted">موجودی سایزها:</span>
-            {sizes.map((z) => (
-              <span class={`px-2 py-0.5 rounded-lg ${avail[z] ? "bg-card text-fg" : "bg-card text-muted line-through"}`}>{z}</span>
+            <span class="text-muted">موجود:</span>
+            {opts.map((o) => (
+              <span class={`px-2 py-0.5 rounded-lg bg-card ${avail[o.key] ? "text-fg" : "text-muted line-through"}`}>{o.label.replace(/^سایز |رنگ /g, "")}</span>
             ))}
           </div>
         )}
@@ -491,12 +499,12 @@ export function ProductPage(props: {
             <select name="wishlist_id" class={field}>
               {props.wishlists.map((w) => <option value={String(w.id)}>{w.title}</option>)}
             </select>
-            {sizes.length > 0 && (
+            {opts.length > 0 && (
               <>
-                <label class="block text-xs text-muted">سایز</label>
-                <select name="size" required class={field}>
-                  <option value="">انتخاب سایز…</option>
-                  {sizes.map((z) => <option value={z}>{z}{avail && !avail[z] ? " (فعلاً ناموجود)" : ""}</option>)}
+                <label class="block text-xs text-muted">سایز / رنگ</label>
+                <select name="variant" required class={field}>
+                  <option value="">انتخاب کنید…</option>
+                  {opts.map((o) => <option value={o.key}>{o.label}{avail && !avail[o.key] ? " (فعلاً ناموجود)" : ""}</option>)}
                 </select>
               </>
             )}
@@ -506,7 +514,7 @@ export function ProductPage(props: {
                 <input name="quantity" type="number" min="1" max="20" value="1" class={field} />
               </div>
               <div class="flex-1">
-                <label class="block text-xs text-muted mb-1">یادداشت ({sizes.length ? "رنگ، ..." : "رنگ، سایز، ..."})</label>
+                <label class="block text-xs text-muted mb-1">یادداشت (اختیاری)</label>
                 <input name="note" maxlength={200} class={field} />
               </div>
             </div>
@@ -610,7 +618,7 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
 export function WishlistPublicPage(props: {
   user: User | null;
   wishlist: Wishlist;
-  owner: { name: string; avatar_key: string };
+  owner: { name: string; avatar_key: string; username: string };
   items: ItemView[];
   isOwner: boolean;
   shareUrl: string;
@@ -635,12 +643,12 @@ export function WishlistPublicPage(props: {
   return (
     <Layout title={`${w.title} | آرزوهای ${props.owner.name}`} user={props.user} nav={props.isOwner ? "wishes" : "home"} header={header} bare wide seo={seo}>
       <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">
-        <div class="relative inline-block mb-4">
+        <a href={props.owner.username ? `/u/${props.owner.username}` : "#"} class="relative inline-block mb-4" aria-label={`پروفایل ${props.owner.name}`}>
           <Avatar user={props.owner} size="w-24 h-24" ring />
           <div class="absolute -bottom-1 -left-1 bg-pink text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] border-2 border-ink">
             <i class="fa-solid fa-gift"></i>
           </div>
-        </div>
+        </a>
         <h1 class="text-2xl font-bold mb-1">{w.title}</h1>
         <p class="text-sm text-muted">
           آرزوهای <b class="text-fg">{props.owner.name}</b>
@@ -700,7 +708,7 @@ export function WishlistPublicPage(props: {
                 <div class="absolute inset-x-0 bottom-0 p-4">
                   <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{it.title}</h3>
                   <div class={`text-[11px] font-bold ${fulfilled ? "text-muted" : "text-pink"}`}>{toman(it.price)}</div>
-                  {it.size && <div class="text-[10px] text-fg/80">سایز: {it.size}</div>}
+                  {variantLabel(it.size, it.color) && <div class="text-[10px] text-fg/80">{variantLabel(it.size, it.color)}</div>}
                   {it.note && <div class="text-[10px] text-muted truncate">{it.note}</div>}
                   {buyable && !fulfilled && !props.isOwner ? (
                     <a href={`/gift/${it.id}`} class="mt-3 block w-full py-2 bg-pink text-white text-center rounded-xl text-[11px] font-bold shadow-lg shadow-pink/20">
@@ -763,7 +771,10 @@ export function CheckoutPage(props: {
       document.getElementById('total').textContent=fa(t);
       var a=document.getElementById('pkg-fee');if(a)a.textContent=pp?fa(pp):'رایگان';
       var b=document.getElementById('ship-fee');if(b)b.textContent=dd?fa(dd):'رایگان';}
-    f.addEventListener('change',upd);upd();})();`;
+    f.addEventListener('change',upd);upd();
+    var sp=document.getElementById('show-on-profile');
+    function vis(){var a=f.querySelector('input[name=visibility][value=anonymous]');if(!sp||!a)return;var cb=sp.querySelector('input');cb.disabled=a.checked;if(a.checked)cb.checked=false;sp.style.opacity=a.checked?'.4':'1';}
+    f.addEventListener('change',vis);vis();})();`;
   const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
   const direct = !!props.wishlist.is_direct;
   const heading = direct ? "خرید برای خودم" : "خرید کادو";
@@ -778,7 +789,7 @@ export function CheckoutPage(props: {
             <div class="min-w-0">
               <h2 class="text-sm font-bold text-fg truncate">{it.title}</h2>
               <p class="text-[10px] text-muted">{direct ? `ارسال به ${props.wishlist.city}` : `برای: لیست «${props.wishlist.title}» ${props.ownerName}`}</p>
-              <p class="text-[10px] text-muted">{it.shop_name}{it.size && <> · سایز: <b class="text-fg">{it.size}</b></>}</p>
+              <p class="text-[10px] text-muted">{it.shop_name}{variantLabel(it.size, it.color) && <> · <b class="text-fg">{variantLabel(it.size, it.color)}</b></>}</p>
             </div>
           </div>
           <div class="space-y-3 pt-4 border-t border-ink">
@@ -792,7 +803,7 @@ export function CheckoutPage(props: {
         <Errors errors={props.errors} />
         {!it.in_stock && (
           <div class="rounded-2xl bg-red-500/10 text-red-300 px-4 py-3 text-sm">
-            این کالا{it.size ? ` در سایز ${it.size}` : ""} فعلاً در فروشگاه ناموجود است.
+            این کالا{variantLabel(it.size, it.color) ? ` (${variantLabel(it.size, it.color)})` : ""} فعلاً در فروشگاه ناموجود است.
           </div>
         )}
 
@@ -828,9 +839,19 @@ export function CheckoutPage(props: {
           {!direct && (
             <>
               <textarea name="message" maxlength={300} rows={3} placeholder="پیام روی کارت هدیه (اختیاری)" class={input}>{v.message ?? ""}</textarea>
-              <label class="flex items-center gap-2 text-xs text-muted px-1">
-                <input type="checkbox" name="anonymous" value="1" checked={v.anonymous === "1"} class="accent-pink" /> نامم به گیرنده نمایش داده نشود
-              </label>
+              <fieldset class="space-y-2 pt-1" id="visibility">
+                <legend class="text-xs text-muted px-1 mb-1">گیرنده شما را بشناسد؟</legend>
+                <label class="flex items-center gap-2 text-sm text-fg px-1">
+                  <input type="radio" name="visibility" value="named" checked={v.visibility !== "anonymous" && v.anonymous !== "1"} class="accent-pink" /> با نام من
+                </label>
+                <label class="flex items-center gap-2 text-sm text-fg px-1">
+                  <input type="radio" name="visibility" value="anonymous" checked={v.visibility === "anonymous" || v.anonymous === "1"} class="accent-pink" /> ناشناس (نامم به گیرنده نشان داده نشود)
+                </label>
+                <label class="flex items-start gap-2 text-xs text-muted px-1 pt-1" id="show-on-profile">
+                  <input type="checkbox" name="show_on_profile" value="1" checked={v.show_on_profile === "1"} class="accent-pink mt-0.5" />
+                  <span>نامم زیر این کادو در پروفایل عمومی {props.ownerName} هم نمایش داده شود (همه می‌بینند)</span>
+                </label>
+              </fieldset>
             </>
           )}
         </section>
@@ -904,7 +925,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
         <div class="min-w-0">
           <h3 class="text-sm font-bold text-fg mb-1">{o.product_title}</h3>
           <p class="text-[10px] text-muted mb-1">فروشگاه: {o.shop_name} · {forWhom}</p>
-          {o.size && <p class="text-[10px] text-muted mb-1">سایز: <b class="text-fg">{o.size}</b></p>}
+          {variantLabel(o.size, o.color) && <p class="text-[10px] text-muted mb-1"><b class="text-fg">{variantLabel(o.size, o.color)}</b></p>}
           <span class="text-xs font-bold text-pink">{toman(o.amount)}</span>
         </div>
       </div>
@@ -926,7 +947,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
               </div>
             </div>
             <div class="space-y-3 pt-4 border-t border-ink">
-              <Row label={<>قیمت کالا{o.size && <> (سایز {o.size})</>}</>} value={toman(o.item_price)} />
+              <Row label={<>قیمت کالا{variantLabel(o.size, o.color) && <> ({variantLabel(o.size, o.color)})</>}</>} value={toman(o.item_price)} />
               {o.package_name && <Row label={`بسته‌بندی (${o.package_name})`} value={o.package_price ? toman(o.package_price) : "رایگان"} />}
               {o.delivery_method && <Row label={`ارسال با ${DELIVERY_LABEL[o.delivery_method]}`} value={o.delivery_fee ? toman(o.delivery_fee) : "رایگان"} />}
               <Row strong label="مبلغ قابل پرداخت" value={toman(o.amount)} />
@@ -1043,14 +1064,14 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
         </section>
         {o.change_status === "pending" && (
           <div class="rounded-2xl bg-amber-400/10 text-amber-200 px-4 py-3 text-sm leading-7">
-            🔁 کالا{o.size ? ` در سایز ${o.size}` : ""} تمام شده و فروشگاه {o.change_size ? `سایز ${o.change_size}` : "گزینه دیگری"} را پیشنهاد داده
+            🔁 کالا{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""} تمام شده و فروشگاه {variantLabel(o.change_size, o.change_color) || "گزینه دیگری"} را پیشنهاد داده
             {o.is_direct ? "؛ در پروفایل خود پاسخ دهید." : "؛ منتظر پاسخ گیرنده است."}
             {o.is_direct && <a href={`/me/changes/${o.id}`} class="block mt-2 text-pink font-bold">پاسخ به پیشنهاد</a>}
           </div>
         )}
         {o.change_status === "accepted" && (
           <div class="rounded-2xl bg-ok/15 text-green-300 px-4 py-3 text-sm">
-            ✓ تغییر پذیرفته شد{o.size ? ` (سایز ${o.size})` : ""}{o.change_reply ? `: ${o.change_reply}` : ""}.
+            ✓ تغییر پذیرفته شد{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""}{o.change_reply ? `: ${o.change_reply}` : ""}.
           </div>
         )}
         {paid && <p class="text-center text-sm">🎉 ممنون از مهربانی‌تان!</p>}
@@ -1090,7 +1111,7 @@ export function DirectBuyPage(props: {
   const avail = props.available ?? null;
   const p = props.product;
   const v = props.values;
-  const sizes = readSizeGuide(p.size_guide)?.rows.map((r) => r[0]) ?? [];
+  const opts = variants(p).filter((x) => x.label);
   const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
   const label = "block text-xs text-muted mb-1.5 px-1";
   return (
@@ -1107,14 +1128,14 @@ export function DirectBuyPage(props: {
           </div>
         </section>
         <Errors errors={props.errors} />
-        {sizes.length > 0 && (
+        {opts.length > 0 && (
           <div>
-            <label class={label}>سایز</label>
-            <select name="size" required class={input}>
-              <option value="">انتخاب سایز…</option>
-              {sizes.map((z) => (
-                <option value={z} selected={v.size === z} disabled={!!avail && !avail[z]}>
-                  {z}{avail && !avail[z] ? " — ناموجود" : ""}
+            <label class={label}>سایز / رنگ</label>
+            <select name="variant" required class={input}>
+              <option value="">انتخاب کنید…</option>
+              {opts.map((o) => (
+                <option value={o.key} selected={v.variant === o.key} disabled={!!avail && !avail[o.key]}>
+                  {o.label}{avail && !avail[o.key] ? " — ناموجود" : ""}
                 </option>
               ))}
             </select>

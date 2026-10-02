@@ -5,7 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { crm } from "./crm/routes";
 import type { Env } from "./env";
-import { SESSION_COOKIE, isConnected, sessionUser } from "./session";
+import { SESSION_COOKIE, isConnected, needsProfile, sessionUser } from "./session";
 import { activeBots } from "./bale/botapi";
 import { CONNECT_EXEMPT, connect } from "./bale/connect";
 import { appCss } from "./assets";
@@ -64,6 +64,17 @@ app.use(async (c, next) => {
   if (user && !isConnected(user) && !adminSettingUp && !CONNECT_EXEMPT.test(c.req.path)) {
     const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";
     return c.redirect(`/connect?next=${encodeURIComponent(back)}`);
+  }
+  await next();
+});
+
+// Then every account needs first name, last name, birth date and a username (older accounts are
+// asked once, at /me/complete).
+app.use(async (c, next) => {
+  const user = c.get("user");
+  if (user && needsProfile(user) && !CONNECT_EXEMPT.test(c.req.path) && c.req.path !== "/me/complete") {
+    const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";
+    return c.redirect(`/me/complete?next=${encodeURIComponent(back)}`);
   }
   await next();
 });

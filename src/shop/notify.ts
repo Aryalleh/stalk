@@ -1,3 +1,4 @@
+import { variantLabel } from "./variants";
 // Texts the bot sends about orders.
 import type { InlineKeyboard } from "../bale/botapi";
 
@@ -5,6 +6,7 @@ export interface OrderInfo {
   id: number;
   product_title: string;
   size: string;
+  color?: string;
   amount: number;
   item_price: number;
   package_name: string;
@@ -28,7 +30,7 @@ export const DELIVERY_LABEL: Record<string, string> = { courier: "پیک", post:
 
 function breakdown(o: OrderInfo) {
   return [
-    `محصول: ${o.product_title}${o.size ? ` (سایز ${o.size})` : ""} — ${fa(o.item_price)}`,
+    `محصول: ${o.product_title}${variantLabel(o.size, o.color ?? "") ? ` (${variantLabel(o.size, o.color ?? "")})` : ""} — ${fa(o.item_price)}`,
     o.package_name ? `بسته‌بندی: ${o.package_name} — ${fa(o.package_price)}` : "",
     o.delivery_method ? `ارسال با ${DELIVERY_LABEL[o.delivery_method] ?? o.delivery_method} — ${fa(o.delivery_fee)}` : "",
     `جمع کل: ${fa(o.amount)}`,

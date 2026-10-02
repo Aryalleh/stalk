@@ -1,3 +1,4 @@
+import { variantKey, variants } from "./variants";
 /** Orders that count as bought (shop confirmed the money). */
 const SOLD = "('paid', 'shipped', 'delivered')";
 /** SQL condition (alias o, ?now param) for orders that occupy a unit: bought, reported, or a live hold. */
@@ -5,14 +6,14 @@ const HOLDS = (nowParam: string) =>
   `(o.status IN ('awaiting', 'paid', 'shipped', 'delivered') OR (o.status = 'pending' AND o.expires_at > ${nowParam}))`;
 
 /**
- * SQL: units of product `pid` in size `size` still free to sell — stock minus orders holding one
+ * SQL: units of product `pid` in size `size` and color `color` still free to sell — stock minus orders holding one
  * (live checkout holds and receipts waiting for the shop; confirmed sales are already taken off
  * the stock). Untracked products count as unlimited.
  */
-const AVAILABLE = (pid: string, size: string, nowParam: string) =>
+const AVAILABLE = (pid: string, size: string, color: string, nowParam: string) =>
   `(CASE WHEN (SELECT track_stock FROM products WHERE id = ${pid}) = 0 THEN 1000000 ELSE
-     COALESCE((SELECT quantity FROM product_stock WHERE product_id = ${pid} AND size = ${size}), 0)
-     - (SELECT COUNT(*) FROM orders h WHERE h.product_id = ${pid} AND h.size = ${size}
+     COALESCE((SELECT quantity FROM product_stock WHERE product_id = ${pid} AND size = ${size} AND color = ${color}), 0)
+     - (SELECT COUNT(*) FROM orders h WHERE h.product_id = ${pid} AND h.size = ${size} AND h.color = ${color}
           AND (h.status = 'awaiting' OR (h.status = 'pending' AND h.expires_at > ${nowParam}))) END)`;
 
 export const now = () => new Date().toISOString();
@@ -61,6 +62,7 @@ export interface Product {
   size_guide_image: string;
   category: string;
   features: string; // one per line
+  colors: string; // one per line
   track_stock: number; // 1 = sell only what product_stock holds
   is_active: number;
   created_at: string;
@@ -92,6 +94,7 @@ export type ItemView = {
   quantity: number;
   note: string;
   size: string;
+  color: string;
   title: string;
   price: number;
   image_key: string;
@@ -151,13 +154,13 @@ export async function getPublicProduct(db: D1Database, id: number) {
 export async function wishlistItems(db: D1Database, wishlistId: number): Promise<ItemView[]> {
   const { results } = await db
     .prepare(
-      `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note, i.size,
+      `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note, i.size, i.color,
               p.title, p.price, p.image_key, p.is_active AS product_active,
               s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '') AS shop_ok,
               s.city AS shop_city, s.courier_enabled, s.courier_fee, s.post_enabled, s.post_fee,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved,
-              (${AVAILABLE("i.product_id", "i.size", "?1")} > 0) AS in_stock
+              (${AVAILABLE("i.product_id", "i.size", "i.color", "?1")} > 0) AS in_stock
        FROM wishlist_items i JOIN products p ON p.id = i.product_id JOIN shops s ON s.id = p.shop_id
        WHERE i.wishlist_id = ?2 ORDER BY i.created_at`,
     )
@@ -171,6 +174,8 @@ export interface GiverInput {
   phone: string;
   message: string;
   anonymous: boolean;
+  /** Name shown under the gift on the recipient's public profile. */
+  showOnProfile?: boolean;
 }
 
 export interface Pricing {
@@ -192,20 +197,20 @@ export async function reserveItem(db: D1Database, itemId: number, giver: GiverIn
     .prepare(
       `INSERT INTO orders (token, item_id, wishlist_id, product_id, shop_id, product_title, item_price, package_name, package_price,
                            delivery_method, delivery_fee, amount, giver_name, giver_phone, gift_message, is_anonymous,
-                           status, expires_at, pay_card_number, size, created_at)
+                           status, expires_at, pay_card_number, size, color, show_on_profile, created_at)
        SELECT ?8, i.id, i.wishlist_id, p.id, p.shop_id, p.title, p.price, ?9, ?10, ?11, ?12, p.price + ?10 + ?12,
-              ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, i.size, ?7
+              ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, i.size, i.color, ?13, ?7
        FROM wishlist_items i
        JOIN wishlists w ON w.id = i.wishlist_id
        JOIN products p ON p.id = i.product_id
        JOIN shops s ON s.id = p.shop_id
        WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND s.status = 'approved' AND s.card_number <> ''
          AND i.quantity > (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?7")})
-         AND ${AVAILABLE("p.id", "i.size", "?7")} > 0
+         AND ${AVAILABLE("p.id", "i.size", "i.color", "?7")} > 0
        RETURNING id, token, amount`,
     )
     .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t, randomSlug(24),
-      pricing.packageName, pricing.packagePrice, pricing.method, pricing.fee)
+      pricing.packageName, pricing.packagePrice, pricing.method, pricing.fee, giver.showOnProfile && !giver.anonymous ? 1 : 0)
     .first<{ id: number; token: string; amount: number }>();
 }
 
@@ -287,6 +292,9 @@ export interface Order {
   created_at: string;
   paid_at: string | null;
   shipped_at: string | null;
+  color: string;
+  change_color: string;
+  show_on_profile: number;
   cancel_kind: string; // 'out_of_stock' when the shop canceled for lack of stock
   refund_note: string;
   change_status: "" | "pending" | "accepted" | "declined";
@@ -327,7 +335,7 @@ export async function confirmPayment(db: D1Database, orderId: number, shopId: nu
     db
       .prepare(
         `UPDATE product_stock SET quantity = MAX(quantity - 1, 0)
-         WHERE (product_id, size) = (SELECT product_id, size FROM orders WHERE id = ?1 AND status = 'paid' AND paid_at = ?2)`,
+         WHERE (product_id, size, color) = (SELECT product_id, size, color FROM orders WHERE id = ?1 AND status = 'paid' AND paid_at = ?2)`,
       )
       .bind(orderId, t),
   ]);
@@ -360,37 +368,37 @@ export async function cancelOutOfStock(db: D1Database, orderId: number, shopId: 
     db.prepare("UPDATE products SET track_stock = 1 WHERE id = (SELECT product_id FROM orders WHERE id = ?1 AND cancel_kind = 'out_of_stock')").bind(orderId),
     db
       .prepare(
-        `INSERT INTO product_stock (product_id, size, quantity)
-         SELECT product_id, size, 0 FROM orders WHERE id = ?1 AND cancel_kind = 'out_of_stock'
-         ON CONFLICT (product_id, size) DO UPDATE SET quantity = 0`,
+        `INSERT INTO product_stock (product_id, size, color, quantity)
+         SELECT product_id, size, color, 0 FROM orders WHERE id = ?1 AND cancel_kind = 'out_of_stock'
+         ON CONFLICT (product_id, size, color) DO UPDATE SET quantity = 0`,
       )
       .bind(orderId),
   ]);
   return r.meta.changes === 1;
 }
 
-/** Stock rows of a product: size -> quantity ('' for products without sizes). */
+/** Stock rows of a product: "size|color" -> quantity. */
 export async function productStock(db: D1Database, productId: number) {
-  const { results } = await db.prepare("SELECT size, quantity FROM product_stock WHERE product_id = ?").bind(productId).all<{ size: string; quantity: number }>();
-  return Object.fromEntries(results.map((r) => [r.size, r.quantity])) as Record<string, number>;
+  const { results } = await db.prepare("SELECT size, color, quantity FROM product_stock WHERE product_id = ?").bind(productId).all<{ size: string; color: string; quantity: number }>();
+  return Object.fromEntries(results.map((r) => [variantKey(r.size, r.color), r.quantity])) as Record<string, number>;
 }
 
-/** Units free to sell right now per size (stock minus live holds); null when stock isn't tracked. */
-export async function availableBySize(db: D1Database, product: { id: number; track_stock: number }, sizes: string[]) {
+/** Units free to sell right now per variant ("size|color"); null when stock isn't tracked. */
+export async function availableByVariant(db: D1Database, product: { id: number; track_stock: number; size_guide: string; colors: string }) {
   if (!product.track_stock) return null;
-  const list = sizes.length ? sizes : [""];
-  const rows = await db.batch(list.map((size) => db.prepare(`SELECT ${AVAILABLE("?1", "?2", "?3")} AS n`).bind(product.id, size, now())));
-  return Object.fromEntries(list.map((size, i) => [size, Math.max(0, (rows[i].results[0] as { n: number }).n)])) as Record<string, number>;
+  const list = variants(product);
+  const rows = await db.batch(list.map((v) => db.prepare(`SELECT ${AVAILABLE("?1", "?2", "?3", "?4")} AS n`).bind(product.id, v.size, v.color, now())));
+  return Object.fromEntries(list.map((v, i) => [v.key, Math.max(0, (rows[i].results[0] as { n: number }).n)])) as Record<string, number>;
 }
 
-/** Add `delta` units (can be negative; never below 0) to one size of a product. */
-export async function adjustStock(db: D1Database, productId: number, size: string, delta: number) {
+/** Add `delta` units (can be negative; never below 0) to one variant of a product. */
+export async function adjustStock(db: D1Database, productId: number, size: string, color: string, delta: number) {
   await db
     .prepare(
-      `INSERT INTO product_stock (product_id, size, quantity) VALUES (?1, ?2, MAX(?3, 0))
-       ON CONFLICT (product_id, size) DO UPDATE SET quantity = MAX(quantity + ?3, 0)`,
+      `INSERT INTO product_stock (product_id, size, color, quantity) VALUES (?1, ?2, ?3, MAX(?4, 0))
+       ON CONFLICT (product_id, size, color) DO UPDATE SET quantity = MAX(quantity + ?4, 0)`,
     )
-    .bind(productId, size, delta)
+    .bind(productId, size, color, delta)
     .run();
 }
 

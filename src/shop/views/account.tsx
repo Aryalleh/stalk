@@ -3,6 +3,8 @@ import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { Avatar, Errors, Layout, Thumb, TitleBar } from "./layout";
+import { variantLabel } from "../variants";
+import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
 /** Centered dark card for the account flows (login, setup). */
 function AuthShell(props: { title: string; icon: string; subtitle: string; children?: unknown }) {
@@ -22,12 +24,86 @@ function AuthShell(props: { title: string; icon: string; subtitle: string; child
   );
 }
 
+/** First name, last name and Jalali birth date (and optionally the username) — form values by field name. */
+export function ProfileFields(props: { values: Record<string, string>; username?: boolean; origin?: string }) {
+  const v = props.values;
+  const thisYear = currentJalaliYear();
+  const years = Array.from({ length: 96 }, (_, i) => thisYear - 5 - i);
+  const fa = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
+  return (
+    <>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label>نام</label>
+          <input name="first_name" value={v.first_name ?? ""} required maxlength={40} autocomplete="given-name" />
+        </div>
+        <div>
+          <label>نام خانوادگی</label>
+          <input name="last_name" value={v.last_name ?? ""} required maxlength={40} autocomplete="family-name" />
+        </div>
+      </div>
+      <label>تاریخ تولد</label>
+      <div class="grid grid-cols-3 gap-2">
+        <select name="birth_day" required aria-label="روز تولد">
+          <option value="">روز</option>
+          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option value={String(d)} selected={v.birth_day === String(d)}>{fa(d)}</option>)}
+        </select>
+        <select name="birth_month" required aria-label="ماه تولد">
+          <option value="">ماه</option>
+          {JALALI_MONTHS.map((m, i) => <option value={String(i + 1)} selected={v.birth_month === String(i + 1)}>{m}</option>)}
+        </select>
+        <select name="birth_year" required aria-label="سال تولد">
+          <option value="">سال</option>
+          {years.map((y) => <option value={String(y)} selected={v.birth_year === String(y)}>{fa(y)}</option>)}
+        </select>
+      </div>
+      {props.username && (
+        <>
+          <label>نام کاربری (آدرس پروفایل عمومی شما)</label>
+          <div class="flex items-center gap-2 ltr">
+            <span class="text-xs muted whitespace-nowrap">{(props.origin ?? "").replace(/^https?:\/\//, "")}/u/</span>
+            <input name="username" value={v.username ?? ""} required maxlength={30} class="ltr" pattern="[a-z0-9][a-z0-9_.\-]{2,29}" autocapitalize="none" />
+          </div>
+          <p class="small muted" style="margin:4px 0 0">حروف انگلیسی کوچک، عدد، نقطه، - و _ (۳ تا ۳۰ حرف).</p>
+        </>
+      )}
+    </>
+  );
+}
+
+/** Form values of a user's profile fields. */
+export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_date" | "username">): Record<string, string> {
+  const [y, m, d] = (u.birth_date || "").split("-");
+  return {
+    first_name: u.first_name,
+    last_name: u.last_name,
+    birth_year: y ?? "",
+    birth_month: m ? String(Number(m)) : "",
+    birth_day: d ? String(Number(d)) : "",
+    username: u.username ?? "",
+  };
+}
+
+/** Accounts made before names / birth date / username were required finish their profile here. */
+export function CompleteProfilePage(props: { user: User; next: string; values: Record<string, string>; origin: string; error?: string }) {
+  return (
+    <AuthShell title="تکمیل پروفایل" icon="fa-user-pen" subtitle="برای ادامه، نام، نام خانوادگی و تاریخ تولدتان را وارد کنید و نام کاربری پروفایل عمومی‌تان را انتخاب کنید.">
+      <Errors errors={[props.error]} />
+      <form method="post" action="/me/complete" class="space-y-2">
+        <input type="hidden" name="next" value={props.next} />
+        <ProfileFields values={props.values} username origin={props.origin} />
+        <button class="w-full py-4 mt-4 rounded-2xl text-base font-bold shadow-lg shadow-pink/20">ذخیره و ادامه</button>
+      </form>
+    </AuthShell>
+  );
+}
+
 export function CodeLoginPage(props: {
   next: string;
   step: "phone" | "code" | "unavailable";
   phone?: string;
   isNew?: boolean;
-  name?: string;
+  values?: Record<string, string>;
   error?: string;
   setupOpen?: boolean;
 }) {
@@ -60,10 +136,10 @@ export function CodeLoginPage(props: {
           </p>
           <input name="code" class="ltr text-center text-2xl tracking-[0.6em] font-bold" inputmode="numeric" autocomplete="one-time-code" maxlength={6} placeholder="------" required autofocus />
           {props.isNew && (
-            <>
-              <label>نام و نام خانوادگی (حساب جدید)</label>
-              <input name="name" value={props.name ?? ""} required maxlength={80} />
-            </>
+            <div>
+              <p class="text-xs text-muted text-center">حساب جدید — مشخصات خود را وارد کنید:</p>
+              <ProfileFields values={props.values ?? {}} />
+            </div>
           )}
           <button class={big}>{props.isNew ? "ساخت حساب و ورود" : "ورود"}</button>
         </form>
@@ -224,6 +300,7 @@ export function ProfilePage(props: {
         <section class="flex gap-4 mb-10 overflow-x-auto no-scrollbar">
           {action("/me/wishlists/new", "fa-plus", "لیست جدید", true)}
           {props.shareUrl ? action("#", "fa-share-nodes", "اشتراک‌گذاری", false, { "data-share": props.shareUrl }) : null}
+          {u.username && action(`/u/${u.username}`, "fa-id-card", "پروفایل عمومی")}
           {action("/me/wishlists", "fa-list", "لیست‌ها")}
           {action("/me/orders", "fa-bag-shopping", "خریدهای من")}
           {action("/me/settings", "fa-robot", "اتصال ربات")}
@@ -291,8 +368,20 @@ export function ProfilePage(props: {
   );
 }
 
-export function ProfileSettingsPage(props: { user: User; bots: { kind: string; connected: boolean; link: string }[]; error?: string; saved?: boolean }) {
+export function ProfileSettingsPage(props: {
+  user: User;
+  bots: { kind: string; connected: boolean; link: string }[];
+  origin: string;
+  values?: Record<string, string>;
+  error?: string;
+  saved?: boolean;
+}) {
   const u = props.user;
+  const check = (name: string, on: number, label: string) => (
+    <label class="row" style="color:var(--fg);margin-top:8px">
+      <input type="checkbox" name={name} value="1" checked={!!on} /> {label}
+    </label>
+  );
   return (
     <Layout title="تنظیمات حساب" user={u} nav="profile">
       <h1>تنظیمات حساب</h1>
@@ -309,10 +398,18 @@ export function ProfileSettingsPage(props: { user: User; bots: { kind: string; c
             )}
           </div>
         </div>
-        <label>نام و نام خانوادگی</label>
-        <input name="name" value={u.name} required maxlength={80} />
+        <ProfileFields values={props.values ?? profileValues(u)} username origin={props.origin} />
         <label>شماره موبایل (ورود با کد بله)</label>
         <input value={u.phone} class="ltr" disabled />
+        <h2 style="margin-top:20px">پروفایل عمومی</h2>
+        {u.username && (
+          <p class="small" style="margin-top:0">
+            آدرس: <a href={`/u/${u.username}`} class="dt">{`${props.origin.replace(/^https?:\/\//, "")}/u/${u.username}`}</a> — همه لیست‌های آرزوی باز شما اینجا دیده می‌شوند.
+          </p>
+        )}
+        {check("show_received", u.show_received, "کادوهایی که گرفته‌ام در پروفایلم نمایش داده شود")}
+        {check("show_givers", u.show_givers, "نام کادودهنده‌ها زیر کادو نمایش داده شود (فقط کسانی که خودشان اجازه داده‌اند)")}
+        {check("show_birthday", u.show_birthday, "روز و ماه تولدم نمایش داده شود (سال هرگز نمایش داده نمی‌شود)")}
         <p><button>ذخیره</button></p>
       </form>
       <div class="card" id="bot">
@@ -439,7 +536,7 @@ export function WishlistFormPage(props: {
               <div class="body">
                 <a href={`/p/${it.product_id}`}><b>{it.title}</b></a> <span class="muted small">· {it.shop_name}</span>
                 <div class="price">{toman(it.price)}</div>
-                <div class="small muted">{it.bought} از {it.quantity} خریده شده{it.size && ` · سایز: ${it.size}`}{it.note && ` · یادداشت: ${it.note}`}</div>
+                <div class="small muted">{it.bought} از {it.quantity} خریده شده{variantLabel(it.size, it.color) && ` · ${variantLabel(it.size, it.color)}`}{it.note && ` · یادداشت: ${it.note}`}</div>
               </div>
               {it.bought === 0 && it.reserved === 0 ? (
                 <form method="post" action={`/me/items/${it.id}/delete`}>
@@ -528,16 +625,16 @@ export function ChangeRequestPage(props: { user: User; order: Order & { image_ke
           </div>
           <div class="min-w-0">
             <h1 class="text-sm font-bold text-fg">{o.product_title}</h1>
-            <p class="text-[11px] text-muted">فروشگاه {o.shop_name}{o.size && <> · سایز سفارش: <b class="text-fg">{o.size}</b></>}</p>
+            <p class="text-[11px] text-muted">فروشگاه {o.shop_name}{variantLabel(o.size, o.color) && <> · سفارش: <b class="text-fg">{variantLabel(o.size, o.color)}</b></>}</p>
           </div>
         </section>
         {pending ? (
           <>
             <section class="p-5 bg-pink/5 border border-pink/20 rounded-2xl space-y-2">
               <p class="text-sm text-fg leading-7">
-                کالایی که خواسته بودید {o.size ? `در سایز ${o.size} ` : ""}تمام شده. فروشگاه پیشنهاد می‌دهد:
+                کالایی که خواسته بودید{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""} تمام شده. فروشگاه پیشنهاد می‌دهد:
               </p>
-              {o.change_size && <p class="text-lg font-bold text-pink">سایز {o.change_size}</p>}
+              {variantLabel(o.change_size, o.change_color) && <p class="text-lg font-bold text-pink">{variantLabel(o.change_size, o.change_color)}</p>}
               {o.change_message && <p class="text-sm text-fg leading-7 whitespace-pre-wrap">{o.change_message}</p>}
             </section>
             <form method="post" class="space-y-4">
@@ -557,7 +654,7 @@ export function ChangeRequestPage(props: { user: User; order: Order & { image_ke
         ) : (
           <div class="p-5 bg-card rounded-2xl text-sm leading-7">
             {o.change_status === "accepted" ? (
-              <>✅ پیشنهاد را پذیرفتید{o.change_size ? ` (سایز ${o.change_size})` : ""}؛ فروشگاه کادو را با همین مشخصات می‌فرستد.</>
+              <>✅ پیشنهاد را پذیرفتید{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""}؛ فروشگاه کادو را با همین مشخصات می‌فرستد.</>
             ) : (
               <>سفارش لغو شد و این آرزو دوباره در لیست شما فعال است.</>
             )}

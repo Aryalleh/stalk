@@ -2,6 +2,7 @@
 import { sendPhotoToChats, sendToChats, type Chats } from "../bale/botapi";
 import type { Settings } from "../settings";
 import { adjustStock, cancelOutOfStock, confirmPayment, rejectPayment, toman, type Order } from "./db";
+import { variantLabel } from "./variants";
 import { receiptButtons, receiptCaption, shipMessage } from "./notify";
 
 export interface Deps {
@@ -82,25 +83,29 @@ export async function cancelForStock(d: Deps, orderId: number, shopId: number, r
   return true;
 }
 
-/** The shop proposes another size and/or color instead; the recipient answers at /me/changes/<id>. */
-export async function requestChange(d: Deps, orderId: number, shopId: number, message: string, size: string) {
+/**
+ * The shop proposes another size and/or color instead (size/color "" = keep the ordered one); the
+ * recipient answers at /me/changes/<id>.
+ */
+export async function requestChange(d: Deps, orderId: number, shopId: number, message: string, size: string, color: string) {
   const r = await d.db
     .prepare(
-      `UPDATE orders SET change_status = 'pending', change_message = ?3, change_size = ?4, change_reply = ''
+      `UPDATE orders SET change_status = 'pending', change_message = ?3, change_size = ?4, change_color = ?5, change_reply = ''
        WHERE id = ?1 AND shop_id = ?2 AND status IN ('awaiting', 'paid') AND change_status <> 'pending'`,
     )
-    .bind(orderId, shopId, message, size)
+    .bind(orderId, shopId, message, size, color)
     .run();
   if (r.meta.changes !== 1) return false;
   const o = (await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>())!;
   // Proposing a change means the ordered size/color ran out: mark it sold out if stock is tracked.
-  await d.db.prepare("UPDATE product_stock SET quantity = 0 WHERE product_id = ? AND size = ?").bind(o.product_id, o.size).run();
+  await d.db.prepare("UPDATE product_stock SET quantity = 0 WHERE product_id = ? AND size = ? AND color = ?").bind(o.product_id, o.size, o.color).run();
   const people = await orderPeople(d.db, o);
-  const proposal = `${size ? `سایز ${size}` : ""}${size && message ? " — " : ""}${message}`;
+  const proposal = [variantLabel(size, color), message].filter(Boolean).join(" — ");
+  const ordered = variantLabel(o.size, o.color);
   await say(
     d,
     people.owner,
-    `🔁 «${o.product_title}»${o.size ? ` در سایز ${o.size}` : ""} تمام شده. فروشگاه پیشنهاد می‌دهد: ${proposal}\nقبول یا رد: ${d.siteUrl}/me/changes/${o.id}`,
+    `🔁 «${o.product_title}»${ordered ? ` (${ordered})` : ""} تمام شده. فروشگاه پیشنهاد می‌دهد: ${proposal}\nقبول یا رد: ${d.siteUrl}/me/changes/${o.id}`,
   );
   if (!people.isDirect) await say(d, people.giver, `🔁 برای سفارش «${o.product_title}» فروشگاه به گیرنده پیشنهاد تغییر داده و منتظر پاسخ اوست.\n${d.siteUrl}/order/${o.token}`);
   return true;
@@ -121,14 +126,16 @@ export async function answerChange(d: Deps, orderId: number, userId: number, acc
     return true;
   }
   const newSize = o.change_size || o.size;
+  const newColor = o.change_color || o.color;
   const r = await d.db
-    .prepare("UPDATE orders SET change_status = 'accepted', change_reply = ?2, size = ?3 WHERE id = ?1 AND change_status = 'pending'")
-    .bind(o.id, reply, newSize)
+    .prepare("UPDATE orders SET change_status = 'accepted', change_reply = ?2, size = ?3, color = ?4 WHERE id = ?1 AND change_status = 'pending'")
+    .bind(o.id, reply, newSize, newColor)
     .run();
   if (r.meta.changes !== 1) return false;
   // A confirmed order already took a unit off the stock; the new size now gives one up too
   // (the old size was declared sold out when the shop made the proposal).
-  if (o.paid_at && newSize !== o.size) await adjustStock(d.db, o.product_id, newSize, -1);
-  await say(d, shop, `✅ گیرنده پیشنهاد سفارش #${o.id} را پذیرفت${newSize ? ` (سایز ${newSize})` : ""}${reply ? `: ${reply}` : ""}.\n${d.siteUrl}/panel/orders/${o.id}`);
+  if (o.paid_at && (newSize !== o.size || newColor !== o.color)) await adjustStock(d.db, o.product_id, newSize, newColor, -1);
+  const chosen = variantLabel(newSize, newColor);
+  await say(d, shop, `✅ گیرنده پیشنهاد سفارش #${o.id} را پذیرفت${chosen ? ` (${chosen})` : ""}${reply ? `: ${reply}` : ""}.\n${d.siteUrl}/panel/orders/${o.id}`);
   return true;
 }

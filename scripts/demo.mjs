@@ -22,10 +22,10 @@ const CARD = "6037997599999993"; // passes the card check; demo only
 // ---------- the data ----------
 
 const users = [
-  { id: 9001, phone: "09000009001", name: "فاطمه احمدی" },
-  { id: 9002, phone: "09000009002", name: "رضا گلی" },
-  { id: 9003, phone: "09000009003", name: "مهسا نوری" },
-  { id: 9004, phone: "09000009004", name: "سارا محمدی", avatar: ["#ff8fb4", "#7c3aed", "👩🏻"] },
+  { id: 9001, phone: "09000009001", first: "فاطمه", last: "احمدی", username: "demo-fatemeh", birth: "1365-02-14" },
+  { id: 9002, phone: "09000009002", first: "رضا", last: "گلی", username: "demo-reza", birth: "1362-09-03" },
+  { id: 9003, phone: "09000009003", first: "مهسا", last: "نوری", username: "demo-mahsa", birth: "1370-11-21" },
+  { id: 9004, phone: "09000009004", first: "سارا", last: "محمدی", username: "demo-sara", birth: "1376-03-25", avatar: ["#ff8fb4", "#7c3aed", "👩🏻"] },
 ];
 
 const shops = [
@@ -54,7 +54,7 @@ const tshirtGuide = JSON.stringify({
   rows: [["S", "96", "68"], ["M", "102", "71"], ["L", "108", "74"], ["XL", "114", "77"]],
 });
 
-// [shop, title, category, price, emoji, colors, height, description, features, packages?, sizeGuide?]
+// [shop, title, category, price, emoji, gradient, height, description, features, packages?, sizeGuide?, colors?]
 const products = [
   [9001, "ساعت مچی رزگلد الیت", "اکسسوری", 3450000, "⌚", ["#f6d365", "#fda085"], 900, "ساعت مچی زنانه با بند استیل رزگلد و صفحه صدفی؛ مقاوم در برابر آب.", ["بند استیل ضدحساسیت", "ضد آب تا ۳ اتمسفر", "جعبه چوبی کادویی"], [["جعبه کادو با روبان", 0], ["جعبه لوکس مخمل", 150000]]],
   [9001, "گردنبند نقره ماه و ستاره", "اکسسوری", 1280000, "🌙", ["#a18cd1", "#fbc2eb"], 700, "گردنبند نقره ۹۲۵ با آویز ماه و ستاره، زنجیر ۴۵ سانتی.", ["نقره ۹۲۵ عیار", "قابل حک نام", "ضمانت رنگ"], [["کیسه مخمل", 0], ["جعبه چرمی", 90000]]],
@@ -64,8 +64,8 @@ const products = [
   [9001, "پک مراقبت پوست ارگانیک", "تولد", 890000, "🧴", ["#d4fc79", "#96e6a1"], 600, "پک سه‌تایی سرم، کرم و ماسک با ترکیبات گیاهی.", ["بدون پارابن", "مناسب انواع پوست", "تاریخ تولید جدید"], [["جعبه کادو", 0]]],
   [9002, "دسته‌گل رز قرمز", "گل و گیاه", 850000, "🌹", ["#ff5858", "#f857a6"], 950, "۲۱ شاخه رز قرمز تازه با کاغذ کرافت و روبان؛ ارسال همان روز در شیراز.", ["گل تازه روز", "ماندگاری ۷ روز", "کارت پیام رایگان"], [["کاغذ کرافت", 0], ["باکس لوکس", 200000]]],
   [9002, "گیاه آپارتمانی زاموفیلیا", "گل و گیاه", 540000, "🪴", ["#56ab2f", "#a8e063"], 800, "زاموفیلیا با گلدان سفید؛ کم‌توقع و مقاوم، مناسب هدیه به خانه نو.", ["نیاز کم به آب", "گلدان سرامیکی", "راهنمای نگهداری"]],
-  [9002, "تی‌شرت نخی اورسایز", "پوشاک", 450000, "👕", ["#89f7fe", "#66a6ff"], 750, "تی‌شرت نخ پنبه ۱۰۰٪ با یقه گرد؛ در چهار رنگ.", ["نخ پنبه ۱۰۰٪", "قابل شستشو در ماشین", "دوخت ایرانی"], null, tshirtGuide],
-  [9002, "هودی گرم زمستانه", "پوشاک", 980000, "🧥", ["#fbc2eb", "#a6c1ee"], 900, "هودی دورس داخل کرکی با کلاه و جیب کانگورویی.", ["داخل کرکی", "کلاه دوجداره", "رنگ ثابت"], [["کیسه پارچه‌ای", 0]], tshirtGuide],
+  [9002, "تی‌شرت نخی اورسایز", "پوشاک", 450000, "👕", ["#89f7fe", "#66a6ff"], 750, "تی‌شرت نخ پنبه ۱۰۰٪ با یقه گرد؛ در چهار رنگ.", ["نخ پنبه ۱۰۰٪", "قابل شستشو در ماشین", "دوخت ایرانی"], null, tshirtGuide, ["مشکی", "سفید", "سرمه‌ای", "طوسی"]],
+  [9002, "هودی گرم زمستانه", "پوشاک", 980000, "🧥", ["#fbc2eb", "#a6c1ee"], 900, "هودی دورس داخل کرکی با کلاه و جیب کانگورویی.", ["داخل کرکی", "کلاه دوجداره", "رنگ ثابت"], [["کیسه پارچه‌ای", 0]], tshirtGuide, ["کرم", "سبز زیتونی", "مشکی"]],
   [9002, "باکس گل و شکلات تولد", "تولد", 1350000, "🎂", ["#f6d365", "#ff5c93"], 700, "باکس گل رز صورتی با شکلات دست‌ساز و بادکنک «تولدت مبارک».", ["گل تازه", "شکلات دست‌ساز", "بادکنک فویلی"], [["باکس استاندارد", 0], ["باکس بزرگ با کیک", 450000]]],
   [9003, "اسپیکر بلوتوثی پرتابل", "تکنولوژی", 1450000, "🔊", ["#434343", "#000000"], 650, "اسپیکر ضدآب با ۱۲ ساعت شارژدهی و صدای استریو.", ["ضد آب IPX6", "۱۲ ساعت پخش", "بلوتوث ۵٫۳"]],
   [9003, "هدفون نویز کنسلینگ", "تکنولوژی", 9800000, "🎧", ["#30cfd0", "#330867"], 1000, "هدفون بی‌سیم با حذف نویز فعال و ۳۰ ساعت شارژدهی.", ["حذف نویز فعال", "۳۰ ساعت باتری", "شارژ سریع"]],
@@ -78,8 +78,8 @@ const products = [
 const wishlist = {
   id: 9001, user: 9004, slug: "demo-sara", title: "تولد سارا 🎂", occasion: "۲۵ خرداد", city: "تهران",
   description: "این‌ها چیزهایی هستند که برای تولدم خیلی خوشحالم می‌کنند! ✨",
-  // [product index, quantity, size, bought]
-  items: [[0, 1, "", 1], [12, 1, "", 0], [8, 2, "M", 1], [3, 2, "", 0], [6, 1, "", 0], [14, 1, "", 1]],
+  // [product index, quantity, size, bought, color]
+  items: [[0, 1, "", 1], [12, 1, "", 0], [8, 2, "M", 1, "سرمه‌ای"], [3, 2, "", 0], [6, 1, "", 0], [14, 1, "", 1]],
 };
 
 // ---------- pictures ----------
@@ -126,23 +126,26 @@ const clearSql = [
 function seedSql() {
   const out = [...clearSql];
   for (const u of users) {
-    out.push(`INSERT INTO users (id, phone, name, password_hash, created_at, avatar_key) VALUES (${u.id}, ${q(u.phone)}, ${q(u.name)}, '!', ${q(ago(9000))}, ${q(u.avatar ? `a/demo/${u.id}.svg` : "")});`);
+    out.push(
+      `INSERT INTO users (id, phone, name, first_name, last_name, birth_date, username, password_hash, created_at, avatar_key) VALUES (` +
+        [u.id, u.phone, `${u.first} ${u.last}`, u.first, u.last, u.birth, u.username, "!", ago(9000), u.avatar ? `a/demo/${u.id}.svg` : ""].map(q).join(", ") + ");",
+    );
   }
   for (const s of shops) {
     out.push(
       `INSERT INTO shops (id, owner_id, name, slug, description, phone, status, card_number, card_holder, city, courier_enabled, courier_fee, post_enabled, post_fee, instagram, telegram, bale, website, logo_key, cover_key, created_at) VALUES (` +
-        [s.id, s.owner, s.name, s.slug, s.description, s.phone, "approved", CARD, users.find((u) => u.id === s.owner).name, s.city, 1, s.courier, 1, s.post,
+        [s.id, s.owner, s.name, s.slug, s.description, s.phone, "approved", CARD, (({ first, last }) => `${first} ${last}`)(users.find((u) => u.id === s.owner)), s.city, 1, s.courier, 1, s.post,
           s.instagram ?? "", s.telegram ?? "", "", s.website ?? "", `s/demo/${s.slug}-logo.svg`, `s/demo/${s.slug}-cover.svg`, ago(8000)].map(q).join(", ") + ");",
     );
   }
   let imageId = 9001;
   let packageId = 9001;
-  products.forEach(([shop, title, category, price, , , , description, features, packages, guide], i) => {
+  products.forEach(([shop, title, category, price, , , , description, features, packages, guide, colors], i) => {
     const id = 9001 + i;
     const t = ago(products.length - i); // newest last in the list = first in the feed
     out.push(
-      `INSERT INTO products (id, shop_id, title, description, price, image_key, is_active, created_at, updated_at, video_url, size_guide, size_guide_image, category, features) VALUES (` +
-        [id, shop, title, description, price, productKeys[i][0], 1, t, t, "", guide ?? "", "", category, features.join("\n")].map(q).join(", ") + ");",
+      `INSERT INTO products (id, shop_id, title, description, price, image_key, is_active, created_at, updated_at, video_url, size_guide, size_guide_image, category, features, colors) VALUES (` +
+        [id, shop, title, description, price, productKeys[i][0], 1, t, t, "", guide ?? "", "", category, features.join("\n"), (colors ?? []).join("\n")].map(q).join(", ") + ");",
     );
     productKeys[i].forEach((key, n) => out.push(`INSERT INTO product_images (id, product_id, image_key, sort) VALUES (${imageId++}, ${id}, ${q(key)}, ${n});`));
     (packages ?? []).forEach(([name, p], n) => out.push(`INSERT INTO product_packages (id, product_id, name, price, sort) VALUES (${packageId++}, ${id}, ${q(name)}, ${p}, ${n});`));
@@ -153,15 +156,17 @@ function seedSql() {
       [w.id, w.user, w.slug, w.title, w.description, w.occasion, "سارا محمدی", "09000009004", "تهران، نمونه (داده دمو)", "1234567890", w.city, 1, ago(5000)].map(q).join(", ") + ");",
   );
   let orderId = 9001;
-  w.items.forEach(([pi, qty, size, bought], n) => {
+  w.items.forEach(([pi, qty, size, bought, color = ""], n) => {
     const itemId = 9001 + n;
     const [shop, title, , price] = products[pi];
-    out.push(`INSERT INTO wishlist_items (id, wishlist_id, product_id, quantity, note, size, created_at) VALUES (${itemId}, ${w.id}, ${9001 + pi}, ${qty}, '', ${q(size)}, ${q(ago(4000 - n))});`);
+    out.push(`INSERT INTO wishlist_items (id, wishlist_id, product_id, quantity, note, size, color, created_at) VALUES (${itemId}, ${w.id}, ${9001 + pi}, ${qty}, '', ${q(size)}, ${q(color)}, ${q(ago(4000 - n))});`);
     for (let k = 0; k < bought; k++) {
       const t = ago(1000 + n * 60);
       out.push(
-        `INSERT INTO orders (id, token, item_id, wishlist_id, product_id, shop_id, product_title, amount, item_price, giver_name, giver_phone, gift_message, status, expires_at, pay_card_number, size, delivery_method, delivery_fee, ship_city, reported_at, created_at, paid_at, shipped_at) VALUES (` +
-          [orderId, `demo-order-${orderId}`, itemId, w.id, 9001 + pi, shop, title, price, price, "نیکان", "09000009099", "تولدت مبارک سارا جان! 🎉", "delivered", t, CARD, size, "post", 0, w.city, t, t, t, t].map(q).join(", ") + ");",
+        `INSERT INTO orders (id, token, item_id, wishlist_id, product_id, shop_id, product_title, amount, item_price, giver_name, giver_phone, gift_message, is_anonymous, show_on_profile, status, expires_at, pay_card_number, size, color, delivery_method, delivery_fee, ship_city, reported_at, created_at, paid_at, shipped_at) VALUES (` +
+          // The first giver is named on Sara's profile; the second chose to stay anonymous.
+          [orderId, `demo-order-${orderId}`, itemId, w.id, 9001 + pi, shop, title, price, price, n === 0 ? "نیکان" : n === 2 ? "مریم" : "آرش", "09000009099", "تولدت مبارک سارا جان! 🎉",
+            n === 2 ? 1 : 0, n === 2 ? 0 : 1, "delivered", t, CARD, size, color, "post", 0, w.city, t, t, t, t].map(q).join(", ") + ");",
       );
       orderId++;
     }
@@ -200,4 +205,4 @@ if (mode === "clear") {
   }
   console.log();
 }
-console.log(mode === "seed" ? "Demo ready: open the site; sample wishlist at /w/demo-sara" : "Demo data removed.");
+console.log(mode === "seed" ? "Demo ready: open the site; sample profile at /u/demo-sara, wishlist at /w/demo-sara" : "Demo data removed.");

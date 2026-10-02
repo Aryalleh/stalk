@@ -6,7 +6,7 @@ import { safirReady } from "../settings";
 import { sendBotMessage } from "../bale/botapi";
 import { normalizePhone } from "../../lib/normalize";
 import type { C as Ctx, Env } from "../env";
-import { canUseCrm, type User } from "../session";
+import { assignUsername, canUseCrm, type User } from "../session";
 import {
   DuplicateNationalCode,
   PAGE_SIZE,
@@ -310,9 +310,11 @@ crm.post("/users", requireAdmin, async (c) => {
   }
   if (!name) return staffPage(c, { error: "این شماره هنوز در سایت حساب ندارد؛ برای ساختن حساب، نام را هم وارد کنید." }, 400);
   // No password: the person signs in with a Bale one-time code on their own phone.
-  await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, is_staff, created_at) VALUES (?, ?, '!', 1, ?)")
-    .bind(phone, name, new Date().toISOString())
-    .run();
+  // Names and birth date are completed by the person at first sign-in.
+  const row = await c.env.DB.prepare("INSERT INTO users (phone, name, first_name, password_hash, is_staff, created_at) VALUES (?, ?, ?, '!', 1, ?) RETURNING id")
+    .bind(phone, name, name.slice(0, 40), new Date().toISOString())
+    .first<{ id: number }>();
+  if (row) await assignUsername(c.env.DB, row.id);
   return staffPage(c, { ok: `حساب ${name} با دسترسی CRM ساخته شد.` });
 });
 

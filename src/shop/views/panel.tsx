@@ -4,7 +4,8 @@ import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
 import { DELIVERY_LABEL } from "../notify";
-import { CLOTHING_TEMPLATE, sizeNames } from "../sizes";
+import { CLOTHING_TEMPLATE } from "../sizes";
+import { variantKey, variantLabel, variants, type Variant } from "../variants";
 import type { User } from "../../session";
 import type { Child } from "hono/jsx";
 import { Errors, Layout, Thumb } from "./layout";
@@ -134,7 +135,7 @@ function OrderCard(props: { o: PanelOrder }) {
             {o.image_key ? <img class="w-full h-full object-cover" src={`/img/${o.image_key}`} alt="" loading="lazy" /> : "🎁"}
           </div>
           <div class="min-w-0">
-            <h3 class="text-xs font-bold text-slate-900 truncate">{o.product_title}{o.size && <span class="text-slate-500"> · سایز {o.size}</span>}</h3>
+            <h3 class="text-xs font-bold text-slate-900 truncate">{o.product_title}{variantLabel(o.size, o.color) && <span class="text-slate-500"> · {variantLabel(o.size, o.color)}</span>}</h3>
             <p class="text-[10px] text-slate-500">سفارش #{o.id} · <span class="dt">{formatJalali(o.reported_at ?? o.created_at, false)}</span></p>
             <p class="text-[11px] font-bold text-slate-900 mt-0.5">{toman(o.amount)}</p>
           </div>
@@ -228,7 +229,7 @@ export function OrdersPage(props: { user: User; shop: Shop; orders: PanelOrder[]
 }
 
 /** Out-of-stock tools on an order that isn't shipped yet: cancel (refund) or propose another size/color. */
-function StockActions(props: { o: Order; sizes: string[]; available: Record<string, number> | null }) {
+function StockActions(props: { o: Order; variants: Variant[]; available: Record<string, number> | null }) {
   const o = props.o;
   if (o.status === "rejected" && o.cancel_kind === "out_of_stock") {
     return (
@@ -248,29 +249,29 @@ function StockActions(props: { o: Order; sizes: string[]; available: Record<stri
     );
   }
   if (o.status !== "awaiting" && o.status !== "paid") return null;
-  const others = props.sizes.filter((z) => z !== o.size);
+  const others = props.variants.filter((v) => v.key !== variantKey(o.size, o.color));
   return (
     <div class="card">
       <h2>🚫 کالا تمام شده؟</h2>
       {o.change_status === "pending" ? (
         <div class="warnbox">
-          پیشنهاد شما برای گیرنده فرستاده شده و منتظر پاسخ است: {o.change_size && <b>سایز {o.change_size} </b>}{o.change_message}
+          پیشنهاد شما برای گیرنده فرستاده شده و منتظر پاسخ است: <b>{variantLabel(o.change_size, o.change_color)}</b> {o.change_message}
         </div>
       ) : (
         <>
           {o.change_status === "accepted" && (
-            <div class="okbox">گیرنده تغییر را پذیرفت{o.change_reply ? `: ${o.change_reply}` : ""}. سفارش را با سایز {o.size || "—"} ارسال کنید.</div>
+            <div class="okbox">گیرنده تغییر را پذیرفت{o.change_reply ? `: ${o.change_reply}` : ""}. سفارش را با {variantLabel(o.size, o.color) || "همین مشخصات"} ارسال کنید.</div>
           )}
           <form method="post" action={`/panel/orders/${o.id}/change`}>
             <p class="small muted" style="margin-top:0">پیشنهاد سایز یا رنگ دیگر به گیرنده (در بات برایش می‌رود و قبول یا رد می‌کند):</p>
             {others.length > 0 && (
               <>
-                <label>سایز جایگزین</label>
-                <select name="size">
-                  <option value="">همان سایز</option>
-                  {others.map((z) => (
-                    <option value={z} disabled={props.available !== null && !props.available[z]}>
-                      {z}{props.available !== null ? (props.available[z] ? ` (${props.available[z].toLocaleString("fa-IR")} موجود)` : " (ناموجود)") : ""}
+                <label>سایز / رنگ جایگزین</label>
+                <select name="variant">
+                  <option value="">بدون تغییر (فقط پیام)</option>
+                  {others.map((v) => (
+                    <option value={v.key} disabled={props.available !== null && !props.available[v.key]}>
+                      {v.label}{props.available !== null ? (props.available[v.key] ? ` (${props.available[v.key].toLocaleString("fa-IR")} موجود)` : " (ناموجود)") : ""}
                     </option>
                   ))}
                 </select>
@@ -297,7 +298,7 @@ function StockActions(props: { o: Order; sizes: string[]; available: Record<stri
   );
 }
 
-export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; sizes: string[]; available: Record<string, number> | null; saved?: string }) {
+export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; variants: Variant[]; available: Record<string, number> | null; saved?: string }) {
   const o = props.order;
   const confirmed = o.status === "paid" || o.status === "shipped" || o.status === "delivered";
   return (
@@ -308,7 +309,7 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
         <div class="card">
           <h2>سفارش #{o.id} <span class="tag">{STATUS_LABEL[o.status]}</span></h2>
           <p>
-            محصول: <b>{o.product_title}</b>{o.size && <> — سایز <b>{o.size}</b></>} — {toman(o.item_price)}
+            محصول: <b>{o.product_title}</b>{variantLabel(o.size, o.color) && <> — <b>{variantLabel(o.size, o.color)}</b></>} — {toman(o.item_price)}
             {o.package_name && <><br />بسته‌بندی: <b>{o.package_name}</b> — {toman(o.package_price)}</>}
             {o.delivery_method && <><br />ارسال با <b>{DELIVERY_LABEL[o.delivery_method]}</b> — {toman(o.delivery_fee)}</>}
             <br />جمع کل: <span class="price">{toman(o.amount)}</span>
@@ -322,7 +323,7 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
               <img src={`/panel/orders/${o.id}/receipt`} alt="فیش واریز" style="max-width:100%;max-height:420px;border-radius:10px;border:1px solid var(--line)" />
             </a>
           )}
-          <p>خریدار: {o.giver_name} — <span class="dt">{o.giver_phone}</span>{o.is_anonymous ? " (نامش روی کارت هدیه نیاید)" : ""}</p>
+          <p>خریدار: {o.giver_name} — <span class="dt">{o.giver_phone}</span>{o.is_anonymous ? " (ناشناس: نامش روی کارت هدیه نیاید)" : ""}</p>
           {o.gift_message && <p>پیام کارت هدیه:<br /><span style="white-space:pre-wrap">{o.gift_message}</span></p>}
           {o.status === "awaiting" && (
             <div class="card" style="background:var(--bg)">
@@ -367,7 +368,7 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
           )}
         </div>
       </div>
-      <StockActions o={o} sizes={props.sizes} available={props.available} />
+      <StockActions o={o} variants={props.variants} available={props.available} />
     </PanelShell>
   );
 }
@@ -423,8 +424,9 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
   );
 }
 
-/** Stock per size (or one number). New sizes added to the size table get their stock after saving. */
-function StockEditor(props: { sizes: string[]; stock: Record<string, number>; track: boolean }) {
+/** Stock per variant (size × color), or one number. New sizes/colors get their stock after saving. */
+function StockEditor(props: { variants: Variant[]; stock: Record<string, number>; track: boolean }) {
+  const single = props.variants.length === 1 && !props.variants[0].label;
   return (
     <div class="card" id="stock">
       <h2>📦 موجودی انبار</h2>
@@ -432,26 +434,19 @@ function StockEditor(props: { sizes: string[]; stock: Record<string, number>; tr
         <input type="checkbox" name="track_stock" value="1" checked={props.track} /> مدیریت موجودی (بیشتر از موجودی فروخته نمی‌شود)
       </label>
       <p class="muted small" style="margin:4px 0 8px">
-        خاموش = نامحدود. با هر تأیید واریز یکی کم می‌شود؛ تا وقتی فیش‌ها منتظر تأیید هستند، همان تعداد رزرو می‌ماند. در صفحه سفارش هم
-        می‌توانید سفارشی را به‌علت ناموجودی لغو کنید یا سایز/رنگ دیگری پیشنهاد دهید.
+        خاموش = نامحدود. موجودی برای هر ترکیب سایز و رنگ جداست. با هر تأیید واریز یکی کم می‌شود؛ تا وقتی فیش‌ها منتظر تأیید هستند، همان
+        تعداد رزرو می‌ماند. در صفحه سفارش هم می‌توانید به‌علت ناموجودی لغو کنید یا سایز/رنگ دیگری پیشنهاد دهید.
       </p>
-      {props.sizes.length ? (
-        <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
-          {props.sizes.map((size, n) => (
-            <div>
-              <label style="margin-top:0">سایز {size}</label>
-              <input type="hidden" name={`stock_name_${n}`} value={size} />
-              <input name={`stock_${n}`} value={String(props.stock[size] ?? 0)} class="ltr" inputmode="numeric" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style="max-width:160px">
-          <label style="margin-top:0">تعداد موجود</label>
-          <input name="stock" value={String(props.stock[""] ?? 0)} class="ltr" inputmode="numeric" />
-        </div>
-      )}
-      <p class="muted small" style="margin-bottom:0">اگر سایز تازه‌ای به جدول سایز اضافه کردید، بعد از ذخیره موجودی آن را اینجا وارد کنید.</p>
+      <div class={single ? "" : "grid grid-cols-2 md:grid-cols-4 gap-2"} style={single ? "max-width:160px" : ""}>
+        {props.variants.map((v, n) => (
+          <div>
+            <label style="margin-top:0">{v.label || "تعداد موجود"}</label>
+            <input type="hidden" name={`stock_key_${n}`} value={v.key} />
+            <input name={`stock_${n}`} value={String(props.stock[v.key] ?? 0)} class="ltr" inputmode="numeric" />
+          </div>
+        ))}
+      </div>
+      <p class="muted small" style="margin-bottom:0">اگر سایز یا رنگ تازه‌ای اضافه کردید، بعد از ذخیره موجودی آن را اینجا وارد کنید.</p>
     </div>
   );
 }
@@ -489,6 +484,8 @@ export function ProductFormPage(props: {
             </select>
             <label>توضیحات</label>
             <textarea name="description" maxlength={3000} style="min-height:140px">{v.description ?? ""}</textarea>
+            <label>رنگ‌ها (هر خط یک رنگ؛ خالی = بدون انتخاب رنگ)</label>
+            <textarea name="colors" maxlength={600} placeholder={"مثلاً:\nمشکی\nسرمه‌ای\nطوسی"} style="min-height:90px">{v.colors ?? ""}</textarea>
             <label>ویژگی‌های کلیدی (هر خط یک ویژگی، تا ۸ مورد)</label>
             <textarea name="features" maxlength={800} placeholder={"مثلاً:\nجنس نخ پنبه\nقابل شستشو"}>{v.features ?? ""}</textarea>
             <label>لینک ویدیو (پست اینستاگرام، کانال تلگرام یا بله)</label>
@@ -515,7 +512,7 @@ export function ProductFormPage(props: {
             <div class="row" id="img-preview" style="margin-top:8px"></div>
           </div>
         </div>
-        <StockEditor sizes={sizeNames(v.size_guide ?? "")} stock={props.stock ?? {}} track={v.track_stock === "1"} />
+        <StockEditor variants={variants({ size_guide: v.size_guide ?? "", colors: v.colors ?? "" })} stock={props.stock ?? {}} track={v.track_stock === "1"} />
         <div class="card">
           <h2>📏 راهنمای سایز (برای لباس و هر محصول سایزدار)</h2>
           <p class="muted small" style="margin-top:0">
