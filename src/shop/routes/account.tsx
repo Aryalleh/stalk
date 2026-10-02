@@ -3,7 +3,7 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
+import { availableBySize, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import { upsertCustomer } from "../../crm/sync";
 import { sizeNames } from "../sizes";
 import type { C, Env } from "../../env";
@@ -15,8 +15,9 @@ import { activeBots, botLink } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { CodeLoginPage, MyOrdersPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, MyOrdersPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
 import { DirectBuyPage } from "../views/store";
+import { answerChange } from "../orders";
 
 const sessionUserById = (db: D1Database, id: number) =>
   db.prepare("SELECT id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key FROM users WHERE id = ?").bind(id).first<User>();
@@ -179,9 +180,13 @@ account.get("/me", async (c) => {
   ]);
   const s = c.get("settings");
   const bots = activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id) }));
+  const { results: changes } = await db
+    .prepare("SELECT o.id, o.product_title FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ? AND o.change_status = 'pending'")
+    .bind(user.id)
+    .all<{ id: number; product_title: string }>();
   return render(
     c,
-    <ProfilePage user={user} stats={stats ?? { wishes: 0, gifts: 0 }} items={items.results} shareUrl={latest ? `${siteUrl(c)}/w/${latest.slug}` : ""} bots={bots} />,
+    <ProfilePage changes={changes} user={user} stats={stats ?? { wishes: 0, gifts: 0 }} items={items.results} shareUrl={latest ? `${siteUrl(c)}/w/${latest.slug}` : ""} bots={bots} />,
   );
 });
 
@@ -364,7 +369,8 @@ async function directBuyPage(c: C, values: Record<string, string>, errors?: stri
   const product = await getPublicProduct(c.env.DB, intParam(c, "id"));
   if (!product) return c.notFound();
   const image = (await productImages(c.env.DB, product.id))[0]?.image_key ?? product.image_key;
-  return render(c, <DirectBuyPage user={currentUser(c)} product={product} image={image} values={values} errors={errors} />, status);
+  const available = await availableBySize(c.env.DB, product, sizeNames(product.size_guide));
+  return render(c, <DirectBuyPage user={currentUser(c)} product={product} image={image} available={available} values={values} errors={errors} />, status);
 }
 
 account.get("/p/:id{[0-9]+}/buy", async (c) => {
@@ -387,6 +393,8 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
   const sizes = await productSizes(c.env.DB, productId);
   const size = f.size ?? "";
   if (sizes.length && !sizes.includes(size)) errors.push("سایز را انتخاب کنید.");
+  const available = await availableBySize(c.env.DB, product, sizes);
+  if (available && !errors.length && !available[sizes.length ? size : ""]) errors.push(sizes.length ? `سایز ${size} ناموجود است.` : "این محصول ناموجود است.");
   if (errors.length) return directBuyPage(c, { ...f, ...values }, errors, 400);
   const db = c.env.DB;
   const w = await db
@@ -405,7 +413,7 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
 account.get("/me/orders", async (c) => {
   const user = currentUser(c);
   const { results } = await c.env.DB.prepare(
-    `SELECT o.token, o.id, o.product_title, o.amount, o.status, o.created_at, w.is_direct, u.name AS owner_name,
+    `SELECT o.token, o.id, o.product_title, o.amount, o.status, o.cancel_kind, o.created_at, w.is_direct, u.name AS owner_name,
             COALESCE(p.image_key, '') AS image_key
      FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id LEFT JOIN products p ON p.id = o.product_id
      WHERE o.giver_phone = ? ORDER BY o.created_at DESC LIMIT 100`,
@@ -413,4 +421,28 @@ account.get("/me/orders", async (c) => {
     .bind(user.phone)
     .all<MyOrder>();
   return render(c, <MyOrdersPage user={user} orders={results} />);
+});
+
+// ---------- the recipient answers an out-of-stock change proposal ----------
+
+const changeOrder = (c: C) =>
+  c.env.DB.prepare(
+    `SELECT o.*, COALESCE(p.image_key, '') AS image_key, s.name AS shop_name
+     FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN shops s ON s.id = o.shop_id LEFT JOIN products p ON p.id = o.product_id
+     WHERE o.id = ? AND w.user_id = ? AND o.change_status <> ''`,
+  )
+    .bind(intParam(c, "id"), currentUser(c).id)
+    .first<Order & { image_key: string; shop_name: string }>();
+
+account.get("/me/changes/:id{[0-9]+}", async (c) => {
+  const order = await changeOrder(c);
+  if (!order) return c.notFound();
+  return render(c, <ChangeRequestPage user={currentUser(c)} order={order} />);
+});
+
+account.post("/me/changes/:id{[0-9]+}", async (c) => {
+  const f = await form(c);
+  const deps = { db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) };
+  await answerChange(deps, intParam(c, "id"), currentUser(c).id, f.answer === "accept", (f.reply ?? "").slice(0, 200));
+  return c.redirect(`/me/changes/${intParam(c, "id")}`);
 });

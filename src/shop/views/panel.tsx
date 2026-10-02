@@ -4,7 +4,7 @@ import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
 import { DELIVERY_LABEL } from "../notify";
-import { CLOTHING_TEMPLATE } from "../sizes";
+import { CLOTHING_TEMPLATE, sizeNames } from "../sizes";
 import type { User } from "../../session";
 import type { Child } from "hono/jsx";
 import { Errors, Layout, Thumb } from "./layout";
@@ -139,7 +139,7 @@ function OrderCard(props: { o: PanelOrder }) {
             <p class="text-[11px] font-bold text-slate-900 mt-0.5">{toman(o.amount)}</p>
           </div>
         </div>
-        <span class={`px-2 py-1 text-[10px] font-bold rounded-md whitespace-nowrap ${STATUS_STYLE[o.status] ?? ""}`}>{SHORT_STATUS[o.status]}</span>
+        <span class={`px-2 py-1 text-[10px] font-bold rounded-md whitespace-nowrap ${STATUS_STYLE[o.status] ?? ""}`}>{o.cancel_kind === "out_of_stock" ? "لغو، ناموجود" : o.change_status === "pending" ? "منتظر پاسخ تغییر" : SHORT_STATUS[o.status]}</span>
       </div>
       <div class="flex items-center justify-between pt-3 border-t border-slate-100">
         <div class="text-[11px] text-slate-500">
@@ -227,7 +227,77 @@ export function OrdersPage(props: { user: User; shop: Shop; orders: PanelOrder[]
   );
 }
 
-export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; saved?: string }) {
+/** Out-of-stock tools on an order that isn't shipped yet: cancel (refund) or propose another size/color. */
+function StockActions(props: { o: Order; sizes: string[]; available: Record<string, number> | null }) {
+  const o = props.o;
+  if (o.status === "rejected" && o.cancel_kind === "out_of_stock") {
+    return (
+      <div class="card">
+        <h2>لغو به‌علت ناموجودی</h2>
+        {o.reject_reason && <p class="small">{o.reject_reason}</p>}
+        {o.paid_at ? (
+          <form method="post" action={`/panel/orders/${o.id}/refund`}>
+            <label>بازگشت وجه به خریدار ({toman(o.amount)} به <span class="dt">{o.giver_phone}</span>) — شماره پیگیری یا توضیح</label>
+            <input name="refund_note" value={o.refund_note} maxlength={200} placeholder="مثلاً: کارت به کارت، پیگیری ۱۲۳۴۵۶" />
+            <p><button class="small">ثبت بازگشت وجه</button></p>
+          </form>
+        ) : (
+          <p class="muted small">واریزی تأیید نشده بود؛ اگر مبلغی دریافت کرده‌اید آن را به خریدار برگردانید.</p>
+        )}
+      </div>
+    );
+  }
+  if (o.status !== "awaiting" && o.status !== "paid") return null;
+  const others = props.sizes.filter((z) => z !== o.size);
+  return (
+    <div class="card">
+      <h2>🚫 کالا تمام شده؟</h2>
+      {o.change_status === "pending" ? (
+        <div class="warnbox">
+          پیشنهاد شما برای گیرنده فرستاده شده و منتظر پاسخ است: {o.change_size && <b>سایز {o.change_size} </b>}{o.change_message}
+        </div>
+      ) : (
+        <>
+          {o.change_status === "accepted" && (
+            <div class="okbox">گیرنده تغییر را پذیرفت{o.change_reply ? `: ${o.change_reply}` : ""}. سفارش را با سایز {o.size || "—"} ارسال کنید.</div>
+          )}
+          <form method="post" action={`/panel/orders/${o.id}/change`}>
+            <p class="small muted" style="margin-top:0">پیشنهاد سایز یا رنگ دیگر به گیرنده (در بات برایش می‌رود و قبول یا رد می‌کند):</p>
+            {others.length > 0 && (
+              <>
+                <label>سایز جایگزین</label>
+                <select name="size">
+                  <option value="">همان سایز</option>
+                  {others.map((z) => (
+                    <option value={z} disabled={props.available !== null && !props.available[z]}>
+                      {z}{props.available !== null ? (props.available[z] ? ` (${props.available[z].toLocaleString("fa-IR")} موجود)` : " (ناموجود)") : ""}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            <label>پیام (مثلاً رنگ‌های موجود)</label>
+            <input name="message" maxlength={300} placeholder="مثلاً: رنگ مشکی تمام شد؛ سرمه‌ای و طوسی موجود است" />
+            <p><button class="small secondary">ارسال پیشنهاد تغییر</button></p>
+          </form>
+        </>
+      )}
+      <form method="post" action={`/panel/orders/${o.id}/cancel-stock`} onsubmit="return confirm('سفارش لغو و کالا ناموجود شود؟ به خریدار و گیرنده خبر داده می‌شود.')">
+        <label>لغو سفارش به‌علت ناموجودی — توضیح برای خریدار</label>
+        <input name="reason" maxlength={200} placeholder="مثلاً: این مدل دیگر تولید نمی‌شود" />
+        {o.status === "paid" && (
+          <>
+            <label>بازگشت وجه ({toman(o.amount)} به <span class="dt">{o.giver_phone}</span>) — شماره پیگیری</label>
+            <input name="refund_note" maxlength={200} />
+          </>
+        )}
+        <p><button class="small danger">لغو به‌علت ناموجودی</button></p>
+      </form>
+    </div>
+  );
+}
+
+export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; sizes: string[]; available: Record<string, number> | null; saved?: string }) {
   const o = props.order;
   const confirmed = o.status === "paid" || o.status === "shipped" || o.status === "delivered";
   return (
@@ -266,7 +336,7 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
               </form>
             </div>
           )}
-          {o.status === "rejected" && <p class="errbox">رد شد{o.reject_reason ? `: ${o.reject_reason}` : ""}</p>}
+          {o.status === "rejected" && !o.cancel_kind && <p class="errbox">رد شد{o.reject_reason ? `: ${o.reject_reason}` : ""}</p>}
         </div>
         <div class="card">
           <h2>ارسال به 📦</h2>
@@ -297,11 +367,22 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
           )}
         </div>
       </div>
+      <StockActions o={o} sizes={props.sizes} available={props.available} />
     </PanelShell>
   );
 }
 
-export function ProductsPage(props: { user: User; shop: Shop; products: Product[] }) {
+function StockBadge(props: { p: Product & { stock_total: number } }) {
+  const p = props.p;
+  if (!p.track_stock) return <span class="text-[10px] text-slate-500">موجودی: نامحدود</span>;
+  return p.stock_total > 0 ? (
+    <span class="text-[10px] text-slate-700">موجودی: <b>{p.stock_total.toLocaleString("fa-IR")}</b></span>
+  ) : (
+    <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-bold">ناموجود</span>
+  );
+}
+
+export function ProductsPage(props: { user: User; shop: Shop; products: (Product & { stock_total: number; has_sizes: number })[] }) {
   return (
     <PanelShell title="محصولات" user={props.user} shop={props.shop} on="products">
       <div class="flex items-center justify-between mb-4">
@@ -311,22 +392,67 @@ export function ProductsPage(props: { user: User; shop: Shop; products: Product[
       {props.products.length === 0 && <div class="card text-center text-sm muted py-10">هنوز محصولی ثبت نشده.</div>}
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         {props.products.map((p) => (
-          <a href={`/panel/products/${p.id}`} class="block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden !text-slate-900">
-            <div class="aspect-square bg-slate-50 flex items-center justify-center text-4xl">
-              {p.image_key ? <img src={`/img/${p.image_key}`} alt={p.title} loading="lazy" class="w-full h-full object-cover" /> : "🎁"}
-            </div>
-            <div class="p-3">
-              <h3 class="text-xs font-bold truncate">{p.title}</h3>
-              <div class="flex items-center justify-between mt-1">
-                <span class="text-[11px] font-bold text-blue-600">{toman(p.price)}</span>
-                <span class={`text-[10px] px-1.5 py-0.5 rounded ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <a href={`/panel/products/${p.id}`} class="block !text-slate-900">
+              <div class="aspect-square bg-slate-50 flex items-center justify-center text-4xl">
+                {p.image_key ? <img src={`/img/${p.image_key}`} alt={p.title} loading="lazy" class="w-full h-full object-cover" /> : "🎁"}
               </div>
-              {p.category && <div class="text-[10px] text-slate-500 mt-1">{p.category}</div>}
+              <div class="p-3 pb-1">
+                <h3 class="text-xs font-bold truncate">{p.title}</h3>
+                <div class="flex items-center justify-between mt-1">
+                  <span class="text-[11px] font-bold text-blue-600">{toman(p.price)}</span>
+                  <span class={`text-[10px] px-1.5 py-0.5 rounded ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
+                </div>
+              </div>
+            </a>
+            <div class="px-3 pb-3 flex items-center justify-between gap-2">
+              <StockBadge p={p} />
+              {p.has_sizes ? (
+                <a href={`/panel/products/${p.id}#stock`} class="text-[10px]">موجودی سایزها</a>
+              ) : (
+                <form method="post" action={`/panel/products/${p.id}/stock`} class="flex gap-1">
+                  <button name="delta" value="-1" class="!px-2 !py-0.5 !text-xs !rounded-lg secondary" aria-label="یکی کم کن">−</button>
+                  <button name="delta" value="1" class="!px-2 !py-0.5 !text-xs !rounded-lg" aria-label="یکی اضافه کن">+</button>
+                </form>
+              )}
             </div>
-          </a>
+          </div>
         ))}
       </div>
     </PanelShell>
+  );
+}
+
+/** Stock per size (or one number). New sizes added to the size table get their stock after saving. */
+function StockEditor(props: { sizes: string[]; stock: Record<string, number>; track: boolean }) {
+  return (
+    <div class="card" id="stock">
+      <h2>📦 موجودی انبار</h2>
+      <label class="row" style="color:var(--fg);margin-top:0">
+        <input type="checkbox" name="track_stock" value="1" checked={props.track} /> مدیریت موجودی (بیشتر از موجودی فروخته نمی‌شود)
+      </label>
+      <p class="muted small" style="margin:4px 0 8px">
+        خاموش = نامحدود. با هر تأیید واریز یکی کم می‌شود؛ تا وقتی فیش‌ها منتظر تأیید هستند، همان تعداد رزرو می‌ماند. در صفحه سفارش هم
+        می‌توانید سفارشی را به‌علت ناموجودی لغو کنید یا سایز/رنگ دیگری پیشنهاد دهید.
+      </p>
+      {props.sizes.length ? (
+        <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+          {props.sizes.map((size, n) => (
+            <div>
+              <label style="margin-top:0">سایز {size}</label>
+              <input type="hidden" name={`stock_name_${n}`} value={size} />
+              <input name={`stock_${n}`} value={String(props.stock[size] ?? 0)} class="ltr" inputmode="numeric" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style="max-width:160px">
+          <label style="margin-top:0">تعداد موجود</label>
+          <input name="stock" value={String(props.stock[""] ?? 0)} class="ltr" inputmode="numeric" />
+        </div>
+      )}
+      <p class="muted small" style="margin-bottom:0">اگر سایز تازه‌ای به جدول سایز اضافه کردید، بعد از ذخیره موجودی آن را اینجا وارد کنید.</p>
+    </div>
   );
 }
 
@@ -337,6 +463,7 @@ export function ProductFormPage(props: {
   values: Record<string, string>;
   images?: ProductImage[];
   packages?: ProductPackage[];
+  stock?: Record<string, number>;
   categories: string[];
   errors?: string[];
 }) {
@@ -388,6 +515,7 @@ export function ProductFormPage(props: {
             <div class="row" id="img-preview" style="margin-top:8px"></div>
           </div>
         </div>
+        <StockEditor sizes={sizeNames(v.size_guide ?? "")} stock={props.stock ?? {}} track={v.track_stock === "1"} />
         <div class="card">
           <h2>📏 راهنمای سایز (برای لباس و هر محصول سایزدار)</h2>
           <p class="muted small" style="margin-top:0">

@@ -1,13 +1,14 @@
 import { Hono } from "hono";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { normCity, now, productImages, productPackages, randomSlug, type Order, type Product, type Shop } from "../db";
+import { adjustStock, availableBySize, normCity, now, productImages, productPackages, productStock, randomSlug, type Order, type Product, type Shop } from "../db";
+import { sizeNames } from "../sizes";
 import type { C, Env } from "../../env";
 import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
 import { sendSafirText } from "../../bale/safir";
 import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
-import { confirmOrder, rejectOrder, shopOwnerChats, type Deps } from "../orders";
+import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
 import { AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
@@ -137,12 +138,20 @@ const SAVED_MESSAGES: Record<string, string> = {
   confirmed: "واریز تأیید شد. آدرس گیرنده در همین صفحه است و پیام ارسال هم برایتان فرستاده شد.",
   rejected: "واریز رد شد و آرزو دوباره قابل خرید است.",
   saved: "ذخیره شد.",
+  canceled: "سفارش به‌علت ناموجودی لغو شد، کالا «ناموجود» شد و به خریدار و گیرنده خبر داده شد.",
+  change: "پیشنهاد تغییر برای گیرنده فرستاده شد؛ پاسخش در بات و همین صفحه می‌آید.",
 };
 
 panel.get("/panel/orders/:id{[0-9]+}", async (c) => {
   const order = await shopOrder(c);
   if (!order) return c.notFound();
-  return render(c, <OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />);
+  const product = await c.env.DB.prepare("SELECT id, track_stock, size_guide FROM products WHERE id = ?").bind(order.product_id).first<Pick<Product, "id" | "track_stock" | "size_guide">>();
+  const sizes = product ? sizeNames(product.size_guide) : [];
+  const available = product ? await availableBySize(c.env.DB, product, sizes) : null;
+  return render(
+    c,
+    <OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} sizes={sizes} available={available} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />,
+  );
 });
 
 panel.get("/panel/orders/:id{[0-9]+}/receipt", async (c) => {
@@ -172,6 +181,31 @@ panel.post("/panel/orders/:id{[0-9]+}/reject", async (c) => {
   return c.redirect(`/panel/orders/${id}?done=rejected`);
 });
 
+// Out of stock: cancel (with how the money was / will be returned), or propose another size/color.
+panel.post("/panel/orders/:id{[0-9]+}/cancel-stock", async (c) => {
+  const id = intParam(c, "id");
+  const f = await form(c);
+  await cancelForStock(deps(c), id, shopOf(c).id, (f.reason ?? "").slice(0, 200), (f.refund_note ?? "").slice(0, 200));
+  return c.redirect(`/panel/orders/${id}?done=canceled`);
+});
+
+panel.post("/panel/orders/:id{[0-9]+}/change", async (c) => {
+  const id = intParam(c, "id");
+  const f = await form(c);
+  const message = (f.message ?? "").slice(0, 300);
+  const size = (f.size ?? "").slice(0, 30);
+  if (!message && !size) return c.redirect(`/panel/orders/${id}`);
+  await requestChange(deps(c), id, shopOf(c).id, message, size);
+  return c.redirect(`/panel/orders/${id}?done=change`);
+});
+
+panel.post("/panel/orders/:id{[0-9]+}/refund", async (c) => {
+  const order = await shopOrder(c);
+  if (!order || order.status !== "rejected" || !order.paid_at) return c.notFound();
+  await c.env.DB.prepare("UPDATE orders SET refund_note = ? WHERE id = ?").bind(((await form(c)).refund_note ?? "").slice(0, 200), order.id).run();
+  return c.redirect(`/panel/orders/${order.id}?done=saved`);
+});
+
 panel.post("/panel/orders/:id{[0-9]+}/ship", async (c) => {
   const order = await shopOrder(c);
   if (!order || (order.status !== "paid" && order.status !== "shipped")) return c.notFound();
@@ -192,8 +226,26 @@ panel.post("/panel/orders/:id{[0-9]+}/delivered", async (c) => {
 // ---------- products ----------
 
 panel.get("/panel/products", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT * FROM products WHERE shop_id = ? ORDER BY created_at DESC").bind(shopOf(c).id).all<Product>();
+  const { results } = await c.env.DB.prepare(
+    `SELECT p.*, (SELECT COALESCE(SUM(quantity), 0) FROM product_stock s WHERE s.product_id = p.id) AS stock_total,
+            (p.size_guide <> '') AS has_sizes
+     FROM products p WHERE p.shop_id = ? ORDER BY p.created_at DESC`,
+  )
+    .bind(shopOf(c).id)
+    .all<Product & { stock_total: number; has_sizes: number }>();
   return render(c, <ProductsPage user={currentUser(c)} shop={shopOf(c)} products={results} />);
+});
+
+// Quick +/- from the products list (products without sizes).
+panel.post("/panel/products/:id{[0-9]+}/stock", async (c) => {
+  const p = await ownProduct(c);
+  if (!p) return c.notFound();
+  const delta = Math.max(-1000, Math.min(1000, Math.trunc(Number((await form(c)).delta) || 0)));
+  if (delta) {
+    await c.env.DB.prepare("UPDATE products SET track_stock = 1 WHERE id = ?").bind(p.id).run();
+    await adjustStock(c.env.DB, p.id, "", delta);
+  }
+  return c.redirect("/panel/products");
 });
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -203,8 +255,10 @@ const MAX_PACKAGES = 10;
 const VIDEO_URL = /^https:\/\/(www\.)?(instagram\.com|t\.me|telegram\.me|ble\.ir)\/\S+$/i;
 
 async function productFormPage(c: C, product: Product | null, values: Record<string, string>, errors?: string[], status: 200 | 400 = 200) {
-  const [images, packages] = product ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id)]) : [[], []];
-  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} categories={categoryList(c.get("settings"))} errors={errors} />, status);
+  const [images, packages, stock] = product
+    ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id), productStock(c.env.DB, product.id)])
+    : [[], [], {}];
+  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} stock={stock} categories={categoryList(c.get("settings"))} errors={errors} />, status);
 }
 
 async function saveProduct(c: C, product: Product | null) {
@@ -225,6 +279,7 @@ async function saveProduct(c: C, product: Product | null) {
     video_url: str("video_url"),
     size_guide: str("size_guide"),
     category: str("category").slice(0, 40),
+    track_stock: str("track_stock") === "1" ? "1" : "0",
     features: str("features").split("\n").map((x) => x.trim().slice(0, 80)).filter(Boolean).slice(0, 8).join("\n"),
     is_active: str("is_active") === "1" ? "1" : "0",
   };
@@ -237,6 +292,19 @@ async function saveProduct(c: C, product: Product | null) {
   const parsedGuide = parseSizeGuide(values.size_guide);
   if ("error" in parsedGuide) errors.push(parsedGuide.error);
   const sizeGuide = "guide" in parsedGuide && parsedGuide.guide ? JSON.stringify(parsedGuide.guide) : "";
+  // Stock: one number per size (stock_name_N / stock_N), or a single "stock" for products without sizes.
+  const stockRows: { size: string; quantity: number }[] = [];
+  const stockValue = (raw: string, label: string) => {
+    const n = Number(normalizeDigits(raw).replace(/[,٬]/g, "") || "0");
+    if (!Number.isInteger(n) || n < 0 || n > 1_000_000) errors.push(`موجودی ${label} باید عدد صحیح و مثبت باشد.`);
+    return Math.max(0, Math.trunc(n) || 0);
+  };
+  const newSizes = sizeNames(sizeGuide);
+  if (newSizes.length) {
+    const typed: Record<string, string> = {};
+    for (let n = 0; n < 40; n++) if (str(`stock_name_${n}`)) typed[str(`stock_name_${n}`)] = str(`stock_${n}`);
+    for (const size of newSizes) stockRows.push({ size, quantity: stockValue(typed[size] ?? "0", `سایز ${size}`) });
+  } else stockRows.push({ size: "", quantity: stockValue(str("stock"), "") });
   const chartFile = body.size_guide_image instanceof File && body.size_guide_image.size > 0 ? body.size_guide_image : null;
   if (chartFile && !IMAGE_TYPES[chartFile.type]) errors.push("عکس راهنمای سایز باید JPG، PNG یا WebP باشد.");
   else if (chartFile && chartFile.size > MAX_IMAGE) errors.push("حجم عکس راهنمای سایز بیشتر از ۳ مگابایت است.");
@@ -281,21 +349,26 @@ async function saveProduct(c: C, product: Product | null) {
   let productId = product?.id ?? 0;
   if (product) {
     await db.prepare(
-      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, is_active = ?, updated_at = ? WHERE id = ?",
+      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, track_stock = ?, is_active = ?, updated_at = ? WHERE id = ?",
     )
-      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.is_active), t, product.id)
+      .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.track_stock), Number(values.is_active), t, product.id)
       .run();
   } else {
     const row = await db.prepare(
-      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, track_stock, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
-      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.is_active), t, t)
+      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, Number(values.track_stock), Number(values.is_active), t, t)
       .first<{ id: number }>();
     productId = row!.id;
   }
   const stmts: D1PreparedStatement[] = [];
   for (const img of existing.filter((i) => removeIds.has(i.id))) stmts.push(db.prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?").bind(img.id, productId));
   newKeys.forEach((key, n) => stmts.push(db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, ?)").bind(productId, key, kept.length + n)));
+  if (values.track_stock === "1") {
+    // Replace the stock table with the sizes the product has now.
+    stmts.push(db.prepare("DELETE FROM product_stock WHERE product_id = ?").bind(productId));
+    for (const r of stockRows) stmts.push(db.prepare("INSERT INTO product_stock (product_id, size, quantity) VALUES (?, ?, ?)").bind(productId, r.size, r.quantity));
+  }
   const keepPkgIds = packages.map((p) => p.id).filter(Boolean);
   stmts.push(
     db.prepare(`DELETE FROM product_packages WHERE product_id = ? ${keepPkgIds.length ? `AND id NOT IN (${keepPkgIds.map(() => "?").join(",")})` : ""}`).bind(productId, ...keepPkgIds),
@@ -325,7 +398,7 @@ panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   if (!p) return c.notFound();
   const values = {
     title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, size_guide: p.size_guide,
-    category: p.category, features: p.features,
+    category: p.category, features: p.features, track_stock: String(p.track_stock),
     is_active: String(p.is_active), saved: c.req.query("saved") ?? "",
   };
   return productFormPage(c, p, values);

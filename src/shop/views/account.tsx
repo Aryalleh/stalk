@@ -1,6 +1,6 @@
 import { formatJalali } from "../../../lib/jalali";
 import { CITIES } from "../cities";
-import { STATUS_LABEL, toman, type ItemView, type Order, type Wishlist } from "../db";
+import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { Avatar, Errors, Layout, Thumb, TitleBar } from "./layout";
 
@@ -167,6 +167,7 @@ const fa = (n: number) => n.toLocaleString("fa-IR");
 
 /** html/profile.html */
 export function ProfilePage(props: {
+  changes?: { id: number; product_title: string }[];
   user: User;
   stats: { wishes: number; gifts: number };
   items: ProfileItem[];
@@ -208,6 +209,7 @@ export function ProfilePage(props: {
       }
     >
       <div class="px-6 py-6">
+        <PendingChanges items={props.changes ?? []} />
         <section class="grid grid-cols-2 gap-4 mb-8">
           <div class="bg-card p-4 rounded-2xl border border-muted/5">
             <span class="text-[10px] text-muted block mb-1">کل آرزوها</span>
@@ -473,6 +475,7 @@ export function WishlistFormPage(props: {
 }
 
 export interface MyOrder {
+  cancel_kind: string;
   token: string;
   id: number;
   product_title: string;
@@ -504,10 +507,79 @@ export function MyOrdersPage(props: { user: User; orders: MyOrder[] }) {
               <p class="text-[10px] text-muted">{o.is_direct ? "برای خودم" : `کادو برای ${o.owner_name}`} · <span class="dt">{formatJalali(o.created_at, false)}</span></p>
               <p class="text-xs font-bold text-pink mt-1">{toman(o.amount)}</p>
             </div>
-            <span class="text-[10px] text-muted text-left max-w-[90px]">{STATUS_LABEL[o.status]}</span>
+            <span class="text-[10px] text-muted text-left max-w-[90px]">{orderStatusLabel(o)}</span>
           </a>
         ))}
       </div>
     </Layout>
+  );
+}
+
+/** The recipient answers a shop's "this ran out — how about …?" proposal. */
+export function ChangeRequestPage(props: { user: User; order: Order & { image_key: string; shop_name: string }; done?: boolean }) {
+  const o = props.order;
+  const pending = o.change_status === "pending";
+  return (
+    <Layout title="پیشنهاد تغییر" user={props.user} nav="profile" header={<TitleBar title="پیشنهاد تغییر کادو" back="/me" />} bare>
+      <div class="px-6 pb-12 space-y-6">
+        <section class="p-4 bg-card rounded-2xl flex items-center gap-4">
+          <div class="w-20 h-20 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-3xl">
+            {o.image_key ? <img src={`/img/${o.image_key}`} alt="" class="w-full h-full object-cover" /> : "🎁"}
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-sm font-bold text-fg">{o.product_title}</h1>
+            <p class="text-[11px] text-muted">فروشگاه {o.shop_name}{o.size && <> · سایز سفارش: <b class="text-fg">{o.size}</b></>}</p>
+          </div>
+        </section>
+        {pending ? (
+          <>
+            <section class="p-5 bg-pink/5 border border-pink/20 rounded-2xl space-y-2">
+              <p class="text-sm text-fg leading-7">
+                کالایی که خواسته بودید {o.size ? `در سایز ${o.size} ` : ""}تمام شده. فروشگاه پیشنهاد می‌دهد:
+              </p>
+              {o.change_size && <p class="text-lg font-bold text-pink">سایز {o.change_size}</p>}
+              {o.change_message && <p class="text-sm text-fg leading-7 whitespace-pre-wrap">{o.change_message}</p>}
+            </section>
+            <form method="post" class="space-y-4">
+              <label class="block text-xs text-muted">توضیح شما برای فروشگاه (مثلاً رنگ انتخابی) — اختیاری</label>
+              <input name="reply" maxlength={200} class="w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink" />
+              <button name="answer" value="accept" class="w-full py-4 bg-pink text-white rounded-2xl font-bold">✓ قبول می‌کنم</button>
+              <button
+                name="answer"
+                value="decline"
+                class="w-full py-3 bg-card text-muted rounded-2xl text-sm"
+                onclick="return confirm('سفارش لغو شود؟ مبلغ به خریدار برمی‌گردد و آرزو دوباره در لیست شما فعال می‌شود.')"
+              >
+                نمی‌خواهم — سفارش لغو شود
+              </button>
+            </form>
+          </>
+        ) : (
+          <div class="p-5 bg-card rounded-2xl text-sm leading-7">
+            {o.change_status === "accepted" ? (
+              <>✅ پیشنهاد را پذیرفتید{o.change_size ? ` (سایز ${o.change_size})` : ""}؛ فروشگاه کادو را با همین مشخصات می‌فرستد.</>
+            ) : (
+              <>سفارش لغو شد و این آرزو دوباره در لیست شما فعال است.</>
+            )}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+/** Banner on the profile for proposals waiting for an answer. */
+export function PendingChanges(props: { items: { id: number; product_title: string }[] }) {
+  if (!props.items.length) return null;
+  return (
+    <section class="mb-6 space-y-2">
+      {props.items.map((c) => (
+        <a href={`/me/changes/${c.id}`} class="flex items-center gap-3 p-4 rounded-2xl bg-pink/10 border border-pink/30 text-sm">
+          <i class="fa-solid fa-arrows-rotate text-pink"></i>
+          <span class="flex-1">«{c.product_title}» تمام شده؛ فروشگاه پیشنهاد تغییر داده. پاسخ دهید</span>
+          <i class="fa-solid fa-chevron-left text-muted text-xs"></i>
+        </a>
+      ))}
+    </section>
   );
 }

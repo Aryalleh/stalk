@@ -4,7 +4,9 @@ import { upsertCustomer } from "../../crm/sync";
 import type { C, Env } from "../../env";
 import { render } from "../../render";
 import { categoryList, reservationMinutes } from "../../settings";
+import { sizeNames } from "../sizes";
 import {
+  availableBySize,
   deliveryOptions,
   getPublicProduct,
   listProducts,
@@ -86,7 +88,21 @@ store.get("/p/:id{[0-9]+}", async (c) => {
       .first<{ logo_key: string; sales: number }>(),
   ]);
   const error = c.req.query("err") === "size" ? "لطفاً سایز را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
-  return render(c, <ProductPage user={user} product={product} shop={shop ?? { logo_key: "", sales: 0 }} wishlists={wishlists} images={images} packages={packages} added={c.req.query("added")} error={error} />);
+  const available = await availableBySize(c.env.DB, product, sizeNames(product.size_guide));
+  return render(
+    c,
+    <ProductPage
+      user={user}
+      product={product}
+      shop={shop ?? { logo_key: "", sales: 0 }}
+      wishlists={wishlists}
+      images={images}
+      packages={packages}
+      available={available}
+      added={c.req.query("added")}
+      error={error}
+    />,
+  );
 });
 
 store.get("/s/:slug", async (c) => {

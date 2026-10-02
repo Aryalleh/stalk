@@ -4,6 +4,17 @@ const SOLD = "('paid', 'shipped', 'delivered')";
 const HOLDS = (nowParam: string) =>
   `(o.status IN ('awaiting', 'paid', 'shipped', 'delivered') OR (o.status = 'pending' AND o.expires_at > ${nowParam}))`;
 
+/**
+ * SQL: units of product `pid` in size `size` still free to sell — stock minus orders holding one
+ * (live checkout holds and receipts waiting for the shop; confirmed sales are already taken off
+ * the stock). Untracked products count as unlimited.
+ */
+const AVAILABLE = (pid: string, size: string, nowParam: string) =>
+  `(CASE WHEN (SELECT track_stock FROM products WHERE id = ${pid}) = 0 THEN 1000000 ELSE
+     COALESCE((SELECT quantity FROM product_stock WHERE product_id = ${pid} AND size = ${size}), 0)
+     - (SELECT COUNT(*) FROM orders h WHERE h.product_id = ${pid} AND h.size = ${size}
+          AND (h.status = 'awaiting' OR (h.status = 'pending' AND h.expires_at > ${nowParam}))) END)`;
+
 export const now = () => new Date().toISOString();
 
 export function randomSlug(len = 10) {
@@ -50,6 +61,7 @@ export interface Product {
   size_guide_image: string;
   category: string;
   features: string; // one per line
+  track_stock: number; // 1 = sell only what product_stock holds
   is_active: number;
   created_at: string;
 }
@@ -94,6 +106,7 @@ export type ItemView = {
   post_fee: number;
   bought: number;
   reserved: number; // live holds + transfers waiting for the shop to confirm
+  in_stock: number; // 1 if the shop has a unit of this product/size to sell
 };
 
 /** Products visible to the public: active and from an approved shop. */
@@ -143,7 +156,8 @@ export async function wishlistItems(db: D1Database, wishlistId: number): Promise
               s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '') AS shop_ok,
               s.city AS shop_city, s.courier_enabled, s.courier_fee, s.post_enabled, s.post_fee,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
-              (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved
+              (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved,
+              (${AVAILABLE("i.product_id", "i.size", "?1")} > 0) AS in_stock
        FROM wishlist_items i JOIN products p ON p.id = i.product_id JOIN shops s ON s.id = p.shop_id
        WHERE i.wishlist_id = ?2 ORDER BY i.created_at`,
     )
@@ -187,6 +201,7 @@ export async function reserveItem(db: D1Database, itemId: number, giver: GiverIn
        JOIN shops s ON s.id = p.shop_id
        WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND s.status = 'approved' AND s.card_number <> ''
          AND i.quantity > (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?7")})
+         AND ${AVAILABLE("p.id", "i.size", "?7")} > 0
        RETURNING id, token, amount`,
     )
     .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t, randomSlug(24),
@@ -272,6 +287,12 @@ export interface Order {
   created_at: string;
   paid_at: string | null;
   shipped_at: string | null;
+  cancel_kind: string; // 'out_of_stock' when the shop canceled for lack of stock
+  refund_note: string;
+  change_status: "" | "pending" | "accepted" | "declined";
+  change_message: string;
+  change_size: string;
+  change_reply: string;
 }
 
 /**
@@ -286,18 +307,30 @@ export async function reportReceipt(db: D1Database, orderId: number, receiptKey:
   return r.meta.changes === 1;
 }
 
-/** Shop confirms the money arrived: mark paid and snapshot the delivery address. */
+/**
+ * Shop confirms the money arrived: mark paid, snapshot the delivery address and take the unit off
+ * the stock — one D1 batch (a transaction); the stock update only applies when this call is the one
+ * that confirmed (it matches the paid_at it just wrote).
+ */
 export async function confirmPayment(db: D1Database, orderId: number, shopId: number) {
-  const r = await db
-    .prepare(
-      `UPDATE orders SET status = 'paid', paid_at = ?3,
-         ship_name = w.recipient_name, ship_phone = w.recipient_phone, ship_city = w.city,
-         ship_address = w.address, ship_postal_code = w.postal_code
-       FROM wishlists w
-       WHERE orders.id = ?1 AND orders.shop_id = ?2 AND orders.status = 'awaiting' AND w.id = orders.wishlist_id`,
-    )
-    .bind(orderId, shopId, now())
-    .run();
+  const t = now();
+  const [r] = await db.batch([
+    db
+      .prepare(
+        `UPDATE orders SET status = 'paid', paid_at = ?3,
+           ship_name = w.recipient_name, ship_phone = w.recipient_phone, ship_city = w.city,
+           ship_address = w.address, ship_postal_code = w.postal_code
+         FROM wishlists w
+         WHERE orders.id = ?1 AND orders.shop_id = ?2 AND orders.status = 'awaiting' AND w.id = orders.wishlist_id`,
+      )
+      .bind(orderId, shopId, t),
+    db
+      .prepare(
+        `UPDATE product_stock SET quantity = MAX(quantity - 1, 0)
+         WHERE (product_id, size) = (SELECT product_id, size FROM orders WHERE id = ?1 AND status = 'paid' AND paid_at = ?2)`,
+      )
+      .bind(orderId, t),
+  ]);
   return r.meta.changes === 1;
 }
 
@@ -310,6 +343,57 @@ export async function rejectPayment(db: D1Database, orderId: number, shopId: num
   return r.meta.changes === 1;
 }
 
+/**
+ * The shop can't supply the item: cancel a not-yet-shipped order and mark that product/size as
+ * sold out (stock 0) so nobody else can buy it. If the money was already confirmed, refundNote
+ * says how it was returned.
+ */
+export async function cancelOutOfStock(db: D1Database, orderId: number, shopId: number, reason: string, refundNote: string) {
+  const [r] = await db.batch([
+    db
+      .prepare(
+        `UPDATE orders SET status = 'rejected', cancel_kind = 'out_of_stock', reject_reason = ?3, refund_note = ?4,
+           change_status = CASE WHEN change_status = 'pending' THEN 'declined' ELSE change_status END
+         WHERE id = ?1 AND shop_id = ?2 AND status IN ('awaiting', 'paid')`,
+      )
+      .bind(orderId, shopId, reason, refundNote),
+    db.prepare("UPDATE products SET track_stock = 1 WHERE id = (SELECT product_id FROM orders WHERE id = ?1 AND cancel_kind = 'out_of_stock')").bind(orderId),
+    db
+      .prepare(
+        `INSERT INTO product_stock (product_id, size, quantity)
+         SELECT product_id, size, 0 FROM orders WHERE id = ?1 AND cancel_kind = 'out_of_stock'
+         ON CONFLICT (product_id, size) DO UPDATE SET quantity = 0`,
+      )
+      .bind(orderId),
+  ]);
+  return r.meta.changes === 1;
+}
+
+/** Stock rows of a product: size -> quantity ('' for products without sizes). */
+export async function productStock(db: D1Database, productId: number) {
+  const { results } = await db.prepare("SELECT size, quantity FROM product_stock WHERE product_id = ?").bind(productId).all<{ size: string; quantity: number }>();
+  return Object.fromEntries(results.map((r) => [r.size, r.quantity])) as Record<string, number>;
+}
+
+/** Units free to sell right now per size (stock minus live holds); null when stock isn't tracked. */
+export async function availableBySize(db: D1Database, product: { id: number; track_stock: number }, sizes: string[]) {
+  if (!product.track_stock) return null;
+  const list = sizes.length ? sizes : [""];
+  const rows = await db.batch(list.map((size) => db.prepare(`SELECT ${AVAILABLE("?1", "?2", "?3")} AS n`).bind(product.id, size, now())));
+  return Object.fromEntries(list.map((size, i) => [size, Math.max(0, (rows[i].results[0] as { n: number }).n)])) as Record<string, number>;
+}
+
+/** Add `delta` units (can be negative; never below 0) to one size of a product. */
+export async function adjustStock(db: D1Database, productId: number, size: string, delta: number) {
+  await db
+    .prepare(
+      `INSERT INTO product_stock (product_id, size, quantity) VALUES (?1, ?2, MAX(?3, 0))
+       ON CONFLICT (product_id, size) DO UPDATE SET quantity = MAX(quantity + ?3, 0)`,
+    )
+    .bind(productId, size, delta)
+    .run();
+}
+
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   pending: "در انتظار واریز",
   awaiting: "واریز اعلام شد — در انتظار تأیید فروشگاه",
@@ -318,5 +402,9 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   delivered: "تحویل شد",
   rejected: "واریز تأیید نشد",
 };
+
+/** Status text that also tells an out-of-stock cancellation apart from a rejected transfer. */
+export const orderStatusLabel = (o: Pick<Order, "status" | "cancel_kind">) =>
+  o.status === "rejected" && o.cancel_kind === "out_of_stock" ? "لغو شد — ناموجود" : STATUS_LABEL[o.status];
 
 export const toman = (n: number) => `${n.toLocaleString("fa-IR")} تومان`;

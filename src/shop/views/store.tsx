@@ -3,8 +3,8 @@ import { bankName } from "../../../lib/banks";
 import { formatJalali } from "../../../lib/jalali";
 import { formatCard } from "../../../lib/normalize";
 import {
-  STATUS_LABEL,
   deliveryOptions,
+  orderStatusLabel,
   toman,
   type DeliveryMethod,
   type ItemView,
@@ -327,12 +327,17 @@ export function ProductPage(props: {
   wishlists: Wishlist[];
   images: ProductImage[];
   packages: ProductPackage[];
+  /** Units free to sell per size ('' without sizes); null = stock not tracked. */
+  available?: Record<string, number> | null;
   added?: string;
   error?: string;
 }) {
   const p = props.product;
   const guide = readSizeGuide(p.size_guide);
   const sizes = guide?.rows.map((r) => r[0]) ?? [];
+  const avail = props.available ?? null;
+  const totalLeft = avail ? Object.values(avail).reduce((a, b) => a + b, 0) : Infinity;
+  const soldOut = totalLeft <= 0;
   const features = p.features.split("\n").map((s) => s.trim()).filter(Boolean);
   const loginHref = `/login?next=/p/${p.id}`;
   const nofollow = props.user ? undefined : "nofollow";
@@ -366,7 +371,7 @@ export function ProductPage(props: {
           url,
           price: String(p.price * 10),
           priceCurrency: "IRR",
-          availability: "https://schema.org/InStock",
+          availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
           itemCondition: "https://schema.org/NewCondition",
           areaServed: { "@type": "Country", name: "Iran" },
           seller: { "@type": "Organization", name: p.shop_name, url: `${site.origin}/s/${p.shop_slug}` },
@@ -396,9 +401,14 @@ export function ProductPage(props: {
         <span class="text-[10px] text-fg/60">• {p.shop_name}</span>
       </div>
       <h1 class="text-2xl font-black text-fg mb-2 leading-tight">{p.title}</h1>
-      <div class="flex items-baseline gap-2">
+      <div class="flex items-baseline gap-2 flex-wrap">
         <span class="text-2xl font-black text-pink">{fa(p.price)}</span>
         <span class="text-xs text-fg/60">تومان</span>
+        {soldOut ? (
+          <span class="text-[11px] font-bold text-white bg-red-500/80 px-2 py-0.5 rounded-lg mr-2">ناموجود</span>
+        ) : totalLeft <= 3 ? (
+          <span class="text-[11px] font-bold text-amber-200 bg-amber-500/20 px-2 py-0.5 rounded-lg mr-2">فقط {fa(totalLeft)} عدد باقی مانده</span>
+        ) : null}
       </div>
     </>
   );
@@ -435,6 +445,14 @@ export function ProductPage(props: {
             </a>
           );
         })()}
+        {avail && sizes.length > 0 && (
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="text-muted">موجودی سایزها:</span>
+            {sizes.map((z) => (
+              <span class={`px-2 py-0.5 rounded-lg ${avail[z] ? "bg-card text-fg" : "bg-card text-muted line-through"}`}>{z}</span>
+            ))}
+          </div>
+        )}
         <SizeGuideBox guide={guide} image={p.size_guide_image} />
         {props.packages.length > 0 && (
           <div class="bg-card rounded-2xl p-4">
@@ -478,7 +496,7 @@ export function ProductPage(props: {
                 <label class="block text-xs text-muted">سایز</label>
                 <select name="size" required class={field}>
                   <option value="">انتخاب سایز…</option>
-                  {sizes.map((z) => <option value={z}>{z}</option>)}
+                  {sizes.map((z) => <option value={z}>{z}{avail && !avail[z] ? " (فعلاً ناموجود)" : ""}</option>)}
                 </select>
               </>
             )}
@@ -503,8 +521,8 @@ export function ProductPage(props: {
           <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-pink text-white text-center rounded-2xl font-bold shadow-lg shadow-pink/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
           </a>
-          <a href={props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} rel={nofollow} class="flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform">
-            <i class="fa-solid fa-bag-shopping ml-1"></i> خرید مستقیم
+          <a href={soldOut ? "#" : props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} rel={nofollow} aria-disabled={soldOut ? "true" : undefined} class={`${soldOut ? "opacity-40 pointer-events-none " : ""}flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform`}>
+            <i class="fa-solid fa-bag-shopping ml-1"></i> {soldOut ? "ناموجود" : "خرید مستقیم"}
           </a>
         </div>
       </div>
@@ -652,10 +670,12 @@ export function WishlistPublicPage(props: {
               { city: it.shop_city, courier_enabled: it.courier_enabled, courier_fee: it.courier_fee, post_enabled: it.post_enabled, post_fee: it.post_fee },
               w.city,
             ).length > 0;
-            const buyable = w.is_open && it.product_active && it.shop_ok && ships && free > 0;
+            const buyable = w.is_open && it.product_active && it.shop_ok && ships && free > 0 && it.in_stock;
             const status = fulfilled
               ? "تمام شد"
-              : props.isOwner
+              : !it.in_stock && it.product_active
+                ? "فعلاً ناموجود"
+                : props.isOwner
                 ? null
                 : it.reserved > 0 && free <= 0
                   ? "در حال خرید توسط شخص دیگر"
@@ -770,6 +790,11 @@ export function CheckoutPage(props: {
         </section>
 
         <Errors errors={props.errors} />
+        {!it.in_stock && (
+          <div class="rounded-2xl bg-red-500/10 text-red-300 px-4 py-3 text-sm">
+            این کالا{it.size ? ` در سایز ${it.size}` : ""} فعلاً در فروشگاه ناموجود است.
+          </div>
+        )}
 
         {props.packages.length > 0 && (
           <section class="space-y-3">
@@ -818,7 +843,7 @@ export function CheckoutPage(props: {
       </form>
       <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom">
-          <button form="checkout" disabled={props.delivery.length === 0} class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40">
+          <button form="checkout" disabled={props.delivery.length === 0 || !it.in_stock} class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40">
             ادامه و دریافت شماره کارت <i class="fa-solid fa-arrow-left"></i>
           </button>
         </div>
@@ -988,11 +1013,17 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           <div class="flex items-center justify-between mb-8">
             <div>
               <p class="text-[10px] text-muted mb-1">شماره سفارش: #{fa(o.id)}</p>
-              <h2 class={`text-sm font-black ${o.status === "rejected" ? "text-red-300" : "text-pink"}`}>{STATUS_LABEL[o.status]}</h2>
+              <h2 class={`text-sm font-black ${o.status === "rejected" ? "text-red-300" : "text-pink"}`}>{orderStatusLabel(o)}</h2>
             </div>
             <div class="w-12 h-12 rounded-2xl bg-pink/10 text-pink flex items-center justify-center text-xl"><i class={`fa-solid ${icon}`}></i></div>
           </div>
-          {o.status === "rejected" ? (
+          {o.status === "rejected" && o.cancel_kind === "out_of_stock" ? (
+            <div class="text-sm text-red-300 leading-relaxed space-y-2">
+              <p>متأسفانه این کالا ناموجود شد و فروشگاه سفارش را لغو کرد{o.reject_reason ? `: ${o.reject_reason}` : "."}</p>
+              {o.paid_at && <p class="text-fg">مبلغ {toman(o.amount)} به شما برگردانده می‌شود.{o.refund_note && <> بازگشت وجه: <b>{o.refund_note}</b></>}</p>}
+              {!o.paid_at && <p class="text-muted text-xs">اگر مبلغ را واریز کرده‌اید، با رسید با فروشگاه {o.shop_name} تماس بگیرید.</p>}
+            </div>
+          ) : o.status === "rejected" ? (
             <p class="text-sm text-red-300 leading-relaxed">
               فروشگاه دریافت این واریز را تأیید نکرد{o.reject_reason ? `: ${o.reject_reason}` : "."} اگر مبلغ از حساب شما کم شده، با رسید با
               فروشگاه {o.shop_name} تماس بگیرید.
@@ -1010,6 +1041,18 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
             </div>
           )}
         </section>
+        {o.change_status === "pending" && (
+          <div class="rounded-2xl bg-amber-400/10 text-amber-200 px-4 py-3 text-sm leading-7">
+            🔁 کالا{o.size ? ` در سایز ${o.size}` : ""} تمام شده و فروشگاه {o.change_size ? `سایز ${o.change_size}` : "گزینه دیگری"} را پیشنهاد داده
+            {o.is_direct ? "؛ در پروفایل خود پاسخ دهید." : "؛ منتظر پاسخ گیرنده است."}
+            {o.is_direct && <a href={`/me/changes/${o.id}`} class="block mt-2 text-pink font-bold">پاسخ به پیشنهاد</a>}
+          </div>
+        )}
+        {o.change_status === "accepted" && (
+          <div class="rounded-2xl bg-ok/15 text-green-300 px-4 py-3 text-sm">
+            ✓ تغییر پذیرفته شد{o.size ? ` (سایز ${o.size})` : ""}{o.change_reply ? `: ${o.change_reply}` : ""}.
+          </div>
+        )}
         {paid && <p class="text-center text-sm">🎉 ممنون از مهربانی‌تان!</p>}
         {giftCard}
         {o.gift_message && (
@@ -1036,7 +1079,15 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
 }
 
 /** "Buy for myself": size and the buyer's own delivery address, then the usual checkout. */
-export function DirectBuyPage(props: { user: User; product: ProductWithShop; image: string; values: Record<string, string>; errors?: string[] }) {
+export function DirectBuyPage(props: {
+  user: User;
+  product: ProductWithShop;
+  image: string;
+  available?: Record<string, number> | null;
+  values: Record<string, string>;
+  errors?: string[];
+}) {
+  const avail = props.available ?? null;
   const p = props.product;
   const v = props.values;
   const sizes = readSizeGuide(p.size_guide)?.rows.map((r) => r[0]) ?? [];
@@ -1061,7 +1112,11 @@ export function DirectBuyPage(props: { user: User; product: ProductWithShop; ima
             <label class={label}>سایز</label>
             <select name="size" required class={input}>
               <option value="">انتخاب سایز…</option>
-              {sizes.map((z) => <option value={z} selected={v.size === z}>{z}</option>)}
+              {sizes.map((z) => (
+                <option value={z} selected={v.size === z} disabled={!!avail && !avail[z]}>
+                  {z}{avail && !avail[z] ? " — ناموجود" : ""}
+                </option>
+              ))}
             </select>
           </div>
         )}
