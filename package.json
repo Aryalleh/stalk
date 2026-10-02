@@ -9,7 +9,9 @@
     "db:migrate:remote": "wrangler d1 migrations apply app --remote",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "css": "node scripts/fa-subset.mjs && tailwindcss -c tailwind.config.cjs -i src/styles/app.css -o src/static/app.css --minify"
+    "css": "node scripts/fa-subset.mjs && tailwindcss -c tailwind.config.cjs -i src/styles/app.css -o src/static/app.css --minify",
+    "demo:seed": "node scripts/demo.mjs seed --remote",
+    "demo:clear": "node scripts/demo.mjs clear --remote"
   },
   "dependencies": {
     "hono": "^4.13.12"

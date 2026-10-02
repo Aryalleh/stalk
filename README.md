@@ -133,6 +133,16 @@ npm run deploy
 
 بکاپ: `npx wrangler d1 export app --remote --output backup.sql`
 
+## داده نمونه (دمو)
+
+برای نمایش سایت با چند فروشگاه، ۱۷ محصول با عکس و یک لیست آرزوی نمونه:
+```bash
+npm run demo:seed     # روی سایت اصلی (حدود ۲ دقیقه؛ عکس‌ها در R2 و ردیف‌ها در D1)
+npm run demo:clear    # پاک کردن کامل دمو
+```
+لیست آرزوی نمونه: `/w/demo-sara`. همه ردیف‌های دمو شناسه ۹۰۰۱ به بالا دارند، پس پاک کردن به داده واقعی دست نمی‌زند.
+برای نسخه محلی: `node scripts/demo.mjs seed --local` (وقتی `npm run dev` در حال اجراست).
+
 ## اجرای محلی
 ```bash
 npm install
