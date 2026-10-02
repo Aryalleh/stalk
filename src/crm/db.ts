@@ -1,4 +1,5 @@
-import type { User } from "../session";
+/** Who made a change: a staff user, or the system (id null) for automatic imports. */
+export type Actor = { id: number | null; name: string };
 import { CONTACT_KEY, CORE_NAMES, contactName, type ContactData } from "./fields";
 import { diffContact, type Extras, type LogEntry, type LogRow } from "./history";
 import { normalizePhone, toLatinDigits } from "../../lib/normalize";
@@ -49,7 +50,7 @@ export async function recentLogs(db: D1Database, page: number) {
   return results;
 }
 
-function logStatements(db: D1Database, contactId: number, repr: string, entries: LogEntry[], user: User, at: string) {
+function logStatements(db: D1Database, contactId: number, repr: string, entries: LogEntry[], user: Actor, at: string) {
   const stmt = db.prepare(
     `INSERT INTO change_log (contact_id, contact_repr, field_name, field_label, action, old_value, new_value, user_id, username, changed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -70,7 +71,7 @@ export async function saveContact(
   core: ContactData,
   extras: Extras,
   labels: Map<number, string>,
-  user: User,
+  user: Actor,
 ): Promise<number> {
   const now = new Date().toISOString();
   const stmts: D1PreparedStatement[] = [];
@@ -125,7 +126,7 @@ export async function saveContact(
   }
 }
 
-export async function deleteContact(db: D1Database, id: number, labels: Map<number, string>, user: User) {
+export async function deleteContact(db: D1Database, id: number, labels: Map<number, string>, user: Actor) {
   const old = await getContact(db, id);
   if (!old) return;
   const extras = await getExtras(db, id);

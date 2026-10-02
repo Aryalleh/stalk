@@ -1,11 +1,23 @@
 import { formatJalali } from "../../../lib/jalali";
 import { formatCard } from "../../../lib/normalize";
 import { mask, type Settings } from "../../settings";
-import { STATUS_LABEL, toman, type Order, type Product, type Shop } from "../db";
+import { CITIES } from "../cities";
+import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
+import { DELIVERY_LABEL } from "../notify";
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
 const SHOP_STATUS: Record<Shop["status"], string> = { pending: "در انتظار تأیید", approved: "فعال", suspended: "معلق" };
+
+/** City picker: suggestions from the list, but any city can be typed. */
+function CityInput(props: { value: string; name?: string }) {
+  return (
+    <>
+      <input name={props.name ?? "city"} value={props.value} list="cities" required maxlength={40} placeholder="مثلاً تهران" autocomplete="off" />
+      <datalist id="cities">{CITIES.map((c) => <option value={c} />)}</datalist>
+    </>
+  );
+}
 
 export function ShopRegisterPage(props: { user: User; values?: Record<string, string>; errors?: string[] }) {
   const v = props.values ?? {};
@@ -22,6 +34,8 @@ export function ShopRegisterPage(props: { user: User; values?: Record<string, st
           <input name="slug" value={v.slug ?? ""} class="ltr" pattern="[a-z0-9-]{3,40}" placeholder="my-shop" required />
           <label>تلفن فروشگاه</label>
           <input name="phone" value={v.phone ?? ""} class="ltr" inputmode="tel" required />
+          <label>شهر فروشگاه</label>
+          <CityInput value={v.city ?? ""} />
           <label>درباره فروشگاه</label>
           <textarea name="description" maxlength={1000}>{v.description ?? ""}</textarea>
           <p><button>ثبت فروشگاه</button></p>
@@ -55,9 +69,7 @@ function ShopHeader(props: { shop: Shop }) {
       {!s.card_number && (
         <div class="errbox">تا شماره کارت را در <a href="/panel/settings">تنظیمات</a> وارد نکنید، کسی نمی‌تواند محصولات شما را بخرد.</div>
       )}
-      {!s.bale_chat_id && !s.telegram_chat_id && (
-        <div class="warnbox">برای دریافت فوری پیام سفارش‌های جدید، در <a href="/panel/settings">تنظیمات</a> بات بله یا تلگرام را وصل کنید.</div>
-      )}
+      {!s.city && <div class="errbox">شهر فروشگاه و روش‌های ارسال را در <a href="/panel/settings">تنظیمات</a> مشخص کنید.</div>}
     </>
   );
 }
@@ -85,7 +97,7 @@ export function OrdersPage(props: { user: User; shop: Shop; orders: Order[]; fil
           <p class="muted">سفارشی نیست.</p>
         ) : (
           <table>
-            <thead><tr><th>#</th><th>محصول</th><th>خریدار</th><th>مبلغ</th><th>شماره پیگیری</th><th>وضعیت</th><th>زمان اعلام واریز</th></tr></thead>
+            <thead><tr><th>#</th><th>محصول</th><th>خریدار</th><th>مبلغ</th><th>ارسال</th><th>وضعیت</th><th>زمان ارسال فیش</th></tr></thead>
             <tbody>
               {props.orders.map((o) => (
                 <tr>
@@ -93,7 +105,7 @@ export function OrdersPage(props: { user: User; shop: Shop; orders: Order[]; fil
                   <td>{o.product_title}</td>
                   <td>{o.giver_name}</td>
                   <td class="price">{toman(o.amount)}</td>
-                  <td class="ltr">{o.transfer_ref}</td>
+                  <td>{DELIVERY_LABEL[o.delivery_method] ?? "—"}</td>
                   <td><span class={`tag ${o.status === "shipped" || o.status === "delivered" ? "ok" : ""}`}>{STATUS_LABEL[o.status]}</span></td>
                   <td class="muted"><span class="dt">{formatJalali(o.reported_at)}</span></td>
                 </tr>
@@ -117,23 +129,26 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
       <div class="two">
         <div class="card">
           <h2>سفارش #{o.id} <span class="tag">{STATUS_LABEL[o.status]}</span></h2>
-          <p>محصول: <b>{o.product_title}</b> — <span class="price">{toman(o.amount)}</span></p>
-          <h2 style="margin-top:16px">💳 واریز اعلام‌شده</h2>
           <p>
-            شماره پیگیری: <b class="dt">{o.transfer_ref}</b><br />
-            ۴ رقم آخر کارت مبدأ: <b class="dt">{o.transfer_card_last4}</b><br />
-            به کارت: <span class="dt">{formatCard(o.pay_card_number)}</span><br />
-            {o.transfer_at && <>زمان واریز (طبق اعلام خریدار): {o.transfer_at}<br /></>}
-            زمان ثبت در سایت: <span class="dt">{formatJalali(o.reported_at)}</span>
+            محصول: <b>{o.product_title}</b> — {toman(o.item_price)}
+            {o.package_name && <><br />بسته‌بندی: <b>{o.package_name}</b> — {toman(o.package_price)}</>}
+            {o.delivery_method && <><br />ارسال با <b>{DELIVERY_LABEL[o.delivery_method]}</b> — {toman(o.delivery_fee)}</>}
+            <br />جمع کل: <span class="price">{toman(o.amount)}</span>
+          </p>
+          <h2 style="margin-top:16px">🧾 فیش واریز</h2>
+          <p class="small muted">
+            به کارت <span class="dt">{formatCard(o.pay_card_number)}</span> · ارسال فیش: <span class="dt">{formatJalali(o.reported_at)}</span>
           </p>
           {o.receipt_key && (
-            <p><a href={`/panel/orders/${o.id}/receipt`} target="_blank">مشاهده عکس رسید</a></p>
+            <a href={`/panel/orders/${o.id}/receipt`} target="_blank">
+              <img src={`/panel/orders/${o.id}/receipt`} alt="فیش واریز" style="max-width:100%;max-height:420px;border-radius:10px;border:1px solid var(--line)" />
+            </a>
           )}
           <p>خریدار: {o.giver_name} — <span class="dt">{o.giver_phone}</span>{o.is_anonymous ? " (نامش روی کارت هدیه نیاید)" : ""}</p>
           {o.gift_message && <p>پیام کارت هدیه:<br /><span style="white-space:pre-wrap">{o.gift_message}</span></p>}
           {o.status === "awaiting" && (
             <div class="card" style="background:var(--bg)">
-              <p style="margin-top:0">حساب خود را بررسی کنید. مبلغ <b>{toman(o.amount)}</b> با این شماره پیگیری واریز شده؟</p>
+              <p style="margin-top:0">حساب خود را بررسی کنید. مبلغ <b>{toman(o.amount)}</b> واریز شده؟ (همین کار را با دکمه‌های زیر فیش در بات هم می‌توانید انجام دهید.)</p>
               <form method="post" action={`/panel/orders/${o.id}/confirm`} style="margin-bottom:10px">
                 <button>✓ بله، واریز را تأیید می‌کنم</button>
               </form>
@@ -152,6 +167,7 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; s
               <p>
                 {o.ship_name}<br />
                 <span class="dt">{o.ship_phone}</span><br />
+                {o.ship_city && <>{o.ship_city}<br /></>}
                 <span style="white-space:pre-wrap">{o.ship_address}</span><br />
                 کد پستی: <span class="dt">{o.ship_postal_code}</span>
               </p>
@@ -200,41 +216,77 @@ export function ProductsPage(props: { user: User; shop: Shop; products: Product[
   );
 }
 
-export function ProductFormPage(props: { user: User; shop: Shop; product: Product | null; values: Record<string, string>; errors?: string[] }) {
+export function ProductFormPage(props: {
+  user: User;
+  shop: Shop;
+  product: Product | null;
+  values: Record<string, string>;
+  images?: ProductImage[];
+  packages?: ProductPackage[];
+  errors?: string[];
+}) {
   const p = props.product;
   const v = props.values;
+  const pkgs = [...(props.packages ?? []), ...Array.from({ length: 3 }, () => ({ id: 0, name: "", price: 0 }))];
   return (
     <Layout title={p ? p.title : "محصول جدید"} user={props.user}>
       <ShopHeader shop={props.shop} />
       <Tabs on="/panel/products" />
+      {v.saved && <div class="okbox">ذخیره شد.</div>}
       <Errors errors={props.errors} />
-      <form method="post" action={p ? `/panel/products/${p.id}` : "/panel/products/new"} enctype="multipart/form-data" class="card two">
-        <div>
-          <label style="margin-top:0">عنوان محصول</label>
-          <input name="title" value={v.title ?? ""} required maxlength={120} />
-          <label>قیمت (تومان)</label>
-          <input name="price" value={v.price ?? ""} class="ltr" inputmode="numeric" required />
-          <label>توضیحات</label>
-          <textarea name="description" maxlength={3000} style="min-height:140px">{v.description ?? ""}</textarea>
-          <label class="row" style="color:var(--text)">
-            <input type="checkbox" name="is_active" value="1" style="width:auto" checked={v.is_active !== "0"} /> فعال (نمایش در سایت)
-          </label>
+      <form method="post" action={p ? `/panel/products/${p.id}` : "/panel/products/new"} enctype="multipart/form-data">
+        <div class="card two">
+          <div>
+            <label style="margin-top:0">عنوان محصول</label>
+            <input name="title" value={v.title ?? ""} required maxlength={120} />
+            <label>قیمت (تومان)</label>
+            <input name="price" value={v.price ?? ""} class="ltr" inputmode="numeric" required />
+            <label>توضیحات</label>
+            <textarea name="description" maxlength={3000} style="min-height:140px">{v.description ?? ""}</textarea>
+            <label>لینک ویدیو (پست اینستاگرام، کانال تلگرام یا بله)</label>
+            <input name="video_url" value={v.video_url ?? ""} class="ltr" placeholder="https://instagram.com/p/... یا https://t.me/channel/123" maxlength={300} />
+            <label class="row" style="color:var(--text)">
+              <input type="checkbox" name="is_active" value="1" style="width:auto" checked={v.is_active !== "0"} /> فعال (نمایش در سایت)
+            </label>
+          </div>
+          <div>
+            <label style="margin-top:0">عکس‌ها (تا ۸ عکس، هر کدام حداکثر ۳ مگابایت؛ اولی عکس اصلی است)</label>
+            {!!props.images?.length && (
+              <div class="row" style="margin-bottom:8px">
+                {props.images.map((img) => (
+                  <label style="text-align:center;margin:0">
+                    <img src={`/img/${img.image_key}`} alt="" style="width:84px;height:84px;object-fit:cover;border-radius:8px;display:block" />
+                    <input type="checkbox" name="delete_image" value={String(img.id)} style="width:auto" /> حذف
+                  </label>
+                ))}
+              </div>
+            )}
+            <input type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple />
+          </div>
         </div>
-        <div>
-          <label style="margin-top:0">تصویر (JPG/PNG/WebP، حداکثر ۲ مگابایت)</label>
-          {p && <div style="max-width:220px;margin-bottom:8px"><Thumb imageKey={p.image_key} alt={p.title} /></div>}
-          <input type="file" name="image" accept="image/jpeg,image/png,image/webp" />
-          <p style="margin-top:24px"><button>{p ? "ذخیره" : "ثبت محصول"}</button></p>
+        <div class="card">
+          <h2>بسته‌بندی‌های کادویی</h2>
+          <p class="muted small" style="margin-top:0">
+            خریدار کادو یکی از این‌ها را انتخاب می‌کند و قیمتش به مبلغ اضافه می‌شود (قیمت ۰ = رایگان). برای حذف، نام را خالی کنید. اگر
+            هیچ بسته‌بندی تعریف نکنید، انتخاب بسته‌بندی نمایش داده نمی‌شود.
+          </p>
+          {pkgs.map((k, n) => (
+            <div class="row" style="margin-bottom:6px">
+              <input type="hidden" name={`pkg_id_${n}`} value={k.id ? String(k.id) : ""} />
+              <input name={`pkg_name_${n}`} value={k.name} placeholder="مثلاً: جعبه کادو با روبان" maxlength={60} style="flex:2;min-width:180px" />
+              <input name={`pkg_price_${n}`} value={k.id ? String(k.price) : ""} placeholder="قیمت (تومان)" class="ltr" inputmode="numeric" style="flex:1;min-width:120px" />
+            </div>
+          ))}
         </div>
+        <p><button>{p ? "ذخیره" : "ثبت محصول"}</button></p>
       </form>
     </Layout>
   );
 }
 
-type BotInfo = { on: boolean; username: string };
-
-export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: BotInfo; telegram: BotInfo }; error?: string; ok?: string }) {
+export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok?: string }) {
   const s = props.shop;
+  const u = props.user;
   return (
     <Layout title="تنظیمات" user={props.user}>
       <ShopHeader shop={s} />
@@ -242,24 +294,13 @@ export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: BotI
       <Errors errors={[props.error]} />
       {props.ok && <div class="okbox">{props.ok}</div>}
       <form method="post" action="/panel/settings" class="card">
-        <h2>اطلاع‌رسانی سفارش جدید</h2>
+        <h2>اطلاع‌رسانی</h2>
         <p class="muted small" style="margin-top:0">
-          به بات سایت پیام <code>/start</code> بدهید؛ بات «شناسه چت» شما را جواب می‌دهد. آن را اینجا وارد کنید.
-          {props.bots.bale.username && <> بات بله: <a class="dt" href={`https://ble.ir/${props.bots.bale.username}`}>@{props.bots.bale.username}</a></>}
-          {props.bots.telegram.username && <> · بات تلگرام: <a class="dt" href={`https://t.me/${props.bots.telegram.username}`}>@{props.bots.telegram.username}</a></>}
+          فیش‌های واریز (با دکمه تأیید و رد) و سفارش‌ها به بات‌هایی که حسابتان به آن وصل است ارسال می‌شود:{" "}
+          {u.bale_chat_id && <span class="tag ok">بله ✓</span>} {u.telegram_chat_id && <span class="tag ok">تلگرام ✓</span>}
         </p>
-        <div class="two">
-          <div>
-            <label>شناسه چت بله {!props.bots.bale.on && <span class="tag">بات بله روی سایت فعال نیست</span>}</label>
-            <input name="bale_chat_id" value={s.bale_chat_id} class="ltr" maxlength={40} />
-          </div>
-          <div>
-            <label>شناسه چت تلگرام {!props.bots.telegram.on && <span class="tag">بات تلگرام روی سایت فعال نیست</span>}</label>
-            <input name="telegram_chat_id" value={s.telegram_chat_id} class="ltr" maxlength={40} />
-          </div>
-        </div>
+
         <h2 style="margin-top:20px">دریافت پول (کارت به کارت)</h2>
-        <p class="muted small" style="margin-top:0">خریداران مبلغ را مستقیم به این کارت واریز می‌کنند و شما واریز را در پنل تأیید می‌کنید.</p>
         <div class="two">
           <div>
             <label>شماره کارت</label>
@@ -270,6 +311,35 @@ export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: BotI
             <input name="card_holder" value={s.card_holder} maxlength={80} />
           </div>
         </div>
+
+        <h2 style="margin-top:20px">شهر و ارسال</h2>
+        <label>شهر فروشگاه</label>
+        <CityInput value={s.city} />
+        <div class="two">
+          <div>
+            <label class="row" style="color:var(--text)">
+              <input type="checkbox" name="courier_enabled" value="1" style="width:auto" checked={!!s.courier_enabled} /> ارسال با پیک (فقط داخل شهر خودتان)
+            </label>
+            <label>هزینه پیک (تومان)</label>
+            <input name="courier_fee" value={String(s.courier_fee)} class="ltr" inputmode="numeric" />
+          </div>
+          <div>
+            <label class="row" style="color:var(--text)">
+              <input type="checkbox" name="post_enabled" value="1" style="width:auto" checked={!!s.post_enabled} /> ارسال با پست (همه شهرها، از جمله شهر خودتان)
+            </label>
+            <label>هزینه پست (تومان)</label>
+            <input name="post_fee" value={String(s.post_fee)} class="ltr" inputmode="numeric" />
+          </div>
+        </div>
+
+        <h2 style="margin-top:20px">شبکه‌های اجتماعی (در صفحه فروشگاه نمایش داده می‌شود)</h2>
+        <div class="two">
+          <div><label>اینستاگرام (آیدی یا لینک)</label><input name="instagram" value={s.instagram} class="ltr" placeholder="@myshop" /></div>
+          <div><label>کانال تلگرام</label><input name="telegram" value={s.telegram} class="ltr" placeholder="@mychannel" /></div>
+          <div><label>کانال بله</label><input name="bale" value={s.bale} class="ltr" placeholder="@mychannel" /></div>
+          <div><label>وب‌سایت</label><input name="website" value={s.website} class="ltr" placeholder="https://..." /></div>
+        </div>
+
         <h2 style="margin-top:20px">اطلاعات فروشگاه</h2>
         <label>نام</label>
         <input name="name" value={s.name} required maxlength={80} />
@@ -279,7 +349,7 @@ export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: BotI
         <textarea name="description" maxlength={1000}>{s.description}</textarea>
         <p class="row">
           <button>ذخیره</button>
-          <button class="secondary" formaction="/panel/settings/test">ارسال پیام آزمایشی</button>
+          <button class="secondary" formaction="/panel/settings/test">ارسال پیام آزمایشی به بات</button>
         </p>
       </form>
     </Layout>

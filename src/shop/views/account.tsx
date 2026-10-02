@@ -1,4 +1,5 @@
 import { formatJalali } from "../../../lib/jalali";
+import { CITIES } from "../cities";
 import { STATUS_LABEL, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
@@ -95,6 +96,36 @@ export function CodeLoginPage(props: {
   );
 }
 
+export function ConnectPage(props: { user: User; next: string; links: { kind: string; url: string }[] }) {
+  const label: Record<string, string> = { bale: "اتصال با بله", telegram: "اتصال با تلگرام" };
+  const script = `
+    (function poll(){
+      fetch('/connect/status',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
+        if(d.connected){location.href=${JSON.stringify(props.next)};}else{setTimeout(poll,3000);}
+      }).catch(()=>setTimeout(poll,5000));
+    })();`;
+  return (
+    <Layout title="اتصال به بات" user={props.user}>
+      <div class="card" style="max-width:480px;margin:40px auto;text-align:center">
+        <div style="font-size:44px">🤖</div>
+        <h1>یک قدم مانده: اتصال به بات</h1>
+        <p>
+          سفارش‌ها، فیش‌های واریز و همه اطلاع‌رسانی‌ها از طریق بات برایتان ارسال می‌شود. یکی از دکمه‌های زیر را بزنید و در بات
+          «شروع» (Start) را بزنید.
+        </p>
+        <div class="row" style="justify-content:center;margin:18px 0">
+          {props.links.map((l) => (
+            <a class="btn" href={l.url} target="_blank" rel="noopener">{label[l.kind] ?? l.kind}</a>
+          ))}
+        </div>
+        <p class="muted small">بعد از زدن «شروع» در بات، این صفحه خودکار ادامه می‌دهد. <a href={`/connect?next=${encodeURIComponent(props.next)}`}>بررسی دوباره</a></p>
+        <form method="post" action="/logout" style="margin-top:20px"><button class="secondary small">خروج از حساب</button></form>
+      </div>
+      <script dangerouslySetInnerHTML={{ __html: script }} />
+    </Layout>
+  );
+}
+
 export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items: number })[]; siteUrl: string }) {
   return (
     <Layout title="لیست‌های آرزوی من" user={props.user}>
@@ -175,6 +206,9 @@ export function WishlistFormPage(props: {
             <input name="recipient_phone" value={v.recipient_phone ?? ""} class="ltr" inputmode="tel" required />
             <label>آدرس کامل</label>
             <textarea name="address" required maxlength={400}>{v.address ?? ""}</textarea>
+            <label>شهر گیرنده</label>
+            <input name="city" value={v.city ?? ""} list="cities" required maxlength={40} placeholder="مثلاً تهران" autocomplete="off" />
+            <datalist id="cities">{CITIES.map((c) => <option value={c} />)}</datalist>
             <label>کد پستی</label>
             <input name="postal_code" value={v.postal_code ?? ""} class="ltr" inputmode="numeric" required />
           </div>

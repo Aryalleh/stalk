@@ -3,7 +3,8 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession, hashPassword, verifyPassword } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
+import { normCity, now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
+import { upsertCustomer } from "../../crm/sync";
 import type { C, Env } from "../../env";
 import { SESSION_COOKIE } from "../../session";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
@@ -43,6 +44,7 @@ account.post("/register", async (c) => {
     .bind(phone, f.name, await hashPassword(f.password), now())
     .first<{ id: number }>();
   if (!row) return fail(["این شماره قبلاً ثبت‌نام کرده است. وارد شوید."]);
+  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "ثبت‌نام در سایت" }));
   return startSession(c, row.id, f.next);
 });
 
@@ -98,6 +100,7 @@ account.post("/login/code/verify", async (c) => {
     .bind(phone, f.name.slice(0, 80), now())
     .first<{ id: number }>();
   const id = row?.id ?? (await userByPhone(c, phone))!.id;
+  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "ثبت‌نام در سایت (کد بله)" }));
   return startSession(c, id, next);
 });
 
@@ -129,6 +132,7 @@ account.post("/setup", async (c) => {
     .bind(phone, f.name, await hashPassword(f.password), now())
     .first<{ id: number }>();
   if (!row) return render(c, <SetupPage error="این شماره قبلاً در سایت حساب دارد؛ شماره دیگری وارد کنید." values={f} />, 400);
+  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "مدیر سایت" }));
   return startSession(c, row.id, "/admin/settings");
 });
 
@@ -154,6 +158,7 @@ function cleanWishlist(f: Record<string, string>) {
     recipient_phone: normalizePhone(f.recipient_phone ?? ""),
     address: f.address ?? "",
     postal_code: normalizeDigits(f.postal_code ?? ""),
+    city: normCity(f.city ?? ""),
     is_open: f.is_open === "1" ? "1" : "0",
   };
   const errors: string[] = [];
@@ -161,6 +166,7 @@ function cleanWishlist(f: Record<string, string>) {
   if (!values.recipient_name || !values.address) errors.push("نام گیرنده و آدرس برای ارسال لازم است.");
   if (!MOBILE.test(values.recipient_phone)) errors.push("موبایل گیرنده نامعتبر است.");
   if (!/^\d{10}$/.test(values.postal_code)) errors.push("کد پستی باید ۱۰ رقم باشد.");
+  if (!values.city) errors.push("شهر گیرنده را انتخاب کنید.");
   return { values, errors };
 }
 
@@ -184,7 +190,7 @@ account.get("/me/wishlists/new", async (c) => {
   // Prefill delivery details from the user's latest list.
   const last = await c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY id DESC LIMIT 1").bind(user.id).first<Wishlist>();
   const values: Record<string, string> = last
-    ? { recipient_name: last.recipient_name, recipient_phone: last.recipient_phone, address: last.address, postal_code: last.postal_code }
+    ? { recipient_name: last.recipient_name, recipient_phone: last.recipient_phone, address: last.address, postal_code: last.postal_code, city: last.city }
     : { recipient_name: user.name, recipient_phone: user.phone };
   return render(c, <WishlistFormPage user={user} wishlist={null} values={values} productId={c.req.query("product")} siteUrl={siteUrl(c)} />);
 });
@@ -195,10 +201,10 @@ account.post("/me/wishlists/new", async (c) => {
   const { values, errors } = cleanWishlist({ ...f, is_open: "1" });
   if (errors.length) return render(c, <WishlistFormPage user={user} wishlist={null} values={values} errors={errors} productId={f.product} siteUrl={siteUrl(c)} />, 400);
   const row = await c.env.DB.prepare(
-    `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(user.id, randomSlug(), values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, now())
+    .bind(user.id, randomSlug(), values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, now())
     .first<{ id: number }>();
   if (f.product) await addItem(c.env.DB, row!.id, Number(f.product));
   return c.redirect(`/me/wishlists/${row!.id}?saved=1`);
@@ -228,9 +234,9 @@ account.post("/me/wishlists/:id{[0-9]+}", async (c) => {
   }
   await c.env.DB.prepare(
     `UPDATE wishlists SET title = ?, description = ?, occasion_date = ?, recipient_name = ?, recipient_phone = ?,
-       address = ?, postal_code = ?, is_open = ? WHERE id = ?`,
+       address = ?, postal_code = ?, city = ?, is_open = ? WHERE id = ?`,
   )
-    .bind(values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, Number(values.is_open), w.id)
+    .bind(values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, Number(values.is_open), w.id)
     .run();
   return c.redirect(`/me/wishlists/${w.id}?saved=1`);
 });

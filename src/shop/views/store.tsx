@@ -1,6 +1,19 @@
 import { formatJalali } from "../../../lib/jalali";
 import { formatCard } from "../../../lib/normalize";
-import { STATUS_LABEL, toman, type ItemView, type Order, type ProductWithShop, type Shop, type Wishlist } from "../db";
+import {
+  STATUS_LABEL,
+  deliveryOptions,
+  toman,
+  type DeliveryMethod,
+  type ItemView,
+  type Order,
+  type ProductImage,
+  type ProductPackage,
+  type ProductWithShop,
+  type Shop,
+  type Wishlist,
+} from "../db";
+import { DELIVERY_LABEL } from "../notify";
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
@@ -52,10 +65,44 @@ export function HomePage(props: { user: User | null; q: string; products: Produc
   );
 }
 
+/** Turn a pasted Instagram / Telegram / Bale link into a label for the video button. */
+function videoLabel(url: string) {
+  if (/instagram\.com/i.test(url)) return "▶ ویدیو در اینستاگرام";
+  if (/(t\.me|telegram\.me)/i.test(url)) return "▶ ویدیو در تلگرام";
+  if (/ble\.ir/i.test(url)) return "▶ ویدیو در بله";
+  return "▶ مشاهده ویدیو";
+}
+
+function Gallery(props: { images: ProductImage[]; title: string }) {
+  if (!props.images.length) return <Thumb imageKey="" alt={props.title} />;
+  return (
+    <div>
+      <div class="thumb" style="border-radius:12px">
+        <img id="gallery-main" src={`/img/${props.images[0].image_key}`} alt={props.title} />
+      </div>
+      {props.images.length > 1 && (
+        <div class="row" style="margin-top:8px">
+          {props.images.map((img) => (
+            <img
+              src={`/img/${img.image_key}`}
+              alt=""
+              loading="lazy"
+              style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--line)"
+              onclick="document.getElementById('gallery-main').src=this.src"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProductPage(props: {
   user: User | null;
   product: ProductWithShop;
   wishlists: Wishlist[];
+  images: ProductImage[];
+  packages: ProductPackage[];
   added?: string;
   error?: string;
 }) {
@@ -63,14 +110,26 @@ export function ProductPage(props: {
   return (
     <Layout title={p.title} user={props.user}>
       <div class="card two">
-        <Thumb imageKey={p.image_key} alt={p.title} />
+        <Gallery images={props.images} title={p.title} />
         <div>
           <h1>{p.title}</h1>
           <div class="price" style="font-size:20px">{toman(p.price)}</div>
           <p>
             فروشگاه: <a href={`/s/${p.shop_slug}`}>{p.shop_name}</a>
           </p>
+          {p.video_url && (
+            <p><a class="btn secondary" href={p.video_url} target="_blank" rel="noopener nofollow">{videoLabel(p.video_url)}</a></p>
+          )}
           <p style="white-space:pre-wrap">{p.description}</p>
+          {props.packages.length > 0 && (
+            <div class="card" style="background:var(--bg)">
+              <b>بسته‌بندی‌های کادویی</b>
+              {props.packages.map((k) => (
+                <div class="row small"><span>{k.name}</span><span class="sp" /><span>{k.price ? toman(k.price) : "رایگان"}</span></div>
+              ))}
+              <div class="muted small">خریدار کادو هنگام خرید بسته‌بندی را انتخاب می‌کند.</div>
+            </div>
+          )}
           {props.added && <div class="okbox">به لیست «{props.added}» اضافه شد. <a href="/me/wishlists">مشاهده لیست‌ها</a></div>}
           <Errors errors={[props.error]} />
           {!props.user ? (
@@ -97,12 +156,31 @@ export function ProductPage(props: {
   );
 }
 
-export function ShopPage(props: { user: User | null; shop: Shop; products: ProductWithShop[] }) {
+const SOCIALS: [keyof Shop, string, (v: string) => string][] = [
+  ["instagram", "اینستاگرام", (v) => (v.startsWith("http") ? v : `https://instagram.com/${v.replace(/^@/, "")}`)],
+  ["telegram", "تلگرام", (v) => (v.startsWith("http") ? v : `https://t.me/${v.replace(/^@/, "")}`)],
+  ["bale", "بله", (v) => (v.startsWith("http") ? v : `https://ble.ir/${v.replace(/^@/, "")}`)],
+  ["website", "وب‌سایت", (v) => (v.startsWith("http") ? v : `https://${v}`)],
+];
+
+export function ShopPage(props: { user: User | null; shop: Shop; products: ProductWithShop[]; preview?: boolean }) {
+  const shop = props.shop;
   return (
-    <Layout title={props.shop.name} user={props.user}>
+    <Layout title={shop.name} user={props.user}>
+      {props.preview && (
+        <div class="warnbox">
+          پیش‌نمایش: این فروشگاه هنوز تأیید نشده و فقط شما (و مدیر سایت) این صفحه را می‌بینید.
+        </div>
+      )}
       <div class="card">
-        <h1>{props.shop.name}</h1>
-        <p class="muted" style="white-space:pre-wrap;margin:0">{props.shop.description}</p>
+        <h1>{shop.name}</h1>
+        {shop.city && <p class="muted" style="margin:0">📍 {shop.city}</p>}
+        <p class="muted" style="white-space:pre-wrap">{shop.description}</p>
+        <div class="row">
+          {SOCIALS.filter(([k]) => shop[k]).map(([k, label, url]) => (
+            <a class="btn secondary small" href={url(String(shop[k]))} target="_blank" rel="noopener nofollow">{label}</a>
+          ))}
+        </div>
       </div>
       <ProductGrid products={props.products} />
     </Layout>
@@ -154,7 +232,11 @@ export function WishlistPublicPage(props: {
         {props.items.map((it) => {
           const done = it.bought >= it.quantity;
           const free = it.quantity - it.bought - it.reserved;
-          const buyable = w.is_open && it.product_active && it.shop_ok && free > 0;
+          const ships = deliveryOptions(
+            { city: it.shop_city, courier_enabled: it.courier_enabled, courier_fee: it.courier_fee, post_enabled: it.post_enabled, post_fee: it.post_fee },
+            w.city,
+          ).length > 0;
+          const buyable = w.is_open && it.product_active && it.shop_ok && ships && free > 0;
           return (
             <div class="item">
               <Thumb imageKey={it.image_key} alt={it.title} />
@@ -171,6 +253,8 @@ export function WishlistPublicPage(props: {
                   <a class="btn" href={`/gift/${it.id}`}>🎁 این را می‌خرم</a>
                 ) : it.reserved > 0 && free <= 0 ? (
                   <span class="tag">در حال خرید توسط شخص دیگر</span>
+                ) : !ships && it.shop_ok ? (
+                  <span class="tag">فروشگاه به شهر گیرنده ارسال ندارد</span>
                 ) : (
                   <span class="tag">فعلاً موجود نیست</span>
                 )}
@@ -188,11 +272,27 @@ export function CheckoutPage(props: {
   item: ItemView;
   wishlist: Wishlist;
   ownerName: string;
+  packages: ProductPackage[];
+  delivery: { method: DeliveryMethod; fee: number }[];
   values?: Record<string, string>;
   errors?: string[];
 }) {
   const v = props.values ?? {};
   const it = props.item;
+  const pkgDefault = v.package ?? (props.packages[0] ? String(props.packages[0].id) : "");
+  const shipDefault = v.delivery ?? props.delivery[0]?.method ?? "";
+  // Live total as the giver picks options (server recomputes the real amount).
+  const script = `
+    (function(){
+      var f=document.getElementById('checkout'); if(!f) return;
+      function upd(){
+        var t=${it.price};
+        var p=f.querySelector('input[name=package]:checked'); if(p) t+=Number(p.dataset.price);
+        var d=f.querySelector('input[name=delivery]:checked'); if(d) t+=Number(d.dataset.price);
+        document.getElementById('total').textContent=t.toLocaleString('fa-IR')+' تومان';
+      }
+      f.addEventListener('change',upd); upd();
+    })();`;
   return (
     <Layout title="خرید کادو" user={props.user}>
       <div class="card two">
@@ -207,13 +307,34 @@ export function CheckoutPage(props: {
             </div>
           </div>
           <p class="muted small">
-            پرداخت کارت به کارت مستقیم به حساب فروشگاه است. در مرحله بعد شماره کارت را می‌بینید و این آرزو چند دقیقه برای شما رزرو
-            می‌شود. فروشگاه بعد از تأیید واریز، کادو را مستقیم به آدرس گیرنده می‌فرستد؛ آدرس گیرنده محرمانه است و به شما نمایش داده
-            نمی‌شود.
+            پرداخت کارت به کارت مستقیم به حساب فروشگاه است. در مرحله بعد شماره کارت را می‌بینید، مبلغ را واریز می‌کنید و فقط عکس فیش را
+            می‌فرستید. فروشگاه بعد از تأیید، کادو را مستقیم به آدرس گیرنده می‌فرستد؛ آدرس گیرنده محرمانه است و به شما نمایش داده نمی‌شود.
           </p>
         </div>
-        <form method="post" action={`/gift/${it.id}`}>
+        <form method="post" action={`/gift/${it.id}`} id="checkout">
           <Errors errors={props.errors} />
+          {props.packages.length > 0 && (
+            <>
+              <label>بسته‌بندی کادو</label>
+              {props.packages.map((k) => (
+                <label class="row" style="color:var(--text);margin:4px 0">
+                  <input type="radio" name="package" value={String(k.id)} data-price={String(k.price)} style="width:auto" checked={pkgDefault === String(k.id)} />
+                  {k.name} — {k.price ? toman(k.price) : "رایگان"}
+                </label>
+              ))}
+            </>
+          )}
+          <label>روش ارسال</label>
+          {props.delivery.length === 0 ? (
+            <div class="errbox">این فروشگاه به شهر گیرنده ارسال ندارد.</div>
+          ) : (
+            props.delivery.map((d) => (
+              <label class="row" style="color:var(--text);margin:4px 0">
+                <input type="radio" name="delivery" value={d.method} data-price={String(d.fee)} style="width:auto" checked={shipDefault === d.method} />
+                {DELIVERY_LABEL[d.method]} — {d.fee ? toman(d.fee) : "رایگان"}
+              </label>
+            ))
+          )}
           <label>نام شما</label>
           <input name="name" value={v.name ?? props.user?.name ?? ""} required maxlength={80} />
           <label>شماره موبایل شما</label>
@@ -223,9 +344,11 @@ export function CheckoutPage(props: {
           <label class="row" style="color:var(--text)">
             <input type="checkbox" name="anonymous" value="1" style="width:auto" checked={v.anonymous === "1"} /> نامم به گیرنده نمایش داده نشود
           </label>
-          <p><button>ادامه و دریافت شماره کارت</button></p>
+          <p>جمع قابل پرداخت: <b class="price" id="total">{toman(it.price)}</b></p>
+          <p><button disabled={props.delivery.length === 0}>ادامه و دریافت شماره کارت</button></p>
         </form>
       </div>
+      <script dangerouslySetInnerHTML={{ __html: script }} />
     </Layout>
   );
 }
@@ -234,10 +357,8 @@ export function OrderPage(props: {
   user: User | null;
   order: Order & { wishlist_slug: string; owner_name: string; card_holder: string; shop_name: string };
   errors?: string[];
-  values?: Record<string, string>;
 }) {
   const o = props.order;
-  const v = props.values ?? {};
   const expired = o.status === "pending" && o.expires_at <= new Date().toISOString();
   const back = <a class="btn secondary" href={`/w/${o.wishlist_slug}`}>بازگشت به لیست آرزو</a>;
   return (
@@ -253,12 +374,17 @@ export function OrderPage(props: {
           <>
             {expired && (
               <div class="warnbox">
-                زمان رزرو تمام شده. اگر هنوز واریز نکرده‌اید، ممکن است شخص دیگری این آرزو را بخرد؛ اگر واریز کرده‌اید، مشخصاتش را وارد کنید.
+                زمان رزرو تمام شده. اگر هنوز واریز نکرده‌اید، ممکن است شخص دیگری این آرزو را بخرد؛ اگر واریز کرده‌اید، عکس فیش را بفرستید.
               </div>
             )}
             <div class="card" style="background:var(--bg)">
               <h2>۱. مبلغ را کارت به کارت کنید</h2>
               <p>مبلغ: <b class="price" style="font-size:20px">{toman(o.amount)}</b></p>
+              <p class="small muted" style="margin-top:0">
+                {toman(o.item_price)} محصول
+                {o.package_name && <> + {toman(o.package_price)} بسته‌بندی ({o.package_name})</>}
+                {o.delivery_method && <> + {toman(o.delivery_fee)} ارسال با {DELIVERY_LABEL[o.delivery_method]}</>}
+              </p>
               <p>
                 به کارت:
                 <br />
@@ -268,26 +394,18 @@ export function OrderPage(props: {
               </p>
               {!expired && <p class="small muted">این آرزو تا <span class="dt">{formatJalali(o.expires_at)}</span> برای شما رزرو است.</p>}
             </div>
-            <form method="post" action={`/order/${o.token}/transfer`} enctype="multipart/form-data">
-              <h2>۲. مشخصات واریز را وارد کنید</h2>
+            <form method="post" action={`/order/${o.token}/receipt`} enctype="multipart/form-data">
+              <h2>۲. عکس فیش واریز را بفرستید</h2>
               <Errors errors={props.errors} />
-              <label>شماره پیگیری</label>
-              <input name="ref" value={v.ref ?? ""} class="ltr" inputmode="numeric" required />
-              <label>۴ رقم آخر کارتی که از آن واریز کردید</label>
-              <input name="last4" value={v.last4 ?? ""} class="ltr" inputmode="numeric" maxlength={4} required style="max-width:140px" />
-              <label>زمان واریز (اختیاری)</label>
-              <input name="at" value={v.at ?? ""} placeholder="مثلاً ۱۴:۳۰" maxlength={40} style="max-width:240px" />
-              <label>عکس رسید (اختیاری)</label>
-              <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp" />
-              <p><button>ثبت واریز</button></p>
+              <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp" required />
+              <p><button>ارسال فیش</button></p>
             </form>
           </>
         )}
 
         {o.status === "awaiting" && (
           <div class="okbox">
-            واریز شما ثبت شد و برای فروشگاه ارسال شد. بعد از اینکه فروشگاه دریافت مبلغ را تأیید کند، کادو برای {o.owner_name} ارسال می‌شود.
-            <div class="small">شماره پیگیری: <span class="dt">{o.transfer_ref}</span></div>
+            فیش شما برای فروشگاه ارسال شد. بعد از اینکه فروشگاه دریافت مبلغ را تأیید کند، کادو برای {o.owner_name} ارسال می‌شود.
           </div>
         )}
 

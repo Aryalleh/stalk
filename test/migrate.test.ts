@@ -17,7 +17,7 @@ describe("migrations", () => {
       const sql = readFileSync(`migrations/${f}`, "utf8");
       const stmts = statements(sql);
       expect(stmts.length).toBeGreaterThan(0);
-      for (const s of stmts) expect(s).toMatch(/^(CREATE|INSERT)\b/);
+      for (const s of stmts) expect(s).toMatch(/^(CREATE|INSERT|ALTER|UPDATE)\b/);
     }
   });
 });

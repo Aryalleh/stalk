@@ -22,6 +22,15 @@ export interface Shop {
   status: "pending" | "approved" | "suspended";
   card_number: string;
   card_holder: string;
+  city: string;
+  courier_enabled: number;
+  courier_fee: number;
+  post_enabled: number;
+  post_fee: number;
+  instagram: string;
+  telegram: string;
+  bale: string;
+  website: string;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;
@@ -33,7 +42,8 @@ export interface Product {
   title: string;
   description: string;
   price: number;
-  image_key: string;
+  image_key: string; // cover (first photo)
+  video_url: string;
   is_active: number;
   created_at: string;
 }
@@ -50,6 +60,7 @@ export interface Wishlist {
   recipient_phone: string;
   address: string;
   postal_code: string;
+  city: string;
   is_open: number;
   created_at: string;
 }
@@ -68,6 +79,11 @@ export type ItemView = {
   shop_name: string;
   shop_slug: string;
   shop_ok: number; // approved and has a card number to receive transfers
+  shop_city: string;
+  courier_enabled: number;
+  courier_fee: number;
+  post_enabled: number;
+  post_fee: number;
   bought: number;
   reserved: number; // live holds + transfers waiting for the shop to confirm
 };
@@ -113,6 +129,7 @@ export async function wishlistItems(db: D1Database, wishlistId: number): Promise
       `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note,
               p.title, p.price, p.image_key, p.is_active AS product_active,
               s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '') AS shop_ok,
+              s.city AS shop_city, s.courier_enabled, s.courier_fee, s.post_enabled, s.post_fee,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved
        FROM wishlist_items i JOIN products p ON p.id = i.product_id JOIN shops s ON s.id = p.shop_id
@@ -130,28 +147,76 @@ export interface GiverInput {
   anonymous: boolean;
 }
 
+export interface Pricing {
+  packageName: string;
+  packagePrice: number;
+  method: DeliveryMethod;
+  fee: number;
+}
+
 /**
  * Atomically create a pending order holding one unit of the item, only if a unit is still free
  * (quantity > bought + reported + live holds). Returns null when the item is taken or not buyable.
+ * The total is the product's current price + package + delivery fee.
  */
-export async function reserveItem(db: D1Database, itemId: number, giver: GiverInput, holdMinutes: number) {
+export async function reserveItem(db: D1Database, itemId: number, giver: GiverInput, holdMinutes: number, pricing: Pricing) {
   const t = now();
   const expires = new Date(Date.now() + holdMinutes * 60_000).toISOString();
   return db
     .prepare(
-      `INSERT INTO orders (token, item_id, wishlist_id, product_id, shop_id, product_title, amount, giver_name, giver_phone,
-                           gift_message, is_anonymous, status, expires_at, pay_card_number, created_at)
-       SELECT ?8, i.id, i.wishlist_id, p.id, p.shop_id, p.title, p.price, ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, ?7
+      `INSERT INTO orders (token, item_id, wishlist_id, product_id, shop_id, product_title, item_price, package_name, package_price,
+                           delivery_method, delivery_fee, amount, giver_name, giver_phone, gift_message, is_anonymous,
+                           status, expires_at, pay_card_number, created_at)
+       SELECT ?8, i.id, i.wishlist_id, p.id, p.shop_id, p.title, p.price, ?9, ?10, ?11, ?12, p.price + ?10 + ?12,
+              ?2, ?3, ?4, ?5, 'pending', ?6, s.card_number, ?7
        FROM wishlist_items i
        JOIN wishlists w ON w.id = i.wishlist_id
        JOIN products p ON p.id = i.product_id
        JOIN shops s ON s.id = p.shop_id
        WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND s.status = 'approved' AND s.card_number <> ''
          AND i.quantity > (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?7")})
-       RETURNING id, token`,
+       RETURNING id, token, amount`,
     )
-    .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t, randomSlug(24))
-    .first<{ id: number; token: string }>();
+    .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t, randomSlug(24),
+      pricing.packageName, pricing.packagePrice, pricing.method, pricing.fee)
+    .first<{ id: number; token: string; amount: number }>();
+}
+
+// ---------- delivery ----------
+
+export type DeliveryMethod = "courier" | "post";
+
+/** Normalize a city name so "شیراز" typed with Arabic ي/ك or extra spaces still matches. */
+export const normCity = (c: string) => (c ?? "").replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/\s+/g, " ").trim();
+
+/** Delivery methods a shop offers to a recipient city: courier only in the shop's own city, post anywhere. */
+export function deliveryOptions(
+  shop: { city: string; courier_enabled: number; courier_fee: number; post_enabled: number; post_fee: number },
+  recipientCity: string,
+) {
+  const out: { method: DeliveryMethod; fee: number }[] = [];
+  const sameCity = !!shop.city && normCity(shop.city) === normCity(recipientCity);
+  if (shop.courier_enabled && sameCity) out.push({ method: "courier", fee: shop.courier_fee });
+  if (shop.post_enabled) out.push({ method: "post", fee: shop.post_fee });
+  return out;
+}
+
+export interface ProductImage {
+  id: number;
+  image_key: string;
+}
+export interface ProductPackage {
+  id: number;
+  name: string;
+  price: number;
+}
+
+export async function productImages(db: D1Database, productId: number) {
+  return (await db.prepare("SELECT id, image_key FROM product_images WHERE product_id = ? ORDER BY sort, id").bind(productId).all<ProductImage>()).results;
+}
+
+export async function productPackages(db: D1Database, productId: number) {
+  return (await db.prepare("SELECT id, name, price FROM product_packages WHERE product_id = ? ORDER BY sort, id").bind(productId).all<ProductPackage>()).results;
 }
 
 export type OrderStatus = "pending" | "awaiting" | "paid" | "shipped" | "delivered" | "rejected";
@@ -172,6 +237,12 @@ export interface Order {
   status: OrderStatus;
   expires_at: string;
   pay_card_number: string;
+  item_price: number;
+  package_name: string;
+  package_price: number;
+  delivery_method: string;
+  delivery_fee: number;
+  ship_city: string;
   transfer_ref: string;
   transfer_card_last4: string;
   transfer_at: string;
@@ -190,25 +261,14 @@ export interface Order {
   shipped_at: string | null;
 }
 
-export interface TransferReport {
-  ref: string;
-  last4: string;
-  at: string;
-  receiptKey: string;
-}
-
 /**
- * Giver says they transferred the money. Accepted even after the hold lapsed, since the money may
+ * Giver uploaded the transfer receipt. Accepted even after the hold lapsed, since the money may
  * already have moved; the shop decides when confirming. Returns false if already reported.
  */
-export async function reportTransfer(db: D1Database, orderId: number, t: TransferReport) {
+export async function reportReceipt(db: D1Database, orderId: number, receiptKey: string) {
   const r = await db
-    .prepare(
-      `UPDATE orders SET status = 'awaiting', transfer_ref = ?2, transfer_card_last4 = ?3, transfer_at = ?4,
-         receipt_key = ?5, reported_at = ?6
-       WHERE id = ?1 AND status = 'pending'`,
-    )
-    .bind(orderId, t.ref, t.last4, t.at, t.receiptKey, now())
+    .prepare("UPDATE orders SET status = 'awaiting', receipt_key = ?2, reported_at = ?3 WHERE id = ?1 AND status = 'pending'")
+    .bind(orderId, receiptKey, now())
     .run();
   return r.meta.changes === 1;
 }
@@ -218,7 +278,7 @@ export async function confirmPayment(db: D1Database, orderId: number, shopId: nu
   const r = await db
     .prepare(
       `UPDATE orders SET status = 'paid', paid_at = ?3,
-         ship_name = w.recipient_name, ship_phone = w.recipient_phone,
+         ship_name = w.recipient_name, ship_phone = w.recipient_phone, ship_city = w.city,
          ship_address = w.address, ship_postal_code = w.postal_code
        FROM wishlists w
        WHERE orders.id = ?1 AND orders.shop_id = ?2 AND orders.status = 'awaiting' AND w.id = orders.wishlist_id`,

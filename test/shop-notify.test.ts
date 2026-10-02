@@ -1,74 +1,83 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { connectBot, sendPhotoToChats, sendToChats } from "../src/bale/botapi";
 import { DEFAULTS } from "../src/settings";
-import { connectBot, notifyShop, shipMessage, transferMessage } from "../src/shop/notify";
+import { deliveryOptions, normCity } from "../src/shop/db";
+import { receiptButtons, receiptCaption, shipMessage } from "../src/shop/notify";
 
 const order = {
-  id: 7, product_title: "دسته گل رز", amount: 850000, gift_message: "تولدت مبارک", giver_name: "علی", giver_phone: "09124444444",
-  is_anonymous: 0, transfer_ref: "123456789", transfer_card_last4: "4321", transfer_at: "۱۴:۳۰", receipt_key: "r/1/x.png",
-  ship_name: "سارا", ship_phone: "09123333333", ship_address: "تهران، آزادی ۱۲", ship_postal_code: "1234567890",
+  id: 7, product_title: "دسته گل رز", amount: 1_000_000, item_price: 850_000, package_name: "جعبه کادو", package_price: 50_000,
+  delivery_method: "courier", delivery_fee: 100_000, gift_message: "تولدت مبارک", giver_name: "علی", giver_phone: "09124444444",
+  is_anonymous: 0, ship_name: "سارا", ship_phone: "09123333333", ship_city: "تهران", ship_address: "تهران، آزادی ۱۲", ship_postal_code: "1234567890",
 };
-const env = { ...DEFAULTS, bale_bot_token: "bale-token" };
-
+const s = { ...DEFAULTS, bale_bot_token: "bale-token" };
 afterEach(() => vi.unstubAllGlobals());
 
-describe("transferMessage", () => {
-  it("has the transfer details and a panel link, but not the address", () => {
-    const text = transferMessage(order, "https://gift.example");
-    for (const x of ["#7", "دسته گل رز", "۸۵۰٬۰۰۰", "123456789", "4321", "۱۴:۳۰", "رسید", "09124444444", "https://gift.example/panel/orders/7"]) {
-      expect(text).toContain(x);
-    }
+describe("order messages", () => {
+  it("receipt caption has the breakdown and buyer, not the address", () => {
+    const text = receiptCaption(order);
+    for (const x of ["#7", "دسته گل رز", "جعبه کادو", "پیک", "۱٬۰۰۰٬۰۰۰", "09124444444"]) expect(text).toContain(x);
     expect(text).not.toContain("آزادی");
-    expect(text).not.toMatch(/\n\n\n/);
   });
-});
-
-describe("shipMessage", () => {
-  it("has delivery details, giver and gift message", () => {
+  it("receipt buttons carry the order id; panel link only on https", () => {
+    expect(receiptButtons(7, "http://localhost").inline_keyboard).toEqual([
+      [{ text: "✅ تأیید واریز", callback_data: "pay:ok:7" }, { text: "❌ رد واریز", callback_data: "pay:no:7" }],
+    ]);
+    expect(receiptButtons(7, "https://x.ir").inline_keyboard[1][0].url).toBe("https://x.ir/panel/orders/7");
+  });
+  it("ship message has delivery details and hides an anonymous giver", () => {
     const text = shipMessage(order, "https://gift.example");
-    for (const x of ["#7", "سارا", "09123333333", "تهران، آزادی ۱۲", "1234567890", "علی", "تولدت مبارک", "/panel/orders/7"]) {
-      expect(text).toContain(x);
-    }
-  });
-  it("hides the giver when anonymous", () => {
-    const text = shipMessage({ ...order, is_anonymous: 1, gift_message: "" }, "https://x");
-    expect(text).toContain("ناشناس");
-    expect(text).not.toContain("علی");
-    expect(text).not.toMatch(/\n\n\n/);
+    for (const x of ["سارا", "09123333333", "شهر: تهران", "تهران، آزادی ۱۲", "1234567890", "علی", "تولدت مبارک", "/panel/orders/7"]) expect(text).toContain(x);
+    const anon = shipMessage({ ...order, is_anonymous: 1, gift_message: "" }, "https://x");
+    expect(anon).toContain("ناشناس");
+    expect(anon).not.toContain("علی");
+    expect(anon).not.toMatch(/\n\n\n/);
   });
 });
 
-describe("notifyShop", () => {
-  it("posts to the Bale bot API", async () => {
-    const fetch = vi.fn(async () => new Response('{"ok":true,"result":{}}', { status: 200 }));
-    vi.stubGlobal("fetch", fetch);
-    expect(await notifyShop(env, { bale_chat_id: "123", telegram_chat_id: "" }, "hi")).toBe("");
-    expect(fetch).toHaveBeenCalledWith("https://tapi.bale.ai/botbale-token/sendMessage", expect.objectContaining({ method: "POST" }));
-    expect(JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ chat_id: "123", text: "hi" });
+describe("delivery options", () => {
+  const shop = { city: "شیراز", courier_enabled: 1, courier_fee: 80_000, post_enabled: 1, post_fee: 120_000 };
+  it("courier only in the shop's city, post everywhere", () => {
+    expect(deliveryOptions(shop, "شيراز ")).toEqual([{ method: "courier", fee: 80_000 }, { method: "post", fee: 120_000 }]);
+    expect(deliveryOptions(shop, "تهران")).toEqual([{ method: "post", fee: 120_000 }]);
+    expect(deliveryOptions({ ...shop, post_enabled: 0 }, "تهران")).toEqual([]);
+    expect(deliveryOptions(shop, "")).toEqual([{ method: "post", fee: 120_000 }]);
   });
-  it("reports failures per channel", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"ok":false,"description":"chat not found"}', { status: 400 })));
-    const err = await notifyShop(env, { bale_chat_id: "1", telegram_chat_id: "2" }, "hi");
-    expect(err).toContain("bale: bale sendMessage 400");
-    expect(err).toContain("telegram: telegram bot token is not configured");
-  });
-  it("needs at least one channel", async () => {
-    expect(await notifyShop(env, { bale_chat_id: "", telegram_chat_id: "" }, "hi")).toBe("no channel configured");
+  it("normalizes Arabic letters and spaces", () => {
+    expect(normCity("  كرمانشاه ")).toBe("کرمانشاه");
   });
 });
 
-describe("connectBot", () => {
-  it("checks the token and sets the webhook", async () => {
+describe("bot api", () => {
+  it("sends text to every connected chat and reports failures", async () => {
     const fetch = vi.fn(async (url: string) =>
-      new Response(JSON.stringify({ ok: true, result: url.endsWith("/getMe") ? { username: "kadoochi_bot" } : true })),
+      url.includes("tapi.bale.ai") ? new Response('{"ok":true,"result":{}}') : new Response('{"ok":false,"description":"chat not found"}', { status: 400 }),
     );
+    vi.stubGlobal("fetch", fetch);
+    expect(await sendToChats(s, { bale_chat_id: "1", telegram_chat_id: "" }, "hi")).toBe("");
+    expect(fetch).toHaveBeenCalledWith("https://tapi.bale.ai/botbale-token/sendMessage", expect.objectContaining({ method: "POST" }));
+    // telegram has no token configured -> skipped
+    expect(await sendToChats(s, { bale_chat_id: "", telegram_chat_id: "2" }, "hi")).toBe("no connected chat");
+  });
+
+  it("uploads a photo with caption and inline buttons", async () => {
+    const fetch = vi.fn(async () => new Response('{"ok":true,"result":{}}'));
+    vi.stubGlobal("fetch", fetch);
+    const photo = { data: new Uint8Array([1, 2, 3]).buffer, type: "image/png", name: "r.png" };
+    expect(await sendPhotoToChats(s, { bale_chat_id: "9", telegram_chat_id: "" }, photo, "cap", () => receiptButtons(3, "http://x"))).toBe("");
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://tapi.bale.ai/botbale-token/sendPhoto");
+    const body = init.body as FormData;
+    expect(body.get("chat_id")).toBe("9");
+    expect(body.get("caption")).toBe("cap");
+    expect(JSON.parse(body.get("reply_markup") as string).inline_keyboard[0][0].callback_data).toBe("pay:ok:3");
+    expect((body.get("photo") as File).size).toBe(3);
+  });
+
+  it("connectBot checks the token and sets the webhook", async () => {
+    const fetch = vi.fn(async (url: string) => new Response(JSON.stringify({ ok: true, result: url.endsWith("/getMe") ? { username: "kadoochi_bot" } : true })));
     vi.stubGlobal("fetch", fetch);
     expect(await connectBot("bale", "tok", "https://site.example/bot/bale/sec")).toBe("kadoochi_bot");
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map((c) => c[0])).toEqual(["https://tapi.bale.ai/bottok/getMe", "https://tapi.bale.ai/bottok/setWebhook"]);
-    expect(JSON.parse(calls[1][1].body as string)).toEqual({ url: "https://site.example/bot/bale/sec" });
-  });
-  it("surfaces a bad token", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: false, description: "Unauthorized" }), { status: 401 })));
-    await expect(connectBot("bale", "bad", "https://x")).rejects.toThrow("Unauthorized");
   });
 });

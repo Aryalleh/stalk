@@ -4,7 +4,7 @@ import { hashPassword } from "../../lib/auth";
 import { inviteLink, linksFor } from "../bale/links";
 import { sendSafirText } from "../bale/safir";
 import { safirReady } from "../settings";
-import { sendBotMessage } from "../shop/notify";
+import { sendBotMessage } from "../bale/botapi";
 import { normalizePhone } from "../../lib/normalize";
 import type { C as Ctx, Env } from "../env";
 import { canUseCrm, type User } from "../session";

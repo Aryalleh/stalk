@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { confirmPayment, now, randomSlug, rejectPayment, type Order, type Product, type Shop } from "../db";
+import { normCity, now, productImages, productPackages, randomSlug, type Order, type Product, type Shop } from "../db";
 import type { C, Env } from "../../env";
-import { loadSettings, reservationMinutes, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
+import { loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
 import { sendSafirText } from "../../bale/safir";
-import { botToken, connectBot, notifyShop, type BotKind } from "../notify";
-import { sendShopMessage } from "./store";
+import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
+import { confirmOrder, rejectOrder, shopOwnerChats, type Deps } from "../orders";
 import { AdminPage, AdminSettingsPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
-import { currentUser, form, intParam } from "./helpers";
+import { currentUser, form, intParam, siteUrl } from "./helpers";
 
 export const panel = new Hono<Env>();
 
@@ -28,14 +28,32 @@ panel.post("/panel/register", async (c) => {
   if (!f.name) errors.push("نام فروشگاه لازم است.");
   if (!/^[a-z0-9-]{3,40}$/.test(slug)) errors.push("آدرس صفحه باید ۳ تا ۴۰ حرف انگلیسی کوچک، عدد یا - باشد.");
   if (!/^\+?\d{5,15}$/.test(phone)) errors.push("تلفن نامعتبر است.");
+  const city = normCity(f.city ?? "");
+  if (!city) errors.push("شهر فروشگاه را انتخاب کنید.");
   if (errors.length) return render(c, <ShopRegisterPage user={currentUser(c)} values={f} errors={errors} />, 400);
+  const user = currentUser(c);
   try {
-    await c.env.DB.prepare("INSERT INTO shops (owner_id, name, slug, description, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(currentUser(c).id, f.name, slug, f.description ?? "", phone, now())
+    await c.env.DB.prepare("INSERT INTO shops (owner_id, name, slug, description, phone, city, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(user.id, f.name, slug, f.description ?? "", phone, city, now())
       .run();
   } catch {
-    return render(c, <ShopRegisterPage user={currentUser(c)} values={f} errors={["این آدرس صفحه قبلاً گرفته شده است."]} />, 400);
+    return render(c, <ShopRegisterPage user={user} values={f} errors={["این آدرس صفحه قبلاً گرفته شده است."]} />, 400);
   }
+  // Tell the platform admins so they can contact the shop and approve it.
+  c.executionCtx.waitUntil(
+    notifyAdmins(
+      c.env.DB,
+      c.get("settings"),
+      [
+        "🏪 فروشگاه جدید ثبت شد — برای تأیید با آن تماس بگیرید",
+        `فروشگاه: ${f.name} (${city})`,
+        `صاحب فروشگاه: ${user.name} — ${user.phone}`,
+        `تلفن فروشگاه: ${phone}`,
+        f.description ? `توضیح: ${f.description.slice(0, 300)}` : "",
+        `تأیید در: ${siteUrl(c)}/admin`,
+      ].filter(Boolean).join("\n"),
+    ),
+  );
   return c.redirect("/panel");
 });
 
@@ -105,16 +123,18 @@ panel.get("/panel/orders/:id{[0-9]+}/receipt", async (c) => {
   });
 });
 
+const deps = (c: C): Deps => ({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) });
+
 panel.post("/panel/orders/:id{[0-9]+}/confirm", async (c) => {
   const id = intParam(c, "id");
-  if (await confirmPayment(c.env.DB, id, shopOf(c).id)) c.executionCtx.waitUntil(sendShopMessage(c, id, "ship"));
+  await confirmOrder(deps(c), id, shopOf(c).id);
   return c.redirect(`/panel/orders/${id}?done=confirmed`);
 });
 
 panel.post("/panel/orders/:id{[0-9]+}/reject", async (c) => {
   const id = intParam(c, "id");
   const reason = ((await form(c)).reason ?? "").slice(0, 200);
-  await rejectPayment(c.env.DB, id, shopOf(c).id, reason);
+  await rejectOrder(deps(c), id, shopOf(c).id, reason);
   return c.redirect(`/panel/orders/${id}?done=rejected`);
 });
 
@@ -143,45 +163,106 @@ panel.get("/panel/products", async (c) => {
 });
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
-const MAX_IMAGE = 2 * 1024 * 1024;
+const MAX_IMAGE = 3 * 1024 * 1024;
+const MAX_IMAGES = 8;
+const MAX_PACKAGES = 10;
+const VIDEO_URL = /^https:\/\/(www\.)?(instagram\.com|t\.me|telegram\.me|ble\.ir)\/\S+$/i;
+
+async function productFormPage(c: C, product: Product | null, values: Record<string, string>, errors?: string[], status: 200 | 400 = 200) {
+  const [images, packages] = product ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id)]) : [[], []];
+  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} errors={errors} />, status);
+}
 
 async function saveProduct(c: C, product: Product | null) {
   const shop = shopOf(c);
-  const body = await c.req.parseBody();
-  const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
-  const values = { title: str("title"), description: str("description"), price: normalizeDigits(str("price")).replace(/[,٬]/g, ""), is_active: str("is_active") === "1" ? "1" : "0" };
+  const body = await c.req.parseBody({ all: true });
+  const str = (k: string) => {
+    const v = body[k];
+    return (typeof v === "string" ? v : Array.isArray(v) && typeof v[0] === "string" ? (v[0] as string) : "").trim();
+  };
+  const list = (k: string) => {
+    const v = body[k];
+    return (Array.isArray(v) ? v : v === undefined ? [] : [v]).filter((x) => typeof x === "string") as string[];
+  };
+  const values: Record<string, string> = {
+    title: str("title"),
+    description: str("description"),
+    price: normalizeDigits(str("price")).replace(/[,٬]/g, ""),
+    video_url: str("video_url"),
+    is_active: str("is_active") === "1" ? "1" : "0",
+  };
   const errors: string[] = [];
   if (!values.title) errors.push("عنوان لازم است.");
   const price = Number(values.price);
   if (!Number.isInteger(price) || price < 1000) errors.push("قیمت باید عدد صحیح و حداقل ۱۰۰۰ تومان باشد.");
-  const file = body.image;
-  let imageKey = product?.image_key ?? "";
-  if (file instanceof File && file.size > 0) {
-    const ext = IMAGE_TYPES[file.type];
-    if (!ext) errors.push("فرمت تصویر باید JPG، PNG یا WebP باشد.");
-    else if (file.size > MAX_IMAGE) errors.push("حجم تصویر حداکثر ۲ مگابایت است.");
-    else {
-      imageKey = `p/${shop.id}/${randomSlug(16)}.${ext}`;
-      await c.env.IMAGES.put(imageKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-    }
-  }
-  if (errors.length) return render(c, <ProductFormPage user={currentUser(c)} shop={shop} product={product} values={values} errors={errors} />, 400);
+  if (values.video_url && !VIDEO_URL.test(values.video_url)) errors.push("لینک ویدیو باید لینک پست اینستاگرام، تلگرام یا بله باشد (با https).");
 
-  const t = now();
-  if (product) {
-    await c.env.DB.prepare("UPDATE products SET title = ?, description = ?, price = ?, image_key = ?, is_active = ?, updated_at = ? WHERE id = ?")
-      .bind(values.title, values.description, price, imageKey, Number(values.is_active), t, product.id)
-      .run();
-    if (product.image_key && product.image_key !== imageKey) c.executionCtx.waitUntil(c.env.IMAGES.delete(product.image_key));
-  } else {
-    await c.env.DB.prepare("INSERT INTO products (shop_id, title, description, price, image_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(shop.id, values.title, values.description, price, imageKey, Number(values.is_active), t, t)
-      .run();
+  // Packages: rows pkg_id_N / pkg_name_N / pkg_price_N; an empty name deletes the row.
+  const packages: { id: number | null; name: string; price: number }[] = [];
+  for (let n = 0; n < MAX_PACKAGES + 5; n++) {
+    const name = str(`pkg_name_${n}`).slice(0, 60);
+    const id = Number(str(`pkg_id_${n}`)) || null;
+    if (!name) continue;
+    const p = Number(normalizeDigits(str(`pkg_price_${n}`)).replace(/[,٬]/g, "") || "0");
+    if (!Number.isInteger(p) || p < 0) errors.push(`قیمت بسته‌بندی «${name}» نامعتبر است.`);
+    packages.push({ id, name, price: p });
   }
-  return c.redirect("/panel/products");
+  if (packages.length > MAX_PACKAGES) errors.push(`حداکثر ${MAX_PACKAGES} بسته‌بندی.`);
+
+  const existing = product ? await productImages(c.env.DB, product.id) : [];
+  const removeIds = new Set(list("delete_image").map(Number));
+  const files = (Array.isArray(body.images) ? body.images : [body.images]).filter((f): f is File => f instanceof File && f.size > 0);
+  const kept = existing.filter((img) => !removeIds.has(img.id));
+  if (kept.length + files.length > MAX_IMAGES) errors.push(`حداکثر ${MAX_IMAGES} عکس برای هر محصول.`);
+  for (const f of files) {
+    if (!IMAGE_TYPES[f.type]) errors.push(`فرمت «${f.name}» باید JPG، PNG یا WebP باشد.`);
+    else if (f.size > MAX_IMAGE) errors.push(`حجم «${f.name}» بیشتر از ۳ مگابایت است.`);
+  }
+  if (errors.length) return productFormPage(c, product, values, errors, 400);
+
+  const newKeys: string[] = [];
+  for (const f of files) {
+    const key = `p/${shop.id}/${randomSlug(16)}.${IMAGE_TYPES[f.type]}`;
+    await c.env.IMAGES.put(key, await f.arrayBuffer(), { httpMetadata: { contentType: f.type } });
+    newKeys.push(key);
+  }
+  const cover = kept[0]?.image_key ?? newKeys[0] ?? "";
+  const t = now();
+  const db = c.env.DB;
+  let productId = product?.id ?? 0;
+  if (product) {
+    await db.prepare("UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, is_active = ?, updated_at = ? WHERE id = ?")
+      .bind(values.title, values.description, price, values.video_url, cover, Number(values.is_active), t, product.id)
+      .run();
+  } else {
+    const row = await db.prepare(
+      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+    )
+      .bind(shop.id, values.title, values.description, price, values.video_url, cover, Number(values.is_active), t, t)
+      .first<{ id: number }>();
+    productId = row!.id;
+  }
+  const stmts: D1PreparedStatement[] = [];
+  for (const img of existing.filter((i) => removeIds.has(i.id))) stmts.push(db.prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?").bind(img.id, productId));
+  newKeys.forEach((key, n) => stmts.push(db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, ?)").bind(productId, key, kept.length + n)));
+  const keepPkgIds = packages.map((p) => p.id).filter(Boolean);
+  stmts.push(
+    db.prepare(`DELETE FROM product_packages WHERE product_id = ? ${keepPkgIds.length ? `AND id NOT IN (${keepPkgIds.map(() => "?").join(",")})` : ""}`).bind(productId, ...keepPkgIds),
+  );
+  packages.forEach((p, n) =>
+    stmts.push(
+      p.id
+        ? db.prepare("UPDATE product_packages SET name = ?, price = ?, sort = ? WHERE id = ? AND product_id = ?").bind(p.name, p.price, n, p.id, productId)
+        : db.prepare("INSERT INTO product_packages (product_id, name, price, sort) VALUES (?, ?, ?, ?)").bind(productId, p.name, p.price, n),
+    ),
+  );
+  await db.batch(stmts);
+  const removedKeys = existing.filter((i) => removeIds.has(i.id)).map((i) => i.image_key);
+  if (removedKeys.length) c.executionCtx.waitUntil(c.env.IMAGES.delete(removedKeys));
+  return c.redirect(`/panel/products/${productId}?saved=1`);
 }
 
-panel.get("/panel/products/new", (c) => render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={null} values={{}} />));
+panel.get("/panel/products/new", (c) => productFormPage(c, null, {}));
 panel.post("/panel/products/new", (c) => saveProduct(c, null));
 
 const ownProduct = (c: C) =>
@@ -190,8 +271,8 @@ const ownProduct = (c: C) =>
 panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   const p = await ownProduct(c);
   if (!p) return c.notFound();
-  const values = { title: p.title, description: p.description, price: String(p.price), is_active: String(p.is_active) };
-  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={p} values={values} />);
+  const values = { title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, is_active: String(p.is_active), saved: c.req.query("saved") ?? "" };
+  return productFormPage(c, p, values);
 });
 
 panel.post("/panel/products/:id{[0-9]+}", async (c) => {
@@ -202,43 +283,54 @@ panel.post("/panel/products/:id{[0-9]+}", async (c) => {
 
 // ---------- settings ----------
 
-const bots = (c: C) => {
-  const s = c.get("settings");
-  return {
-    bale: { on: !!s.bale_bot_token, username: s.bale_bot_username },
-    telegram: { on: !!s.telegram_bot_token, username: s.telegram_bot_username },
-  };
-};
+const HANDLE = /^[@\w.\-\/:?=&%]{0,200}$/;
 
 async function saveSettings(c: C) {
   const f = await form(c);
-  const chat = (v: string | undefined) => (v ?? "").replace(/[^\d\-]/g, "").slice(0, 40);
   if (!f.name) return { error: "نام فروشگاه لازم است." };
   const card = normalizeDigits(f.card_number ?? "");
   const cardError = card ? cardNumberError(card) : null;
   if (cardError) return { error: cardError };
   if (card && !f.card_holder) return { error: "نام صاحب کارت را وارد کنید." };
+  const city = normCity(f.city ?? "");
+  if (!city) return { error: "شهر فروشگاه را انتخاب کنید." };
+  const fee = (k: string) => Number(normalizeDigits(f[k] ?? "").replace(/[,٬]/g, "") || "0");
+  const courierFee = fee("courier_fee");
+  const postFee = fee("post_fee");
+  if (![courierFee, postFee].every((n) => Number.isInteger(n) && n >= 0)) return { error: "هزینه ارسال باید عدد صحیح باشد." };
+  const courier = f.courier_enabled === "1" ? 1 : 0;
+  const post = f.post_enabled === "1" ? 1 : 0;
+  if (!courier && !post) return { error: "حداقل یک روش ارسال (پیک یا پست) را فعال کنید." };
+  const socials = ["instagram", "telegram", "bale", "website"].map((k) => (f[k] ?? "").trim());
+  if (socials.some((v) => !HANDLE.test(v))) return { error: "لینک شبکه‌های اجتماعی نامعتبر است." };
   await c.env.DB.prepare(
-    "UPDATE shops SET name = ?, phone = ?, description = ?, card_number = ?, card_holder = ?, bale_chat_id = ?, telegram_chat_id = ? WHERE id = ?",
+    `UPDATE shops SET name = ?, phone = ?, description = ?, card_number = ?, card_holder = ?, city = ?,
+       courier_enabled = ?, courier_fee = ?, post_enabled = ?, post_fee = ?, instagram = ?, telegram = ?, bale = ?, website = ?
+     WHERE id = ?`,
   )
-    .bind(f.name, normalizePhone(f.phone ?? ""), f.description ?? "", card, (f.card_holder ?? "").slice(0, 80), chat(f.bale_chat_id), chat(f.telegram_chat_id), shopOf(c).id)
+    .bind(f.name, normalizePhone(f.phone ?? ""), f.description ?? "", card, (f.card_holder ?? "").slice(0, 80), city,
+      courier, courierFee, post, postFee, ...socials, shopOf(c).id)
     .run();
   return { error: "" };
 }
 
-panel.get("/panel/settings", (c) => render(c, <SettingsPage user={currentUser(c)} shop={shopOf(c)} bots={bots(c)} />));
+const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) =>
+  render(c, <SettingsPage user={currentUser(c)} shop={(await myShop(c))!} {...extra} />, status);
+
+panel.get("/panel/settings", (c) => settingsView(c));
 
 panel.post("/panel/settings", async (c) => {
   const { error } = await saveSettings(c);
-  const shop = (await myShop(c))!;
-  return render(c, <SettingsPage user={currentUser(c)} shop={shop} bots={bots(c)} error={error} ok={error ? undefined : "ذخیره شد."} />, error ? 400 : 200);
+  return settingsView(c, error ? { error } : { ok: "ذخیره شد." }, error ? 400 : 200);
 });
 
 panel.post("/panel/settings/test", async (c) => {
-  const saved = await saveSettings(c);
+  const { error } = await saveSettings(c);
+  if (error) return settingsView(c, { error }, 400);
   const shop = (await myShop(c))!;
-  const error = saved.error || (await notifyShop(c.get("settings"), shop, `✅ پیام آزمایشی برای فروشگاه «${shop.name}». سفارش‌های کادویی جدید اینجا اعلام می‌شوند.`));
-  return render(c, <SettingsPage user={currentUser(c)} shop={shop} bots={bots(c)} error={error ? `ارسال ناموفق: ${error}` : undefined} ok={error ? undefined : "پیام آزمایشی ارسال شد."} />);
+  const chats = await shopOwnerChats(c.env.DB, shop.id);
+  const sendError = chats ? await sendToChats(c.get("settings"), chats, `✅ پیام آزمایشی برای فروشگاه «${shop.name}». سفارش‌ها و فیش‌ها اینجا می‌آیند.`) : "no connected chat";
+  return settingsView(c, sendError ? { error: `ارسال ناموفق: ${sendError}` } : { ok: "پیام آزمایشی در بات ارسال شد." });
 });
 
 // ---------- platform admin ----------
@@ -266,8 +358,18 @@ admin.get("/admin", async (c) => {
 
 admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
   const status = (await form(c)).status;
+  const id = intParam(c, "id");
   if (status === "approved" || status === "suspended") {
-    await c.env.DB.prepare("UPDATE shops SET status = ? WHERE id = ?").bind(status, intParam(c, "id")).run();
+    const shop = await c.env.DB.prepare("SELECT name, slug, status FROM shops WHERE id = ?").bind(id).first<Pick<Shop, "name" | "slug" | "status">>();
+    await c.env.DB.prepare("UPDATE shops SET status = ? WHERE id = ?").bind(status, id).run();
+    const chats = await shopOwnerChats(c.env.DB, id);
+    if (shop && chats && shop.status !== status) {
+      const text =
+        status === "approved"
+          ? `🎉 فروشگاه «${shop.name}» تأیید شد و محصولاتش در سایت نمایش داده می‌شود.\nصفحه فروشگاه: ${siteUrl(c)}/s/${shop.slug}`
+          : `⚠️ فروشگاه «${shop.name}» معلق شد و فعلاً در سایت نمایش داده نمی‌شود. برای پیگیری با پشتیبانی تماس بگیرید.`;
+      c.executionCtx.waitUntil(sendToChats(c.get("settings"), chats, text).catch((e) => console.error(e)));
+    }
   }
   return c.redirect("/admin");
 });
@@ -349,7 +451,7 @@ admin.post("/admin/settings/connect/:kind{bale|telegram}", async (c) => {
   try {
     const username = await connectBot(kind, token, `${base}/bot/${kind}/${await webhookSecret(c.env.DB, s)}`);
     await saveSiteSettings(c.env.DB, { [`${kind}_bot_username`]: username });
-    return settingsPage(c, { ok: `بات @${username} وصل شد. فروشگاه‌ها با فرستادن /start به آن، شناسه چتشان را می‌گیرند.` });
+    return settingsPage(c, { ok: `بات @${username} وصل شد. کاربران بعد از ثبت‌نام از صفحه «اتصال به بات» به آن وصل می‌شوند.` });
   } catch (e) {
     return settingsPage(c, { error: `اتصال ناموفق: ${(e as Error).message}` }, 400);
   }

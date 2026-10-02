@@ -1,10 +1,25 @@
 import { Hono } from "hono";
-import { render } from "../../render";
-import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { getPublicProduct, listProducts, randomSlug, reportTransfer, reserveItem, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
+import { normalizePhone } from "../../../lib/normalize";
+import { upsertCustomer } from "../../crm/sync";
 import type { C, Env } from "../../env";
+import { render } from "../../render";
 import { reservationMinutes } from "../../settings";
-import { notifyShop, shipMessage, transferMessage } from "../notify";
+import {
+  deliveryOptions,
+  getPublicProduct,
+  listProducts,
+  productImages,
+  productPackages,
+  randomSlug,
+  reportReceipt,
+  reserveItem,
+  wishlistItems,
+  type ItemView,
+  type Order,
+  type Shop,
+  type Wishlist,
+} from "../db";
+import { sendReceiptToShop } from "../orders";
 import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
@@ -18,20 +33,35 @@ store.get("/", async (c) => {
 });
 
 store.get("/p/:id{[0-9]+}", async (c) => {
-  const product = await getPublicProduct(c.env.DB, intParam(c, "id"));
+  const id = intParam(c, "id");
+  const product = await getPublicProduct(c.env.DB, id);
   if (!product) return c.notFound();
   const user = c.get("user");
-  const wishlists = user
-    ? (await c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all<Wishlist>()).results
-    : [];
-  return render(c, <ProductPage user={user} product={product} wishlists={wishlists} added={c.req.query("added")} />);
+  const [wishlists, images, packages] = await Promise.all([
+    user ? c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all<Wishlist>().then((r) => r.results) : [],
+    productImages(c.env.DB, id),
+    productPackages(c.env.DB, id),
+  ]);
+  return render(c, <ProductPage user={user} product={product} wishlists={wishlists} images={images} packages={packages} added={c.req.query("added")} />);
 });
 
 store.get("/s/:slug", async (c) => {
-  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE slug = ? AND status = 'approved'").bind(c.req.param("slug")).first<Shop>();
+  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE slug = ?").bind(c.req.param("slug")).first<Shop>();
   if (!shop) return c.notFound();
-  const products = await listProducts(c.env.DB, { shopId: shop.id, limit: 200, offset: 0 });
-  return render(c, <ShopPage user={c.get("user")} shop={shop} products={products} />);
+  const user = c.get("user");
+  // Until approved, only the owner (and admins) can see the page, as a preview.
+  const preview = shop.status !== "approved";
+  if (preview && !(user && (user.id === shop.owner_id || user.is_admin))) return c.notFound();
+  const products = preview
+    ? (
+        await c.env.DB.prepare(
+          "SELECT p.*, s.name AS shop_name, s.slug AS shop_slug FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.shop_id = ? AND p.is_active = 1 ORDER BY p.created_at DESC",
+        )
+          .bind(shop.id)
+          .all()
+      ).results
+    : await listProducts(c.env.DB, { shopId: shop.id, limit: 200, offset: 0 });
+  return render(c, <ShopPage user={user} shop={shop} products={products as never} preview={preview} />);
 });
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {
@@ -45,7 +75,8 @@ store.get("/w/:slug", async (c) => {
   const w = await wishlistWithOwner(c.env.DB, "w.slug = ?", c.req.param("slug"));
   if (!w) return c.notFound();
   const user = c.get("user");
-  return render(c, 
+  return render(
+    c,
     <WishlistPublicPage
       user={user}
       wishlist={w}
@@ -65,36 +96,57 @@ async function loadItem(c: C) {
   if (!row) return null;
   const w = await wishlistWithOwner(c.env.DB, "w.id = ?", row.wishlist_id);
   const item = (await wishlistItems(c.env.DB, row.wishlist_id)).find((i) => i.id === itemId);
-  return w && item ? { w, item } : null;
+  if (!w || !item) return null;
+  return { w, item, packages: await productPackages(c.env.DB, item.product_id), delivery: deliveryOptions(shopOf(item), w.city) };
 }
+
+const shopOf = (i: ItemView) => ({
+  city: i.shop_city,
+  courier_enabled: i.courier_enabled,
+  courier_fee: i.courier_fee,
+  post_enabled: i.post_enabled,
+  post_fee: i.post_fee,
+});
 
 store.get("/gift/:itemId{[0-9]+}", async (c) => {
   const found = await loadItem(c);
   if (!found) return c.notFound();
-  return render(c, <CheckoutPage user={c.get("user")} item={found.item} wishlist={found.w} ownerName={found.w.owner_name} />);
+  const { w, item, packages, delivery } = found;
+  return render(c, <CheckoutPage user={c.get("user")} item={item} wishlist={w} ownerName={w.owner_name} packages={packages} delivery={delivery} />);
 });
 
 store.post("/gift/:itemId{[0-9]+}", async (c) => {
   const found = await loadItem(c);
   if (!found) return c.notFound();
-  const { w, item } = found;
+  const { w, item, packages, delivery } = found;
   const f = await form(c);
   const phone = normalizePhone(f.phone ?? "");
   const fail = (errors: string[], status: 400 | 409 = 400) =>
-    render(c, <CheckoutPage user={c.get("user")} item={item} wishlist={w} ownerName={w.owner_name} values={f} errors={errors} />, status);
+    render(
+      c,
+      <CheckoutPage user={c.get("user")} item={item} wishlist={w} ownerName={w.owner_name} packages={packages} delivery={delivery} values={f} errors={errors} />,
+      status,
+    );
 
   const errors: string[] = [];
   if (!f.name) errors.push("نام خود را وارد کنید.");
   if (!/^09\d{9}$/.test(phone)) errors.push("شماره موبایل نامعتبر است.");
+  const pkg = packages.find((p) => String(p.id) === f.package);
+  if (packages.length && !pkg) errors.push("یک بسته‌بندی انتخاب کنید.");
+  const ship = delivery.find((d) => d.method === f.delivery);
+  if (!delivery.length) errors.push("این فروشگاه به شهر گیرنده ارسال ندارد.");
+  else if (!ship) errors.push("روش ارسال را انتخاب کنید.");
   if (errors.length) return fail(errors);
 
-  const order = await reserveItem(c.env.DB, item.id, {
-    name: f.name.slice(0, 80),
-    phone,
-    message: (f.message ?? "").slice(0, 300),
-    anonymous: f.anonymous === "1",
-  }, reservationMinutes(c.get("settings")));
+  const order = await reserveItem(
+    c.env.DB,
+    item.id,
+    { name: f.name.slice(0, 80), phone, message: (f.message ?? "").slice(0, 300), anonymous: f.anonymous === "1" },
+    reservationMinutes(c.get("settings")),
+    { packageName: pkg?.name ?? "", packagePrice: pkg?.price ?? 0, method: ship!.method, fee: ship!.fee },
+  );
   if (!order) return fail(["متأسفانه این آرزو همین الان توسط شخص دیگری خریده یا رزرو شده، یا دیگر در دسترس نیست."], 409);
+  c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: f.name, phone, source: "خریدار کادو" }));
   return c.redirect(`/order/${order.token}`);
 });
 
@@ -119,52 +171,26 @@ store.get("/order/:token", async (c) => {
 });
 
 const RECEIPT_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
-const MAX_RECEIPT = 3 * 1024 * 1024;
+const MAX_RECEIPT = 5 * 1024 * 1024;
 
-store.post("/order/:token/transfer", async (c) => {
+// The giver only uploads the receipt photo; it goes to the shop's bot with confirm/reject buttons.
+store.post("/order/:token/receipt", async (c) => {
   const order = await orderByToken(c);
   if (!order) return c.notFound();
   if (order.status !== "pending") return c.redirect(`/order/${order.token}`);
-  const body = await c.req.parseBody();
-  const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
-  const values = { ref: normalizeDigits(str("ref")), last4: normalizeDigits(str("last4")), at: str("at").slice(0, 40) };
-  const errors: string[] = [];
-  if (!/^\d{4,30}$/.test(values.ref)) errors.push("شماره پیگیری را درست وارد کنید (فقط عدد).");
-  if (!/^\d{4}$/.test(values.last4)) errors.push("۴ رقم آخر کارتی که از آن واریز کردید را وارد کنید.");
-  const file = body.receipt;
-  let receiptKey = "";
-  if (file instanceof File && file.size > 0) {
-    const ext = RECEIPT_TYPES[file.type];
-    if (!ext) errors.push("تصویر رسید باید JPG، PNG یا WebP باشد.");
-    else if (file.size > MAX_RECEIPT) errors.push("حجم تصویر رسید حداکثر ۳ مگابایت است.");
-    else receiptKey = `r/${order.shop_id}/${randomSlug(24)}.${ext}`;
-  }
-  if (errors.length) return render(c, <OrderPage user={c.get("user")} order={order} errors={errors} values={values} />, 400);
-  if (receiptKey) await c.env.IMAGES.put(receiptKey, await (file as File).arrayBuffer(), { httpMetadata: { contentType: (file as File).type } });
-
-  if (await reportTransfer(c.env.DB, order.id, { ...values, receiptKey })) {
-    c.executionCtx.waitUntil(sendShopMessage(c, order.id, "transfer"));
+  const file = (await c.req.parseBody()).receipt;
+  const fail = (error: string) => render(c, <OrderPage user={c.get("user")} order={order} errors={[error]} />, 400);
+  if (!(file instanceof File) || file.size === 0) return fail("عکس فیش واریز را انتخاب کنید.");
+  const ext = RECEIPT_TYPES[file.type];
+  if (!ext) return fail("عکس فیش باید JPG، PNG یا WebP باشد.");
+  if (file.size > MAX_RECEIPT) return fail("حجم عکس فیش حداکثر ۵ مگابایت است.");
+  const key = `r/${order.shop_id}/${randomSlug(24)}.${ext}`;
+  await c.env.IMAGES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+  if (await reportReceipt(c.env.DB, order.id, key)) {
+    c.executionCtx.waitUntil(sendReceiptToShop({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, order.id));
   }
   return c.redirect(`/order/${order.token}`);
 });
-
-/** Message the shop on its bot channels and record the outcome on the order. */
-export async function sendShopMessage(c: C, orderId: number, kind: "transfer" | "ship") {
-  const o = await c.env.DB.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
-  const shop = await c.env.DB.prepare(
-    `SELECT s.*, COALESCE(NULLIF(s.bale_chat_id, ''), l.chat_id, '') AS bale_chat_id
-     FROM shops s JOIN users u ON u.id = s.owner_id LEFT JOIN bale_links l ON l.phone = u.phone WHERE s.id = ?`,
-  )
-    .bind(o!.shop_id)
-    .first<Shop>(); // falls back to the owner's linked Bale chat when the shop set no chat id
-  let error = "";
-  try {
-    error = await notifyShop(c.get("settings"), shop!, kind === "transfer" ? transferMessage(o!, siteUrl(c)) : shipMessage(o!, siteUrl(c)));
-  } catch (e) {
-    error = String(e);
-  }
-  await c.env.DB.prepare("UPDATE orders SET shop_notified = ?, notify_error = ? WHERE id = ?").bind(error ? 0 : 1, error, orderId).run();
-}
 
 // Product images are public; receipts (r/...) are only served through /panel.
 store.get("/img/:key{p/.+}", async (c) => {

@@ -5,7 +5,9 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { crm } from "./crm/routes";
 import type { Env } from "./env";
-import { SESSION_COOKIE, sessionUser } from "./session";
+import { SESSION_COOKIE, isConnected, sessionUser } from "./session";
+import { activeBots } from "./bale/botapi";
+import { CONNECT_EXEMPT, connect } from "./bale/connect";
 import { ensureMigrated } from "./migrate";
 import { loadSettings } from "./settings";
 import { account } from "./shop/routes/account";
@@ -30,6 +32,16 @@ app.use(async (c, next) => {
   await next();
 });
 
+// Signed-in accounts must connect the site's bot before using the site (when a bot is set up).
+app.use(async (c, next) => {
+  const user = c.get("user");
+  if (user && !isConnected(user) && activeBots(c.get("settings")).length && !CONNECT_EXEMPT.test(c.req.path)) {
+    const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";
+    return c.redirect(`/connect?next=${encodeURIComponent(back)}`);
+  }
+  await next();
+});
+
 // Shop pages that need a logged-in user (the CRM checks for itself).
 const LOGIN_REQUIRED = /^\/(me|panel|admin)(\/|$)|^\/p\/\d+\/wish$/;
 app.use(async (c, next) => {
@@ -40,6 +52,7 @@ app.use(async (c, next) => {
   await next();
 });
 
+app.route("/", connect);
 app.route("/crm", crm);
 app.route("/", store);
 app.route("/", account);
