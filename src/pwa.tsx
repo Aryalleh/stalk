@@ -44,8 +44,8 @@ pwa.get("/manifest.webmanifest", (c) => {
       scope: "/",
       display: "standalone",
       orientation: "portrait",
-      background_color: "#17131a",
-      theme_color: "#17131a",
+      background_color: "#0d1320",
+      theme_color: "#0d1320",
       categories: ["shopping", "lifestyle"],
       icons: [
         { src: "/static/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -113,7 +113,7 @@ pwa.get("/offline", (c) =>
         <div class="text-6xl mb-6">📡</div>
         <h1 class="text-xl font-bold mb-3">اتصال اینترنت برقرار نیست</h1>
         <p class="text-sm text-muted leading-relaxed mb-8">به‌محض وصل شدن دوباره، صفحه را تازه کنید.</p>
-        <button type="button" onclick="location.reload()" class="px-6 py-3 rounded-2xl bg-pink text-white font-bold">تلاش دوباره</button>
+        <button type="button" onclick="location.reload()" class="px-6 py-3 rounded-2xl bg-brand text-white font-bold">تلاش دوباره</button>
       </div>
     </Layout>,
   ),

@@ -720,9 +720,8 @@ export function AdminPage(props: {
   featuredId: number;
 }) {
   return (
-    <Layout title="مدیریت" user={props.user}>
-      <h1>مدیریت پلتفرم</h1>
-      <AdminTabs on="/admin" />
+    <AdminShell title="مدیریت" user={props.user} on="/admin">
+      <h1>فروشگاه‌ها و فروش</h1>
       <div class="card wrap">
         <h2>فروشگاه‌ها</h2>
         <table>
@@ -766,7 +765,7 @@ export function AdminPage(props: {
           </tbody>
         </table>
       </div>
-    </Layout>
+    </AdminShell>
   );
 }
 
@@ -810,12 +809,42 @@ export function SetupPage(props: { step: "details" | "code"; error?: string; val
   );
 }
 
-function AdminTabs(props: { on: string }) {
-  const tabs = [["/admin", "فروشگاه‌ها و فروش"], ["/admin/settings", "تنظیمات سایت"], ["/crm", "CRM"]];
+/** Admin area: light theme (like the shop panel) with its own header and tabs. */
+function AdminShell(props: { title: string; user: User; on: string; children?: Child }) {
+  const tabs: [string, string, string][] = [
+    ["/admin", "fa-store", "فروشگاه‌ها و فروش"],
+    ["/admin/content", "fa-pen-to-square", "درباره و سوالات"],
+    ["/admin/settings", "fa-gear", "تنظیمات سایت"],
+    ["/crm", "fa-address-book", "CRM"],
+  ];
+  const header = (
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <a href="/admin" class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white"><i class="fa-solid fa-shield-halved"></i></div>
+          <div>
+            <h1 class="text-sm font-bold text-slate-900">مدیریت سایت</h1>
+            <p class="text-[10px] text-slate-500">{props.user.name}</p>
+          </div>
+        </a>
+        <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-house"></i></a>
+      </div>
+      <nav class="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto no-scrollbar" aria-label="بخش‌های مدیریت">
+        {tabs.map(([href, icon, label]) => (
+          <a
+            href={href}
+            class={`whitespace-nowrap px-3 py-2.5 text-xs font-bold border-b-2 ${props.on === href ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+          >
+            <i class={`fa-solid ${icon} ml-1`}></i>{label}
+          </a>
+        ))}
+      </nav>
+    </header>
+  );
   return (
-    <nav class="tabs">
-      {tabs.map(([href, label]) => <a href={href} class={props.on === href ? "on" : ""}>{label}</a>)}
-    </nav>
+    <Layout title={props.title} user={props.user} panel wide header={header}>
+      {props.children}
+    </Layout>
   );
 }
 
@@ -857,9 +886,8 @@ export function AdminSettingsPage(props: {
     );
   };
   return (
-    <Layout title="تنظیمات سایت" user={props.user}>
+    <AdminShell title="تنظیمات سایت" user={props.user} on="/admin/settings">
       <h1>تنظیمات سایت</h1>
-      <AdminTabs on="/admin/settings" />
       <Errors errors={[props.error]} />
       {props.ok && <div class="okbox">{props.ok}</div>}
       {s.bale_bot_username && (
@@ -881,25 +909,11 @@ export function AdminSettingsPage(props: {
         <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
         <label>توضیح سایت برای گوگل، دستیارهای هوش مصنوعی و پیش‌نمایش لینک‌ها (حدود ۱۵۰ حرف؛ خالی = متن پیش‌فرض)</label>
         <textarea name="site_description" maxlength={300} style="min-height:70px">{s.site_description}</textarea>
-        <h2 style="margin-top:20px">تماس و شبکه‌های اجتماعی سایت</h2>
-        <p class="muted small" style="margin-top:0">
-          در پایین همه صفحه‌ها نمایش داده می‌شود و برای گوگل و دستیارهای هوش مصنوعی به‌عنوان مشخصات کسب‌وکار منتشر می‌شود (با آدرس و تلفن،
-          به‌عنوان «کسب‌وکار محلی»). خالی بگذارید تا نمایش داده نشود.
-        </p>
-        <div class="two">
-          <div><label>تلفن پشتیبانی</label><input name="contact_phone" value={s.contact_phone} class="ltr" maxlength={30} placeholder="021-12345678" /></div>
-          <div><label>ایمیل</label><input name="contact_email" value={s.contact_email} class="ltr" maxlength={100} placeholder="support@example.com" /></div>
-        </div>
-        <label>آدرس</label>
-        <input name="contact_address" value={s.contact_address} maxlength={200} />
-        <div class="two">
-          <div><label>اینستاگرام</label><input name="social_instagram" value={s.social_instagram} class="ltr" placeholder="@kadoochi" /></div>
-          <div><label>کانال تلگرام</label><input name="social_telegram" value={s.social_telegram} class="ltr" placeholder="@kadoochi" /></div>
-          <div><label>کانال بله</label><input name="social_bale" value={s.social_bale} class="ltr" placeholder="@kadoochi" /></div>
-          <div><label>ایکس (توییتر)</label><input name="social_x" value={s.social_x} class="ltr" placeholder="@kadoochi" /></div>
-          <div><label>لینکدین (نام صفحه شرکت یا لینک)</label><input name="social_linkedin" value={s.social_linkedin} class="ltr" /></div>
-          <div><label>یوتیوب</label><input name="social_youtube" value={s.social_youtube} class="ltr" placeholder="@kadoochi" /></div>
-          <div><label>آپارات</label><input name="social_aparat" value={s.social_aparat} class="ltr" placeholder="kadoochi" /></div>
+        <h2 style="margin-top:20px">رنگ اصلی سایت</h2>
+        <p class="muted small" style="margin-top:0">رنگ دکمه‌ها، قیمت‌ها و لینک‌ها در کل سایت (پیش‌فرض آبی). تماس، شبکه‌های اجتماعی، «درباره» و سوالات متداول در <a href="/admin/content">درباره و سوالات</a> تنظیم می‌شوند.</p>
+        <div class="row">
+          <input type="color" name="brand_color" value={s.brand_color} style="width:64px;height:40px;padding:2px" aria-label="رنگ اصلی" />
+          <span class="small muted ltr">{s.brand_color}</span>
         </div>
 
         <h2 style="margin-top:20px">آمار بازدید (اختیاری)</h2>
@@ -937,6 +951,92 @@ export function AdminSettingsPage(props: {
 
         <p style="margin-top:20px"><button>ذخیره</button></p>
       </form>
-    </Layout>
+    </AdminShell>
+  );
+}
+
+/** /admin/content: About page, FAQ, contact details and social profiles, developer credit. */
+export function AdminContentPage(props: { user: User; s: Settings; faq: [string, string][]; isDefaultFaq: boolean; error?: string; ok?: string }) {
+  const s = props.s;
+  const rows = [...props.faq, ...Array.from({ length: 3 }, () => ["", ""] as [string, string])];
+  const social = (key: string, label: string, placeholder: string) => (
+    <div>
+      <label>{label}</label>
+      <input name={key} value={s[key as keyof Settings]} class="ltr" placeholder={placeholder} />
+    </div>
+  );
+  return (
+    <AdminShell title="درباره و سوالات" user={props.user} on="/admin/content">
+      <h1>محتوای سایت</h1>
+      <Errors errors={[props.error]} />
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <form method="post" action="/admin/content">
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0">صفحه «درباره ما»</h2>
+            <span class="sp" />
+            <a href="/about" target="_blank" class="small">مشاهده صفحه</a>
+          </div>
+          <label>عنوان</label>
+          <input name="about_title" value={s.about_title} maxlength={120} placeholder={`${s.site_name} چیست؟`} />
+          <label>متن (خالی = متن پیش‌فرض). پاراگراف‌ها را با یک خط خالی جدا کنید؛ خطی که با «-» شروع شود، فهرست نقطه‌دار می‌شود.</label>
+          <textarea name="about_body" maxlength={6000} style="min-height:220px">{s.about_body}</textarea>
+        </div>
+
+        <div class="card">
+          <h2>راه‌های ارتباطی (در «درباره ما»، پایین همه صفحه‌ها و اطلاعات کسب‌وکار برای گوگل)</h2>
+          <div class="two">
+            <div><label>تلفن</label><input name="contact_phone" value={s.contact_phone} class="ltr" maxlength={30} placeholder="021-12345678" /></div>
+            <div><label>ایمیل</label><input name="contact_email" value={s.contact_email} class="ltr" maxlength={100} placeholder="support@example.com" /></div>
+          </div>
+          <label>آدرس</label>
+          <input name="contact_address" value={s.contact_address} maxlength={200} />
+          <div class="two">
+            {social("social_telegram", "آیدی یا کانال تلگرام", "@kadoochi")}
+            {social("social_instagram", "اینستاگرام", "@kadoochi")}
+            {social("social_bale", "بله", "@kadoochi")}
+            {social("social_x", "ایکس (توییتر)", "@kadoochi")}
+            {social("social_linkedin", "لینکدین (نام صفحه یا لینک)", "kadoochi")}
+            {social("social_youtube", "یوتیوب", "@kadoochi")}
+            {social("social_aparat", "آپارات", "kadoochi")}
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>طراحی و توسعه</h2>
+          <p class="muted small" style="margin-top:0">در صفحه «درباره ما» و پایین سایت نمایش داده می‌شود. خالی بگذارید تا نمایش داده نشود.</p>
+          <div class="two">
+            <div><label>نام توسعه‌دهنده</label><input name="developer_name" value={s.developer_name} maxlength={80} /></div>
+            <div><label>لینک (سایت یا آیدی تلگرام مثل ‎@name)</label><input name="developer_link" value={s.developer_link} class="ltr" maxlength={200} /></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <h2 style="margin:0">سوالات متداول</h2>
+            <span class="sp" />
+            <a href="/faq" target="_blank" class="small">مشاهده صفحه</a>
+          </div>
+          <p class="muted small">
+            {props.isDefaultFaq ? "الان سوالات پیش‌فرض نمایش داده می‌شوند؛ با ذخیره، همین فهرست قابل ویرایش می‌شود. " : ""}
+            برای حذف یک سوال، سوال و پاسخش را خالی کنید. این سوال‌ها در صفحه «سوالات متداول»، صفحه اول و داده ساختاریافته برای گوگل می‌آیند.
+          </p>
+          {rows.map(([q, a], n) => (
+            <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
+              <label style="margin-top:0">سوال {(n + 1).toLocaleString("fa-IR")}</label>
+              <input name={`q_${n}`} value={q} maxlength={200} />
+              <label>پاسخ</label>
+              <textarea name={`a_${n}`} maxlength={1500} style="min-height:70px">{a}</textarea>
+            </div>
+          ))}
+          {!props.isDefaultFaq && (
+            <label class="row" style="color:var(--fg);margin-top:12px">
+              <input type="checkbox" name="reset_faq" value="1" /> بازگرداندن سوالات پیش‌فرض
+            </label>
+          )}
+        </div>
+        <p><button>ذخیره</button></p>
+      </form>
+    </AdminShell>
   );
 }

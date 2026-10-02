@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import type { C, Env } from "./env";
-import { organizationLd } from "./schema";
-import { STEPS, faqs } from "./content";
+import { organizationLd, summary } from "./schema";
+import { STEPS, aboutBlocks, aboutTitle, developerHref, faqs } from "./content";
 import { render, siteOrigin } from "./render";
-import { categoryList, siteDescription, type Settings } from "./settings";
-import { Layout } from "./shop/views/layout";
+import { categoryList, siteDescription, socialLinks, type Settings } from "./settings";
+import { Layout, SOCIAL_ICON } from "./shop/views/layout";
 
 // Search engines and AI answer engines: robots.txt, sitemap.xml, llms.txt, and the About / FAQ
 // pages whose question-and-answer content is also published as FAQPage / HowTo structured data.
@@ -72,7 +72,10 @@ function organization(c: C) {
 seo.get("/about", (c) => {
   const s = c.get("settings");
   const origin = siteOrigin(c);
-  const description = `${s.site_name} چیست و چطور کار می‌کند: لیست آرزو بساز، لینکش را بفرست و از فروشگاه‌های ایرانی کادو بگیر؛ پرداخت کارت به کارت مستقیم به فروشگاه و آدرس محرمانه.`;
+  const blocks = aboutBlocks(s);
+  const firstText = blocks.find((b) => b.kind === "p");
+  const description = summary(firstText && firstText.kind === "p" ? firstText.text : siteDescription(s), 158);
+  const dev = developerHref(s.developer_link);
   const howTo = {
     "@context": "https://schema.org",
     "@type": "HowTo",
@@ -80,17 +83,42 @@ seo.get("/about", (c) => {
     description,
     step: STEPS.map(([name, text], i) => ({ "@type": "HowToStep", position: i + 1, name, text, url: `${origin}/about#step-${i + 1}` })),
   };
-  const page = { "@context": "https://schema.org", "@type": "AboutPage", name: `درباره ${s.site_name}`, url: `${origin}/about`, about: { "@id": `${origin}/#organization` } };
+  const page = {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: aboutTitle(s),
+    url: `${origin}/about`,
+    about: { "@id": `${origin}/#organization` },
+    ...(s.developer_name ? { creator: { "@type": "Person", name: s.developer_name, ...(dev ? { url: dev } : {}) } } : {}),
+  };
+  const socials = socialLinks(s);
+  const contact = (href: string, icon: string, label: string, value: string, external = false) => (
+    <a href={href} {...(external ? { target: "_blank", rel: "noopener" } : {})} class="flex items-center gap-3 p-3 rounded-2xl bg-ink/60 hover:bg-ink !text-fg">
+      <span class="w-10 h-10 rounded-xl bg-brand/15 text-brand flex items-center justify-center shrink-0"><i class={icon}></i></span>
+      <span class="min-w-0">
+        <span class="block text-[11px] text-muted">{label}</span>
+        <span class="block text-sm font-bold truncate ltr text-right">{value}</span>
+      </span>
+    </a>
+  );
+  const handle = (url: string) => url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
   return render(
     c,
-    <Layout title={`درباره ${s.site_name}`} user={c.get("user")} seo={{ index: true, description, type: "article", jsonLd: [organization(c), page, howTo] }}>
+    <Layout title={aboutTitle(s)} user={c.get("user")} seo={{ index: true, description, type: "article", jsonLd: [organization(c), page, howTo] }}>
       <article class="space-y-6">
-        <h1>{s.site_name} چیست؟</h1>
-        <p class="leading-8">
-          <b>{s.site_name}</b> یک بازار آنلاین برای کادو گرفتن است. کاربران محصولات دلخواهشان را از فروشگاه‌های ایرانی عضو، به «لیست آرزو»
-          اضافه می‌کنند و لینک لیست را برای دوستان و خانواده می‌فرستند؛ هر کس یکی از آرزوها را بخرد، فروشگاه آن را مستقیم برای صاحب لیست
-          ارسال می‌کند. پرداخت کارت به کارت و مستقیم به حساب فروشگاه است و آدرس گیرنده به خریدار نشان داده نمی‌شود.
-        </p>
+        <header class="text-center pt-2">
+          <img src="/static/icon-192.png" alt={s.site_name} width="72" height="72" class="mx-auto mb-4 rounded-2xl" />
+          <h1>{aboutTitle(s)}</h1>
+        </header>
+        <section class="space-y-4 leading-8">
+          {blocks.map((b) =>
+            b.kind === "p" ? (
+              <p>{b.text}</p>
+            ) : (
+              <ul class="list-disc pr-5 space-y-1">{b.items.map((i) => <li>{i}</li>)}</ul>
+            ),
+          )}
+        </section>
         <section class="card">
           <h2>کادو گرفتن در ۴ قدم</h2>
           <ol class="list-decimal pr-5 space-y-3 text-sm leading-7">
@@ -99,16 +127,32 @@ seo.get("/about", (c) => {
             ))}
           </ol>
         </section>
-        <section class="card">
-          <h2>چرا {s.site_name}؟</h2>
-          <ul class="list-disc pr-5 space-y-2 text-sm leading-7">
-            <li>کادوی تکراری خریده نمی‌شود؛ هر آرزو تا تأیید واریز برای یک خریدار رزرو است.</li>
-            <li>آدرس گیرنده محرمانه است و فقط فروشگاه، بعد از تأیید پرداخت، آن را می‌بیند.</li>
-            <li>پول مستقیم به حساب فروشگاه می‌رود؛ واسطه‌ای بین خریدار و فروشنده نیست.</li>
-            <li>ارسال با پیک داخل شهر فروشگاه و با پست به همه شهرهای ایران.</li>
-            <li>اطلاع‌رسانی سفارش‌ها در بات بله و تلگرام، و نصب سایت مثل یک اپ روی گوشی.</li>
-          </ul>
-        </section>
+        {(s.contact_phone || s.contact_email || s.contact_address || socials.length > 0) && (
+          <section class="card">
+            <h2>راه‌های ارتباط با ما</h2>
+            <div class="grid gap-3 md:grid-cols-2">
+              {s.contact_phone && contact(`tel:${s.contact_phone.replace(/[^\d+]/g, "")}`, "fa-solid fa-phone", "تلفن", s.contact_phone)}
+              {s.contact_email && contact(`mailto:${s.contact_email}`, "fa-solid fa-envelope", "ایمیل", s.contact_email)}
+              {socials.map((l) => contact(l.url, SOCIAL_ICON[l.key][0], SOCIAL_ICON[l.key][1], handle(l.url), true))}
+            </div>
+            {s.contact_address && (
+              <p class="text-sm mt-4"><i class="fa-solid fa-location-dot text-brand ml-2"></i>{s.contact_address}</p>
+            )}
+          </section>
+        )}
+        {s.developer_name && (
+          <section class="card flex items-center gap-4">
+            <span class="w-12 h-12 rounded-2xl bg-brand/15 text-brand flex items-center justify-center text-xl shrink-0"><i class="fa-solid fa-code"></i></span>
+            <div class="min-w-0">
+              <p class="text-[11px] muted" style="margin:0">طراحی و توسعه</p>
+              {dev ? (
+                <a href={dev} target="_blank" rel="noopener" class="font-bold">{s.developer_name} <span class="text-xs muted ltr">{handle(dev)}</span></a>
+              ) : (
+                <b>{s.developer_name}</b>
+              )}
+            </div>
+          </section>
+        )}
         <p class="text-sm">سوال دیگری دارید؟ <a href="/faq">سوالات متداول</a> را ببینید.</p>
       </article>
     </Layout>,

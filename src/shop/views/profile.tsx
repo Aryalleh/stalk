@@ -50,7 +50,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
     <header class="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-card">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": "/" }} />
-        <a href="/" class="text-lg font-medium text-pink">{site.site_name}</a>
+        <a href="/" class="text-lg font-medium text-brand">{site.site_name}</a>
         <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": url }} />
       </div>
     </header>
@@ -71,14 +71,14 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
           </div>
           {props.gifts && (
             <div>
-              <div class="text-xl font-bold text-pink">{fa(props.gifts.length)}</div>
+              <div class="text-xl font-bold text-brand">{fa(props.gifts.length)}</div>
               <div class="text-[11px] text-muted">کادوی گرفته</div>
             </div>
           )}
         </div>
         {props.isMe && (
           <p class="text-xs text-muted mt-5">
-            این پروفایل عمومی شماست. <a href="/me/settings" class="text-pink">تنظیم نمایش کادوها و تولد</a>
+            این پروفایل عمومی شماست. <a href="/me/settings" class="text-brand">تنظیم نمایش کادوها و تولد</a>
           </p>
         )}
       </section>
@@ -123,7 +123,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
                 <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent"></div>
                 <div class="absolute inset-x-0 bottom-0 p-4">
                   <h3 class="text-xs font-bold text-fg truncate">{g.product_title}</h3>
-                  {g.giver && <p class="text-[10px] text-pink truncate">🎁 از طرف {g.giver}</p>}
+                  {g.giver && <p class="text-[10px] text-brand truncate">🎁 از طرف {g.giver}</p>}
                 </div>
               </a>
             ))}

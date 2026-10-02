@@ -3,6 +3,7 @@ import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { adjustStock, availableByVariant, normCity, now, productImages, productPackages, productStock, randomSlug, type Order, type Product, type Shop } from "../db";
 import { sizeNames } from "../sizes";
+import { developerHref, faqs } from "../../content";
 import { colorList, pickVariant, variantKey, variants, type Variant } from "../variants";
 import type { C, Env } from "../../env";
 import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
@@ -11,7 +12,7 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
+import { AdminContentPage, AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 
 export const panel = new Hono<Env>();
@@ -532,6 +533,55 @@ admin.post("/admin/featured", async (c) => {
   return c.redirect("/admin");
 });
 
+// ---------- content: About page, FAQ, contact details, developer credit ----------
+
+const MAX_FAQ = 30;
+
+async function contentPage(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
+  const s = await loadSettings(c.env.DB);
+  c.set("settings", s);
+  return render(c, <AdminContentPage user={currentUser(c)} s={s} faq={faqs(s)} isDefaultFaq={!s.faq_items} {...extra} />, status);
+}
+
+admin.get("/admin/content", (c) => contentPage(c));
+
+admin.post("/admin/content", async (c) => {
+  const f = await form(c);
+  const one = (k: string, max: number) => (f[k] ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+  const values: Partial<Settings> = {
+    about_title: one("about_title", 120),
+    about_body: (f.about_body ?? "").replace(/\r/g, "").trim().slice(0, 6000),
+    developer_name: one("developer_name", 80),
+    developer_link: one("developer_link", 200),
+    contact_phone: one("contact_phone", 30),
+    contact_address: one("contact_address", 200),
+  };
+  const email = one("contact_email", 100);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return contentPage(c, { error: "ایمیل نامعتبر است." }, 400);
+  values.contact_email = email;
+  if (values.developer_link && !developerHref(values.developer_link)) return contentPage(c, { error: "لینک توسعه‌دهنده باید آدرس سایت (https://…) یا آیدی تلگرام (@name) باشد." }, 400);
+  for (const k of SOCIAL_KEYS) {
+    const v = one(k, 200);
+    if (v && !/^(@?[\w.-]{1,100}|https:\/\/[^\s"<>]{4,200})$/.test(v)) return contentPage(c, { error: "آیدی یا لینک شبکه‌های اجتماعی نامعتبر است." }, 400);
+    values[k] = v;
+  }
+  // FAQ rows q_N / a_N; an empty question removes the row. "Reset" goes back to the built-in list.
+  if (f.reset_faq === "1") values.faq_items = "";
+  else {
+    const rows: [string, string][] = [];
+    for (let n = 0; n < MAX_FAQ + 5; n++) {
+      const q = one(`q_${n}`, 200);
+      const a = (f[`a_${n}`] ?? "").replace(/\s+/g, " ").trim().slice(0, 1500);
+      if (q && a) rows.push([q, a]);
+      else if (q || a) return contentPage(c, { error: "هر سوال باید پاسخ داشته باشد (برای حذف، سوال و پاسخ را خالی کنید)." }, 400);
+    }
+    if (rows.length > MAX_FAQ) return contentPage(c, { error: `حداکثر ${MAX_FAQ} سوال.` }, 400);
+    values.faq_items = rows.length ? JSON.stringify(rows) : "";
+  }
+  await saveSiteSettings(c.env.DB, values);
+  return contentPage(c, { ok: "ذخیره شد. صفحه‌های «درباره» و «سوالات متداول» به‌روز شدند." });
+});
+
 // ---------- site settings (admin) ----------
 
 async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
@@ -554,20 +604,17 @@ async function saveAdminSettings(c: C): Promise<string> {
   if (!(minutes >= 5 && minutes <= 1440)) return "مهلت واریز باید بین ۵ تا ۱۴۴۰ دقیقه باشد.";
   const values: Partial<Settings> = { site_name: f.site_name.slice(0, 40), site_url: siteUrl, reservation_minutes: String(minutes) };
   if (f.site_description !== undefined) values.site_description = f.site_description.replace(/\s+/g, " ").trim().slice(0, 300);
-  if (f.contact_phone !== undefined) {
-    const one = (k: string, max: number) => (f[k] ?? "").replace(/\s+/g, " ").trim().slice(0, max);
-    const email = one("contact_email", 100);
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "ایمیل نامعتبر است.";
-    const ga = one("ga_measurement_id", 30).toUpperCase();
+  if (f.ga_measurement_id !== undefined) {
+    const ga = (f.ga_measurement_id ?? "").trim().toUpperCase();
     if (ga && !/^G-[A-Z0-9]{4,20}$/.test(ga)) return "شناسه Google Analytics باید مثل G-XXXXXXXXXX باشد.";
-    const cf = one("cf_analytics_token", 64).toLowerCase();
+    const cf = (f.cf_analytics_token ?? "").trim().toLowerCase();
     if (cf && !/^[a-f0-9]{32}$/.test(cf)) return "توکن Cloudflare Web Analytics نامعتبر است (۳۲ کاراکتر).";
-    for (const k of SOCIAL_KEYS) {
-      const v = one(k, 200);
-      if (v && !/^(@?[\w.-]{1,100}|https:\/\/[^\s"<>]{4,200})$/.test(v)) return "آیدی یا لینک شبکه‌های اجتماعی نامعتبر است.";
-      values[k] = v;
-    }
-    Object.assign(values, { contact_phone: one("contact_phone", 30), contact_email: email, contact_address: one("contact_address", 200), ga_measurement_id: ga, cf_analytics_token: cf });
+    Object.assign(values, { ga_measurement_id: ga, cf_analytics_token: cf });
+  }
+  if (f.brand_color !== undefined) {
+    const color = f.brand_color.trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(color)) return "رنگ اصلی سایت باید مثل #3b82f6 باشد.";
+    values.brand_color = color;
   }
   if (f.categories !== undefined) {
     const cats = [...new Set(f.categories.split(/\r?\n/).map((x) => x.trim().slice(0, 40)).filter(Boolean))];

@@ -57,11 +57,11 @@ miniapp.get("/app", (c) => {
         <p id="wait" class="text-sm text-muted"><i class="fa-solid fa-spinner fa-spin ml-2"></i>در حال ورود…</p>
         <div id="outside" class="hidden space-y-4">
           <p class="text-sm text-muted">این صفحه برای باز شدن داخل بله یا تلگرام است.</p>
-          <a href="/" class="inline-block px-6 py-3 rounded-2xl bg-pink text-white font-bold">رفتن به سایت</a>
+          <a href="/" class="inline-block px-6 py-3 rounded-2xl bg-brand text-white font-bold">رفتن به سایت</a>
         </div>
         <div id="failed" class="hidden space-y-4">
           <p class="text-sm text-muted">ورود خودکار انجام نشد. با شماره موبایل وارد شوید.</p>
-          <a href={`/login?next=${encodeURIComponent(next)}`} class="inline-block px-6 py-3 rounded-2xl bg-pink text-white font-bold">ورود با کد</a>
+          <a href={`/login?next=${encodeURIComponent(next)}`} class="inline-block px-6 py-3 rounded-2xl bg-brand text-white font-bold">ورود با کد</a>
         </div>
       </div>
       <script dangerouslySetInnerHTML={{ __html: pageScript(next) }} />

@@ -1,15 +1,17 @@
-/** Tailwind build for the site (npm run css). Colors follow the designs in html/. */
+/** Tailwind build for the site (npm run css). Colors are CSS variables (src/styles/app.css), so the
+ *  theme — and the brand color chosen in /admin/settings — is set in one place. */
+const v = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
 module.exports = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        ink: "#17131a", // page background
-        card: "#221c26", // surfaces
-        plum: "#2a2230", // disabled surfaces
-        fg: "#efe8f0", // text
-        muted: "#a79daf", // secondary text
-        pink: "#ff5c93", // accent
+        ink: v("ink"), // page background
+        card: v("card"), // surfaces
+        plum: v("plum"), // disabled surfaces
+        fg: v("fg"), // text
+        muted: v("muted"), // secondary text
+        brand: v("brand"), // accent (blue by default)
         ok: "#1b7f3b", // success
         tg: "#229ED9", // Telegram
         bale: "#2db57d", // Bale

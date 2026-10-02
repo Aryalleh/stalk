@@ -12,7 +12,7 @@ function AuthShell(props: { title: string; icon: string; subtitle: string; child
     <Layout title={props.title} user={null} nav="none" bare header={<div></div>}>
       <div class="min-h-screen flex flex-col justify-center px-6 py-12 max-w-sm mx-auto">
         <div class="text-center mb-10">
-          <div class="w-20 h-20 bg-pink rounded-[24px] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-pink/20 text-white text-3xl">
+          <div class="w-20 h-20 bg-brand rounded-[24px] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-brand/20 text-white text-3xl">
             <i class={`fa-solid ${props.icon}`}></i>
           </div>
           <h1 class="text-2xl font-black text-fg mb-3">{props.title}</h1>
@@ -92,7 +92,7 @@ export function CompleteProfilePage(props: { user: User; next: string; values: R
       <form method="post" action="/me/complete" class="space-y-2">
         <input type="hidden" name="next" value={props.next} />
         <ProfileFields values={props.values} username origin={props.origin} />
-        <button class="w-full py-4 mt-4 rounded-2xl text-base font-bold shadow-lg shadow-pink/20">ذخیره و ادامه</button>
+        <button class="w-full py-4 mt-4 rounded-2xl text-base font-bold shadow-lg shadow-brand/20">ذخیره و ادامه</button>
       </form>
     </AuthShell>
   );
@@ -111,7 +111,7 @@ export function CodeLoginPage(props: {
     props.step === "code"
       ? "کد ۶ رقمی را که در پیام‌رسان بله برایتان آمد وارد کنید."
       : "با شماره موبایل وارد شوید؛ کد ورود در پیام‌رسان بله برایتان ارسال می‌شود. اگر حساب ندارید، همین‌جا ساخته می‌شود.";
-  const big = "w-full py-4 rounded-2xl text-base font-bold shadow-lg shadow-pink/20";
+  const big = "w-full py-4 rounded-2xl text-base font-bold shadow-lg shadow-brand/20";
   return (
     <AuthShell title="ورود / ثبت‌نام" icon="fa-gift" subtitle={subtitle}>
       <Errors errors={[props.error]} />
@@ -188,7 +188,7 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
         <main class="flex-1 space-y-8">
           {steps.map(([title, text], n) => (
             <div class="flex gap-4">
-              <div class={`w-8 h-8 rounded-full ${n === 0 ? "bg-pink text-white" : "bg-card border border-muted/20 text-muted"} flex items-center justify-center text-sm font-bold shrink-0`}>
+              <div class={`w-8 h-8 rounded-full ${n === 0 ? "bg-brand text-white" : "bg-card border border-muted/20 text-muted"} flex items-center justify-center text-sm font-bold shrink-0`}>
                 {(n + 1).toLocaleString("fa-IR")}
               </div>
               <div>
@@ -208,7 +208,7 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
                 <div class={`w-10 h-10 rounded-full bg-ink flex items-center justify-center ${BOT_STYLE[l.kind].text}`}><i class="fa-solid fa-at"></i></div>
                 <span class="text-sm font-mono tracking-wider text-fg ltr">{l.username}</span>
               </div>
-              <button type="button" data-copy={`@${l.username}`} data-copied="کپی شد ✓" class="text-[10px] font-bold text-pink bg-pink/10 px-3 py-1.5 rounded-lg">کپی نام</button>
+              <button type="button" data-copy={`@${l.username}`} data-copied="کپی شد ✓" class="text-[10px] font-bold text-brand bg-brand/10 px-3 py-1.5 rounded-lg">کپی نام</button>
             </div>
           ))}
         </main>
@@ -219,7 +219,7 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
             </a>
           ))}
           <p class="text-center text-[10px] text-muted">
-            اتصال امن است و ربات به گفتگوهای خصوصی شما دسترسی ندارد. <a class="text-pink" href={`/connect?next=${encodeURIComponent(props.next)}`}>بررسی دوباره</a>
+            اتصال امن است و ربات به گفتگوهای خصوصی شما دسترسی ندارد. <a class="text-brand" href={`/connect?next=${encodeURIComponent(props.next)}`}>بررسی دوباره</a>
           </p>
         </footer>
       </div>
@@ -254,7 +254,7 @@ export function ProfilePage(props: {
   const first = u.name.trim().split(/\s+/)[0] ?? u.name;
   const action = (href: string, icon: string, label: string, accent = false, attrs: Record<string, string> = {}) => (
     <a href={href} class="flex flex-col items-center gap-2 min-w-[80px]" {...attrs}>
-      <div class={`w-14 h-14 rounded-2xl ${accent ? "bg-pink/10 text-pink" : "bg-card text-muted"} flex items-center justify-center text-xl`}>
+      <div class={`w-14 h-14 rounded-2xl ${accent ? "bg-brand/10 text-brand" : "bg-card text-muted"} flex items-center justify-center text-xl`}>
         <i class={`fa-solid ${icon}`}></i>
       </div>
       <span class="text-[10px] text-muted">{label}</span>
@@ -293,7 +293,7 @@ export function ProfilePage(props: {
           </div>
           <div class="bg-card p-4 rounded-2xl border border-muted/5">
             <span class="text-[10px] text-muted block mb-1">کادوهای دریافتی</span>
-            <span class="text-xl font-bold text-pink">{fa(props.stats.gifts)}</span>
+            <span class="text-xl font-bold text-brand">{fa(props.stats.gifts)}</span>
           </div>
         </section>
 
@@ -311,11 +311,11 @@ export function ProfilePage(props: {
         <section>
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-sm font-bold text-fg">آرزوهای فعال</h2>
-            <a href="/me/wishlists" class="text-[10px] text-pink font-bold">مشاهده همه</a>
+            <a href="/me/wishlists" class="text-[10px] text-brand font-bold">مشاهده همه</a>
           </div>
           {props.items.length === 0 && (
             <div class="bg-card rounded-2xl p-6 text-center text-sm text-muted">
-              هنوز آرزویی ندارید. از <a href="/" class="text-pink">فروشگاه</a> محصولی را به لیستتان اضافه کنید.
+              هنوز آرزویی ندارید. از <a href="/" class="text-brand">فروشگاه</a> محصولی را به لیستتان اضافه کنید.
             </div>
           )}
           <div class="space-y-4">
@@ -328,7 +328,7 @@ export function ProfilePage(props: {
                   <h3 class="text-xs font-bold text-fg truncate mb-1">{it.title}</h3>
                   <div class="flex items-center gap-2 mb-2">
                     <div class="flex-1 h-1.5 bg-ink rounded-full overflow-hidden">
-                      <div class="h-full bg-pink rounded-full" style={`width:${pct(it.bought, it.quantity)}%`}></div>
+                      <div class="h-full bg-brand rounded-full" style={`width:${pct(it.bought, it.quantity)}%`}></div>
                     </div>
                     <span class="text-[9px] text-muted">{fa(pct(it.bought, it.quantity))}٪</span>
                   </div>
@@ -344,12 +344,12 @@ export function ProfilePage(props: {
           </div>
         </section>
 
-        <section class="mt-10 p-5 bg-pink/5 border border-pink/20 rounded-[24px]">
+        <section class="mt-10 p-5 bg-brand/5 border border-brand/20 rounded-[24px]">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-pink flex items-center justify-center text-white"><i class="fa-solid fa-robot text-lg"></i></div>
+              <div class="w-10 h-10 rounded-full bg-brand flex items-center justify-center text-white"><i class="fa-solid fa-robot text-lg"></i></div>
               <div>
-                <h3 class="text-sm font-bold text-pink">ربات اطلاع‌رسانی</h3>
+                <h3 class="text-sm font-bold text-brand">ربات اطلاع‌رسانی</h3>
                 <p class="text-[10px] text-muted">
                   وضعیت: {connected.length ? `متصل (${connected.map((b) => BOT_STYLE[b.kind].name).join("، ")})` : "متصل نیست"}
                 </p>
@@ -602,7 +602,7 @@ export function MyOrdersPage(props: { user: User; orders: MyOrder[] }) {
             <div class="flex-1 min-w-0">
               <h3 class="text-sm font-bold text-fg truncate">{o.product_title}</h3>
               <p class="text-[10px] text-muted">{o.is_direct ? "برای خودم" : `کادو برای ${o.owner_name}`} · <span class="dt">{formatJalali(o.created_at, false)}</span></p>
-              <p class="text-xs font-bold text-pink mt-1">{toman(o.amount)}</p>
+              <p class="text-xs font-bold text-brand mt-1">{toman(o.amount)}</p>
             </div>
             <span class="text-[10px] text-muted text-left max-w-[90px]">{orderStatusLabel(o)}</span>
           </a>
@@ -630,17 +630,17 @@ export function ChangeRequestPage(props: { user: User; order: Order & { image_ke
         </section>
         {pending ? (
           <>
-            <section class="p-5 bg-pink/5 border border-pink/20 rounded-2xl space-y-2">
+            <section class="p-5 bg-brand/5 border border-brand/20 rounded-2xl space-y-2">
               <p class="text-sm text-fg leading-7">
                 کالایی که خواسته بودید{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""} تمام شده. فروشگاه پیشنهاد می‌دهد:
               </p>
-              {variantLabel(o.change_size, o.change_color) && <p class="text-lg font-bold text-pink">{variantLabel(o.change_size, o.change_color)}</p>}
+              {variantLabel(o.change_size, o.change_color) && <p class="text-lg font-bold text-brand">{variantLabel(o.change_size, o.change_color)}</p>}
               {o.change_message && <p class="text-sm text-fg leading-7 whitespace-pre-wrap">{o.change_message}</p>}
             </section>
             <form method="post" class="space-y-4">
               <label class="block text-xs text-muted">توضیح شما برای فروشگاه (مثلاً رنگ انتخابی) — اختیاری</label>
-              <input name="reply" maxlength={200} class="w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink" />
-              <button name="answer" value="accept" class="w-full py-4 bg-pink text-white rounded-2xl font-bold">✓ قبول می‌کنم</button>
+              <input name="reply" maxlength={200} class="w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-brand" />
+              <button name="answer" value="accept" class="w-full py-4 bg-brand text-white rounded-2xl font-bold">✓ قبول می‌کنم</button>
               <button
                 name="answer"
                 value="decline"
@@ -671,8 +671,8 @@ export function PendingChanges(props: { items: { id: number; product_title: stri
   return (
     <section class="mb-6 space-y-2">
       {props.items.map((c) => (
-        <a href={`/me/changes/${c.id}`} class="flex items-center gap-3 p-4 rounded-2xl bg-pink/10 border border-pink/30 text-sm">
-          <i class="fa-solid fa-arrows-rotate text-pink"></i>
+        <a href={`/me/changes/${c.id}`} class="flex items-center gap-3 p-4 rounded-2xl bg-brand/10 border border-brand/30 text-sm">
+          <i class="fa-solid fa-arrows-rotate text-brand"></i>
           <span class="flex-1">«{c.product_title}» تمام شده؛ فروشگاه پیشنهاد تغییر داده. پاسخ دهید</span>
           <i class="fa-solid fa-chevron-left text-muted text-xs"></i>
         </a>

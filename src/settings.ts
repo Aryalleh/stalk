@@ -14,7 +14,15 @@ export const DEFAULTS = {
   safir_bot_id: "", // numeric id of the bot Safir sends as
   categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line
   featured_shop_id: "", // the "shop of the week" banner on the home page
+  brand_color: "#3b82f6", // accent color of the whole site (buttons, prices, links)
   site_description: "", // meta description of the home page (search engines, AI answers, link previews); empty = default text
+  // Editable content (/admin/content): FAQ as JSON [[question, answer], ...] ("" = built-in list),
+  // the About page title and text ("" = built-in), and the developer credit shown on About.
+  faq_items: "",
+  about_title: "",
+  about_body: "",
+  developer_name: "",
+  developer_link: "", // site URL, t.me link or @telegram_id
   // Public contact details and profiles: shown in the footer and published as Organization data.
   contact_phone: "",
   contact_email: "",
@@ -99,4 +107,10 @@ export function socialLinks(s: Settings): { key: (typeof SOCIAL_KEYS)[number]; u
     const v = s[k].trim();
     return { key: k, url: /^https?:\/\//.test(v) ? v : base[k] + v.replace(/^@/, "") };
   });
+}
+
+/** The brand color as "r g b" for the CSS variable, or "" if it isn't a valid #rrggbb. */
+export function brandRgb(s: Settings) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s.brand_color.trim());
+  return m ? m.slice(1).map((h) => parseInt(h, 16)).join(" ") : "";
 }

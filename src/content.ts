@@ -2,7 +2,20 @@ import type { Settings } from "./settings";
 
 // Copy shared by the home page, /about, /faq and llms.txt (and their FAQPage / HowTo data).
 
+/** The FAQ: the admin's list from /admin/content, or the built-in one. */
 export function faqs(s: Settings): [string, string][] {
+  try {
+    const list = s.faq_items ? (JSON.parse(s.faq_items) as unknown) : null;
+    if (Array.isArray(list) && list.length && list.every((r) => Array.isArray(r) && typeof r[0] === "string" && typeof r[1] === "string")) {
+      return list as [string, string][];
+    }
+  } catch {
+    // fall back to the built-in list
+  }
+  return defaultFaqs(s);
+}
+
+export function defaultFaqs(s: Settings): [string, string][] {
   const n = s.site_name;
   return [
     [`${n} چیست؟`, `${n} یک بازار آنلاین برای کادو گرفتن است: هر کس محصولات دلخواهش را از فروشگاه‌های عضو به «لیست آرزو» اضافه می‌کند و لینک لیست را برای دوستان و خانواده می‌فرستد تا هر کدام یکی از آرزوها را برایش بخرند.`],
@@ -24,3 +37,33 @@ export const STEPS: [string, string][] = [
   ["کادو بگیر", "هر کس آرزویی را بخرد، فروشگاه بعد از تأیید واریز آن را مستقیم به آدرست می‌فرستد."],
 ];
 
+
+export const aboutTitle = (s: Settings) => s.about_title || `${s.site_name} چیست؟`;
+
+export const defaultAboutBody = (s: Settings) =>
+  `${s.site_name} یک بازار آنلاین برای کادو گرفتن است. کاربران محصولات دلخواهشان را از فروشگاه‌های ایرانی عضو، به «لیست آرزو» اضافه می‌کنند و لینک لیست را برای دوستان و خانواده می‌فرستند؛ هر کس یکی از آرزوها را بخرد، فروشگاه آن را مستقیم برای صاحب لیست ارسال می‌کند.
+
+پرداخت کارت به کارت و مستقیم به حساب فروشگاه است و آدرس گیرنده به خریدار نشان داده نمی‌شود.`;
+
+/** About text as blocks: paragraphs (blank-line separated) and bullet lists (lines starting with "-"). */
+export function aboutBlocks(s: Settings): ({ kind: "p"; text: string } | { kind: "ul"; items: string[] })[] {
+  return (s.about_body || defaultAboutBody(s))
+    .replace(/\r/g, "")
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const lines = block.split("\n").map((l) => l.trim());
+      return lines.every((l) => /^[-•*]\s+/.test(l))
+        ? { kind: "ul" as const, items: lines.map((l) => l.replace(/^[-•*]\s+/, "")) }
+        : { kind: "p" as const, text: lines.join(" ") };
+    });
+}
+
+/** The developer credit link: a URL, or a Telegram id written as @name. */
+export function developerHref(link: string) {
+  const v = link.trim();
+  if (/^https?:\/\//.test(v)) return v;
+  if (/^@?[A-Za-z][\w]{3,31}$/.test(v)) return `https://t.me/${v.replace(/^@/, "")}`;
+  return "";
+}

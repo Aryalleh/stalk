@@ -49,7 +49,7 @@ function ProductCard(props: { p: ProductWithShop }) {
       <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent"></div>
       <div class="absolute inset-x-0 bottom-0 p-4">
         <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{p.title}</h3>
-        <div class="text-[11px] text-pink font-bold">{toman(p.price)}</div>
+        <div class="text-[11px] text-brand font-bold">{toman(p.price)}</div>
         <div class="text-[10px] text-muted truncate">{p.shop_name}</div>
       </div>
     </a>
@@ -102,7 +102,7 @@ function HomeGuide(props: { categories: string[] }) {
         <ol class="grid gap-3 md:grid-cols-4">
           {STEPS.map(([name, text], i) => (
             <li class="bg-card rounded-2xl p-4">
-              <h3 class="font-bold mb-1"><span class="text-pink ml-1">{(i + 1).toLocaleString("fa-IR")}.</span>{name}</h3>
+              <h3 class="font-bold mb-1"><span class="text-brand ml-1">{(i + 1).toLocaleString("fa-IR")}.</span>{name}</h3>
               <p class="text-muted text-xs leading-6">{text}</p>
             </li>
           ))}
@@ -113,7 +113,7 @@ function HomeGuide(props: { categories: string[] }) {
           <h2 class="text-lg font-bold mb-4">دسته‌بندی هدیه‌ها</h2>
           <div class="flex flex-wrap gap-2">
             {props.categories.map((c) => (
-              <a href={categoryPath(c)} class="px-4 py-2 rounded-xl bg-card text-xs text-fg hover:text-pink">هدیه {c}</a>
+              <a href={categoryPath(c)} class="px-4 py-2 rounded-xl bg-card text-xs text-fg hover:text-brand">هدیه {c}</a>
             ))}
           </div>
         </section>
@@ -128,7 +128,7 @@ function HomeGuide(props: { categories: string[] }) {
             </div>
           ))}
         </div>
-        <p class="mt-3 text-xs"><a href="/faq" class="text-pink">همه سوالات متداول</a> · <a href="/about" class="text-pink">درباره {site.site_name}</a></p>
+        <p class="mt-3 text-xs"><a href="/faq" class="text-brand">همه سوالات متداول</a> · <a href="/about" class="text-brand">درباره {site.site_name}</a></p>
       </section>
     </div>
   );
@@ -152,7 +152,7 @@ export function HomePage(props: {
   const chip = (label: string, cat: string) => (
     <a
       href={feedUrl(search, props.q, cat)}
-      class={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-medium ${props.category === cat ? "bg-pink text-white" : "bg-card text-muted hover:text-fg"}`}
+      class={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-medium ${props.category === cat ? "bg-brand text-white" : "bg-card text-muted hover:text-fg"}`}
     >
       {label}
     </a>
@@ -161,7 +161,7 @@ export function HomePage(props: {
     <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
       <div class="max-w-5xl mx-auto px-4 py-4 space-y-4">
         <div class="flex items-center justify-between gap-3">
-          <a href="/" class="text-xl font-bold text-pink">{site.site_name}</a>
+          <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
           <div class="flex items-center gap-3">
             {props.user ? (
               <>
@@ -170,7 +170,7 @@ export function HomePage(props: {
                 <a href="/me" aria-label="پروفایل"><Avatar user={props.user} size="w-10 h-10" /></a>
               </>
             ) : (
-              <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-pink text-white text-sm font-bold">ورود / ثبت‌نام</a>
+              <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-brand text-white text-sm font-bold">ورود / ثبت‌نام</a>
             )}
           </div>
         </div>
@@ -184,7 +184,7 @@ export function HomePage(props: {
             value={props.q}
             autofocus={props.search}
             placeholder="جستجوی هدیه، فروشگاه یا برند..."
-            class="w-full bg-card border-none rounded-2xl py-3 pr-11 pl-4 text-sm text-fg placeholder:text-muted focus:ring-2 focus:ring-pink outline-none"
+            class="w-full bg-card border-none rounded-2xl py-3 pr-11 pl-4 text-sm text-fg placeholder:text-muted focus:ring-2 focus:ring-brand outline-none"
           />
         </form>
         {props.categories.length > 0 && (
@@ -224,11 +224,11 @@ export function HomePage(props: {
             {f.cover_key ? (
               <img class="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" src={`/img/${f.cover_key}`} alt={f.name} />
             ) : (
-              <div class="w-full h-full bg-gradient-to-br from-pink/40 to-plum"></div>
+              <div class="w-full h-full bg-gradient-to-br from-brand/40 to-plum"></div>
             )}
             <div class="absolute inset-0 bg-gradient-to-t from-ink to-transparent"></div>
             <div class="absolute bottom-4 right-5 left-5">
-              <span class="text-[10px] bg-pink text-white px-2 py-0.5 rounded-full mb-2 inline-block">فروشگاه هفته</span>
+              <span class="text-[10px] bg-brand text-white px-2 py-0.5 rounded-full mb-2 inline-block">فروشگاه هفته</span>
               <h2 class="text-xl font-bold text-white mb-1">{f.name}</h2>
               {f.description && <p class="text-xs text-muted line-clamp-1">{f.description}</p>}
             </div>
@@ -271,7 +271,7 @@ function videoLink(url: string): [string, string] {
 function Gallery(props: { images: ProductImage[]; title: string; overlay: Child }) {
   const imgs = props.images;
   const script = `(function(){var g=document.getElementById('gallery-track');if(!g)return;var d=document.querySelectorAll('#gallery-dots span');
-    g.addEventListener('scroll',function(){var i=Math.round(Math.abs(g.scrollLeft)/g.clientWidth);d.forEach(function(x,k){x.className=k===i?'w-2 h-2 rounded-full bg-pink':'w-2 h-2 rounded-full bg-fg/30';});},{passive:true});})();`;
+    g.addEventListener('scroll',function(){var i=Math.round(Math.abs(g.scrollLeft)/g.clientWidth);d.forEach(function(x,k){x.className=k===i?'w-2 h-2 rounded-full bg-brand':'w-2 h-2 rounded-full bg-fg/30';});},{passive:true});})();`;
   return (
     <section class="relative w-full aspect-[4/5] md:aspect-[16/10] max-h-[80vh] bg-card overflow-hidden">
       {imgs.length ? (
@@ -287,7 +287,7 @@ function Gallery(props: { images: ProductImage[]; title: string; overlay: Child 
       <div class="absolute bottom-10 inset-x-6 pointer-events-none">{props.overlay}</div>
       {imgs.length > 1 && (
         <div id="gallery-dots" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {imgs.map((_, i) => <span class={`w-2 h-2 rounded-full ${i ? "bg-fg/30" : "bg-pink"}`}></span>)}
+          {imgs.map((_, i) => <span class={`w-2 h-2 rounded-full ${i ? "bg-fg/30" : "bg-brand"}`}></span>)}
         </div>
       )}
       <script dangerouslySetInnerHTML={{ __html: script }} />
@@ -299,7 +299,7 @@ function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
   if (!props.guide && !props.image) return null;
   return (
     <details class="bg-card rounded-2xl p-4" open>
-      <summary class="cursor-pointer text-sm font-bold"><i class="fa-solid fa-ruler text-pink ml-2"></i>راهنمای سایز</summary>
+      <summary class="cursor-pointer text-sm font-bold"><i class="fa-solid fa-ruler text-brand ml-2"></i>راهنمای سایز</summary>
       {props.guide && (
         <div class="overflow-x-auto mt-3">
           <table class="w-full text-xs text-center">
@@ -319,7 +319,7 @@ function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
   );
 }
 
-const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-none focus:border-pink";
+const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-none focus:border-brand";
 
 export function ProductPage(props: {
   user: User | null;
@@ -399,12 +399,12 @@ export function ProductPage(props: {
   const overlay = (
     <>
       <div class="flex items-center gap-2 mb-2">
-        {p.category && <span class="text-[10px] font-bold text-pink bg-pink/10 backdrop-blur-md px-2 py-1 rounded-lg">{p.category}</span>}
+        {p.category && <span class="text-[10px] font-bold text-brand bg-brand/10 backdrop-blur-md px-2 py-1 rounded-lg">{p.category}</span>}
         <span class="text-[10px] text-fg/60">• {p.shop_name}</span>
       </div>
       <h1 class="text-2xl font-black text-fg mb-2 leading-tight">{p.title}</h1>
       <div class="flex items-baseline gap-2 flex-wrap">
-        <span class="text-2xl font-black text-pink">{fa(p.price)}</span>
+        <span class="text-2xl font-black text-brand">{fa(p.price)}</span>
         <span class="text-xs text-fg/60">تومان</span>
         {soldOut ? (
           <span class="text-[11px] font-bold text-white bg-red-500/80 px-2 py-0.5 rounded-lg mr-2">ناموجود</span>
@@ -434,7 +434,7 @@ export function ProductPage(props: {
             <h2 class="text-sm font-bold text-fg mb-3">ویژگی‌های کلیدی</h2>
             <ul class="grid grid-cols-2 gap-3">
               {features.map((x) => (
-                <li class="flex items-center gap-2 text-xs text-muted"><i class="fa-solid fa-circle-check text-pink"></i><span>{x}</span></li>
+                <li class="flex items-center gap-2 text-xs text-muted"><i class="fa-solid fa-circle-check text-brand"></i><span>{x}</span></li>
               ))}
             </ul>
           </div>
@@ -443,7 +443,7 @@ export function ProductPage(props: {
           const [icon, label] = videoLink(p.video_url);
           return (
             <a href={p.video_url} target="_blank" rel="noopener nofollow" class="flex items-center gap-3 p-4 bg-card rounded-2xl text-sm font-bold">
-              <i class={`${icon} text-pink text-xl`}></i> {label} <i class="fa-solid fa-arrow-up-left-from-square text-muted text-xs mr-auto"></i>
+              <i class={`${icon} text-brand text-xl`}></i> {label} <i class="fa-solid fa-arrow-up-left-from-square text-muted text-xs mr-auto"></i>
             </a>
           );
         })()}
@@ -464,7 +464,7 @@ export function ProductPage(props: {
         <SizeGuideBox guide={guide} image={p.size_guide_image} />
         {props.packages.length > 0 && (
           <div class="bg-card rounded-2xl p-4">
-            <h2 class="text-sm font-bold mb-3"><i class="fa-solid fa-gift text-pink ml-2"></i>بسته‌بندی‌های کادویی</h2>
+            <h2 class="text-sm font-bold mb-3"><i class="fa-solid fa-gift text-brand ml-2"></i>بسته‌بندی‌های کادویی</h2>
             {props.packages.map((k) => (
               <div class="flex justify-between text-xs text-muted py-1.5"><span>{k.name}</span><span>{k.price ? toman(k.price) : "رایگان"}</span></div>
             ))}
@@ -473,7 +473,7 @@ export function ProductPage(props: {
         )}
         <div class="p-4 bg-card rounded-2xl flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl bg-ink flex items-center justify-center overflow-hidden text-pink font-bold">
+            <div class="w-12 h-12 rounded-xl bg-ink flex items-center justify-center overflow-hidden text-brand font-bold">
               {props.shop.logo_key ? <img class="w-full h-full object-cover" src={`/img/${props.shop.logo_key}`} alt={p.shop_name} /> : p.shop_name.charAt(0)}
             </div>
             <div>
@@ -518,7 +518,7 @@ export function ProductPage(props: {
                 <input name="note" maxlength={200} class={field} />
               </div>
             </div>
-            <button class="w-full py-3.5 bg-pink text-white rounded-2xl font-bold">❤ افزودن به آرزوها</button>
+            <button class="w-full py-3.5 bg-brand text-white rounded-2xl font-bold">❤ افزودن به آرزوها</button>
             <a href={`/me/wishlists/new?product=${p.id}`} class="block text-center text-xs text-muted">یا ساخت لیست جدید</a>
           </form>
         </div>
@@ -526,7 +526,7 @@ export function ProductPage(props: {
 
       <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom flex gap-3">
-          <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-pink text-white text-center rounded-2xl font-bold shadow-lg shadow-pink/20 active:scale-95 transition-transform">
+          <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-brand text-white text-center rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
           </a>
           <a href={soldOut ? "#" : props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} rel={nofollow} aria-disabled={soldOut ? "true" : undefined} class={`${soldOut ? "opacity-40 pointer-events-none " : ""}flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform`}>
@@ -586,10 +586,10 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
       )}
       <section class="relative">
         <div class="h-40 md:h-56 bg-card overflow-hidden">
-          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover opacity-70" /> : <div class="w-full h-full bg-gradient-to-br from-pink/30 to-plum"></div>}
+          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover opacity-70" /> : <div class="w-full h-full bg-gradient-to-br from-brand/30 to-plum"></div>}
         </div>
         <div class="px-6 -mt-10 relative flex items-end gap-4">
-          <div class="w-20 h-20 rounded-2xl bg-card border-4 border-ink overflow-hidden flex items-center justify-center text-3xl font-bold text-pink shrink-0">
+          <div class="w-20 h-20 rounded-2xl bg-card border-4 border-ink overflow-hidden flex items-center justify-center text-3xl font-bold text-brand shrink-0">
             {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
           </div>
           <div class="pb-1 min-w-0">
@@ -603,7 +603,7 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
         <div class="flex flex-wrap gap-2">
           {SOCIALS.filter(([k]) => shop[k]).map(([k, label, icon, url]) => (
             <a class="px-3 py-2 rounded-xl bg-card text-xs text-fg flex items-center gap-2" href={url(String(shop[k]))} target="_blank" rel="noopener nofollow">
-              <i class={`${icon} text-pink`}></i>{label}
+              <i class={`${icon} text-brand`}></i>{label}
             </a>
           ))}
         </div>
@@ -629,7 +629,7 @@ export function WishlistPublicPage(props: {
     <header class="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-card">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": "/" }} />
-        <a href="/" class="text-lg font-medium text-pink">{site.site_name}</a>
+        <a href="/" class="text-lg font-medium text-brand">{site.site_name}</a>
         <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": props.shareUrl }} />
       </div>
     </header>
@@ -645,7 +645,7 @@ export function WishlistPublicPage(props: {
       <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">
         <a href={props.owner.username ? `/u/${props.owner.username}` : "#"} class="relative inline-block mb-4" aria-label={`پروفایل ${props.owner.name}`}>
           <Avatar user={props.owner} size="w-24 h-24" ring />
-          <div class="absolute -bottom-1 -left-1 bg-pink text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] border-2 border-ink">
+          <div class="absolute -bottom-1 -left-1 bg-brand text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] border-2 border-ink">
             <i class="fa-solid fa-gift"></i>
           </div>
         </a>
@@ -661,7 +661,7 @@ export function WishlistPublicPage(props: {
             <p class="text-xs text-muted mb-2">این لیست خودتان است؛ این لینک را بفرستید:</p>
             <div class="flex gap-2">
               <input readonly value={props.shareUrl} class="flex-1 min-w-0 bg-card rounded-xl px-3 py-2 text-xs ltr text-fg" onclick="this.select()" />
-              <button type="button" data-copy={props.shareUrl} data-copied="کپی شد ✓" class="px-3 py-2 bg-pink text-white rounded-xl text-xs font-bold">کپی</button>
+              <button type="button" data-copy={props.shareUrl} data-copied="کپی شد ✓" class="px-3 py-2 bg-brand text-white rounded-xl text-xs font-bold">کپی</button>
               <a href={`/me/wishlists/${w.id}`} class="px-3 py-2 bg-card text-fg rounded-xl text-xs">ویرایش</a>
             </div>
           </div>
@@ -699,7 +699,7 @@ export function WishlistPublicPage(props: {
                 {fulfilled ? (
                   <div class="absolute top-3 right-3 bg-ok px-2 py-1 rounded-lg text-[10px] text-white">✓ برآورده شد</div>
                 ) : it.quantity > 1 && it.bought > 0 ? (
-                  <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-pink border border-pink/20">
+                  <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-brand border border-brand/20">
                     {fa(it.bought)} از {fa(it.quantity)} خریده شده
                   </div>
                 ) : it.quantity > 1 ? (
@@ -707,11 +707,11 @@ export function WishlistPublicPage(props: {
                 ) : null}
                 <div class="absolute inset-x-0 bottom-0 p-4">
                   <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{it.title}</h3>
-                  <div class={`text-[11px] font-bold ${fulfilled ? "text-muted" : "text-pink"}`}>{toman(it.price)}</div>
+                  <div class={`text-[11px] font-bold ${fulfilled ? "text-muted" : "text-brand"}`}>{toman(it.price)}</div>
                   {variantLabel(it.size, it.color) && <div class="text-[10px] text-fg/80">{variantLabel(it.size, it.color)}</div>}
                   {it.note && <div class="text-[10px] text-muted truncate">{it.note}</div>}
                   {buyable && !fulfilled && !props.isOwner ? (
-                    <a href={`/gift/${it.id}`} class="mt-3 block w-full py-2 bg-pink text-white text-center rounded-xl text-[11px] font-bold shadow-lg shadow-pink/20">
+                    <a href={`/gift/${it.id}`} class="mt-3 block w-full py-2 bg-brand text-white text-center rounded-xl text-[11px] font-bold shadow-lg shadow-brand/20">
                       🎁 کادو بده
                     </a>
                   ) : status ? (
@@ -729,7 +729,7 @@ export function WishlistPublicPage(props: {
 
 function Row(props: { label: Child; value: Child; strong?: boolean }) {
   return (
-    <div class={`flex justify-between ${props.strong ? "text-sm font-bold text-pink pt-2" : "text-xs text-muted"}`}>
+    <div class={`flex justify-between ${props.strong ? "text-sm font-bold text-brand pt-2" : "text-xs text-muted"}`}>
       <span>{props.label}</span>
       <span>{props.value}</span>
     </div>
@@ -738,13 +738,13 @@ function Row(props: { label: Child; value: Child; strong?: boolean }) {
 
 function Option(props: { name: string; value: string; price: number; checked: boolean; title: Child; hint?: Child }) {
   return (
-    <label class="flex items-center gap-3 p-4 bg-card rounded-2xl border border-muted/10 cursor-pointer has-[:checked]:border-pink has-[:checked]:bg-pink/5">
-      <input type="radio" name={props.name} value={props.value} data-price={String(props.price)} checked={props.checked} class="accent-pink w-4 h-4" />
+    <label class="flex items-center gap-3 p-4 bg-card rounded-2xl border border-muted/10 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand/5">
+      <input type="radio" name={props.name} value={props.value} data-price={String(props.price)} checked={props.checked} class="accent-brand w-4 h-4" />
       <span class="flex-1 text-sm text-fg">
         {props.title}
         {props.hint && <span class="block text-[10px] text-muted">{props.hint}</span>}
       </span>
-      <span class="text-xs font-bold text-pink">{props.price ? toman(props.price) : "رایگان"}</span>
+      <span class="text-xs font-bold text-brand">{props.price ? toman(props.price) : "رایگان"}</span>
     </label>
   );
 }
@@ -775,7 +775,7 @@ export function CheckoutPage(props: {
     var sp=document.getElementById('show-on-profile');
     function vis(){var a=f.querySelector('input[name=visibility][value=anonymous]');if(!sp||!a)return;var cb=sp.querySelector('input');cb.disabled=a.checked;if(a.checked)cb.checked=false;sp.style.opacity=a.checked?'.4':'1';}
     f.addEventListener('change',vis);vis();})();`;
-  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
+  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-brand";
   const direct = !!props.wishlist.is_direct;
   const heading = direct ? "خرید برای خودم" : "خرید کادو";
   return (
@@ -825,7 +825,7 @@ export function CheckoutPage(props: {
                 value={d.method}
                 price={d.fee}
                 checked={shipDefault === d.method}
-                title={<><i class={`fa-solid ${d.method === "courier" ? "fa-motorcycle" : "fa-box"} text-pink ml-2`}></i>{DELIVERY_LABEL[d.method]}</>}
+                title={<><i class={`fa-solid ${d.method === "courier" ? "fa-motorcycle" : "fa-box"} text-brand ml-2`}></i>{DELIVERY_LABEL[d.method]}</>}
                 hint={`به ${props.wishlist.city || "شهر گیرنده"}`}
               />
             ))
@@ -842,13 +842,13 @@ export function CheckoutPage(props: {
               <fieldset class="space-y-2 pt-1" id="visibility">
                 <legend class="text-xs text-muted px-1 mb-1">گیرنده شما را بشناسد؟</legend>
                 <label class="flex items-center gap-2 text-sm text-fg px-1">
-                  <input type="radio" name="visibility" value="named" checked={v.visibility !== "anonymous" && v.anonymous !== "1"} class="accent-pink" /> با نام من
+                  <input type="radio" name="visibility" value="named" checked={v.visibility !== "anonymous" && v.anonymous !== "1"} class="accent-brand" /> با نام من
                 </label>
                 <label class="flex items-center gap-2 text-sm text-fg px-1">
-                  <input type="radio" name="visibility" value="anonymous" checked={v.visibility === "anonymous" || v.anonymous === "1"} class="accent-pink" /> ناشناس (نامم به گیرنده نشان داده نشود)
+                  <input type="radio" name="visibility" value="anonymous" checked={v.visibility === "anonymous" || v.anonymous === "1"} class="accent-brand" /> ناشناس (نامم به گیرنده نشان داده نشود)
                 </label>
                 <label class="flex items-start gap-2 text-xs text-muted px-1 pt-1" id="show-on-profile">
-                  <input type="checkbox" name="show_on_profile" value="1" checked={v.show_on_profile === "1"} class="accent-pink mt-0.5" />
+                  <input type="checkbox" name="show_on_profile" value="1" checked={v.show_on_profile === "1"} class="accent-brand mt-0.5" />
                   <span>نامم زیر این کادو در پروفایل عمومی {props.ownerName} هم نمایش داده شود (همه می‌بینند)</span>
                 </label>
               </fieldset>
@@ -864,7 +864,7 @@ export function CheckoutPage(props: {
       </form>
       <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom">
-          <button form="checkout" disabled={props.delivery.length === 0 || !it.in_stock} class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40">
+          <button form="checkout" disabled={props.delivery.length === 0 || !it.in_stock} class="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40">
             ادامه و دریافت شماره کارت <i class="fa-solid fa-arrow-left"></i>
           </button>
         </div>
@@ -886,14 +886,14 @@ export type OrderView = Order & {
 const RECEIPT_PREVIEW = `(function(){var i=document.getElementById('receipt-input'),z=document.getElementById('dropzone'),p=document.getElementById('receipt-preview');if(!i)return;
   function show(){var f=i.files&&i.files[0];if(!f){p.classList.add('hidden');return;}p.src=URL.createObjectURL(f);p.classList.remove('hidden');document.getElementById('dz-text').textContent=f.name;}
   i.addEventListener('change',show);
-  ['dragover','dragenter'].forEach(function(e){z.addEventListener(e,function(ev){ev.preventDefault();z.classList.add('border-pink');});});
-  ['dragleave','drop'].forEach(function(e){z.addEventListener(e,function(){z.classList.remove('border-pink');});});
+  ['dragover','dragenter'].forEach(function(e){z.addEventListener(e,function(ev){ev.preventDefault();z.classList.add('border-brand');});});
+  ['dragleave','drop'].forEach(function(e){z.addEventListener(e,function(){z.classList.remove('border-brand');});});
   z.addEventListener('drop',function(ev){ev.preventDefault();if(ev.dataTransfer.files.length){i.files=ev.dataTransfer.files;show();}});})();`;
 
 function Step(props: { done: boolean; active?: boolean; title: string; hint: string }) {
   return (
     <div class="relative flex gap-4">
-      <div class={`w-4 h-4 rounded-full z-10 shrink-0 ${props.done ? "bg-pink shadow-[0_0_10px_#ff5c93]" : "bg-ink border-2 border-card"}`}></div>
+      <div class={`w-4 h-4 rounded-full z-10 shrink-0 ${props.done ? "bg-brand shadow-[0_0_10px_rgb(var(--c-brand))]" : "bg-ink border-2 border-card"}`}></div>
       <div class={`flex-1 -mt-1 ${props.done || props.active ? "" : "opacity-40"}`}>
         <h3 class="text-xs font-bold text-fg">{props.title}</h3>
         <p class="text-[10px] text-muted">{props.hint}</p>
@@ -926,7 +926,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           <h3 class="text-sm font-bold text-fg mb-1">{o.product_title}</h3>
           <p class="text-[10px] text-muted mb-1">فروشگاه: {o.shop_name} · {forWhom}</p>
           {variantLabel(o.size, o.color) && <p class="text-[10px] text-muted mb-1"><b class="text-fg">{variantLabel(o.size, o.color)}</b></p>}
-          <span class="text-xs font-bold text-pink">{toman(o.amount)}</span>
+          <span class="text-xs font-bold text-brand">{toman(o.amount)}</span>
         </div>
       </div>
     </section>
@@ -960,10 +960,10 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
             </div>
           )}
 
-          <section class="bg-pink/5 border border-pink/20 p-5 rounded-2xl">
+          <section class="bg-brand/5 border border-brand/20 p-5 rounded-2xl">
             <div class="flex items-center gap-3 mb-4">
-              <div class="w-8 h-8 rounded-full bg-pink flex items-center justify-center text-white"><i class="fa-solid fa-credit-card text-sm"></i></div>
-              <h3 class="text-sm font-bold text-pink">۱. مبلغ را کارت به کارت کنید</h3>
+              <div class="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white"><i class="fa-solid fa-credit-card text-sm"></i></div>
+              <h3 class="text-sm font-bold text-brand">۱. مبلغ را کارت به کارت کنید</h3>
             </div>
             <p class="text-xs text-muted leading-relaxed mb-5">
               مبلغ <b class="text-fg">{toman(o.amount)}</b> را به کارت زیر (مستقیم به حساب فروشگاه) واریز کنید و تصویر رسید را پایین بفرستید.
@@ -973,7 +973,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
                 <span class="text-[10px] text-muted block mb-1">شماره کارت مقصد</span>
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-base sm:text-lg font-mono tracking-wider whitespace-nowrap text-fg dt">{formatCard(o.pay_card_number)}</span>
-                  <button type="button" data-copy={o.pay_card_number} data-copied='<i class="fa-solid fa-check"></i>' class="text-pink w-9 h-9" aria-label="کپی شماره کارت">
+                  <button type="button" data-copy={o.pay_card_number} data-copied='<i class="fa-solid fa-check"></i>' class="text-brand w-9 h-9" aria-label="کپی شماره کارت">
                     <i class="fa-regular fa-copy"></i>
                   </button>
                 </div>
@@ -993,7 +993,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
                   <span class="text-[10px] text-muted block mb-1">مبلغ به ریال</span>
                   <span class="text-sm font-medium text-fg">{fa(o.amount * 10)} ریال</span>
                 </div>
-                <button type="button" data-copy={String(o.amount * 10)} data-copied="کپی شد ✓" class="text-[11px] text-pink">کپی مبلغ</button>
+                <button type="button" data-copy={String(o.amount * 10)} data-copied="کپی شد ✓" class="text-[11px] text-brand">کپی مبلغ</button>
               </div>
             </div>
             {!expired && <p class="text-[10px] text-muted mt-3">این آرزو تا <span class="dt">{formatJalali(o.expires_at)}</span> برای شما رزرو است.</p>}
@@ -1002,7 +1002,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           <section>
             <h3 class="text-sm font-bold text-fg mb-3 px-1">۲. عکس فیش واریز را بفرستید</h3>
             <Errors errors={props.errors} />
-            <label id="dropzone" class="border-2 border-dashed border-card rounded-2xl p-8 flex flex-col items-center justify-center gap-3 bg-card/30 cursor-pointer hover:border-pink/40 transition-colors">
+            <label id="dropzone" class="border-2 border-dashed border-card rounded-2xl p-8 flex flex-col items-center justify-center gap-3 bg-card/30 cursor-pointer hover:border-brand/40 transition-colors">
               <img id="receipt-preview" class="hidden max-h-64 rounded-xl" alt="پیش‌نمایش فیش" />
               <div class="w-12 h-12 rounded-full bg-card flex items-center justify-center text-muted"><i class="fa-solid fa-cloud-arrow-up text-xl"></i></div>
               <p id="dz-text" class="text-xs text-muted">تصویر رسید را اینجا رها کنید یا انتخاب کنید</p>
@@ -1014,7 +1014,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
         </form>
         <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
           <div class="max-w-3xl mx-auto p-4 safe-bottom">
-            <button form="receipt-form" class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+            <button form="receipt-form" class="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
               ارسال فیش <i class="fa-solid fa-arrow-left"></i>
             </button>
           </div>
@@ -1034,9 +1034,9 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           <div class="flex items-center justify-between mb-8">
             <div>
               <p class="text-[10px] text-muted mb-1">شماره سفارش: #{fa(o.id)}</p>
-              <h2 class={`text-sm font-black ${o.status === "rejected" ? "text-red-300" : "text-pink"}`}>{orderStatusLabel(o)}</h2>
+              <h2 class={`text-sm font-black ${o.status === "rejected" ? "text-red-300" : "text-brand"}`}>{orderStatusLabel(o)}</h2>
             </div>
-            <div class="w-12 h-12 rounded-2xl bg-pink/10 text-pink flex items-center justify-center text-xl"><i class={`fa-solid ${icon}`}></i></div>
+            <div class="w-12 h-12 rounded-2xl bg-brand/10 text-brand flex items-center justify-center text-xl"><i class={`fa-solid ${icon}`}></i></div>
           </div>
           {o.status === "rejected" && o.cancel_kind === "out_of_stock" ? (
             <div class="text-sm text-red-300 leading-relaxed space-y-2">
@@ -1066,7 +1066,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           <div class="rounded-2xl bg-amber-400/10 text-amber-200 px-4 py-3 text-sm leading-7">
             🔁 کالا{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""} تمام شده و فروشگاه {variantLabel(o.change_size, o.change_color) || "گزینه دیگری"} را پیشنهاد داده
             {o.is_direct ? "؛ در پروفایل خود پاسخ دهید." : "؛ منتظر پاسخ گیرنده است."}
-            {o.is_direct && <a href={`/me/changes/${o.id}`} class="block mt-2 text-pink font-bold">پاسخ به پیشنهاد</a>}
+            {o.is_direct && <a href={`/me/changes/${o.id}`} class="block mt-2 text-brand font-bold">پاسخ به پیشنهاد</a>}
           </div>
         )}
         {o.change_status === "accepted" && (
@@ -1079,8 +1079,8 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
         {o.gift_message && (
           <section>
             <h2 class="text-xs font-bold text-muted mb-4 px-1">پیام شما برای {o.owner_name}</h2>
-            <div class="p-5 bg-pink/5 border border-pink/20 rounded-3xl relative">
-              <i class="fa-solid fa-quote-right absolute -top-3 -right-3 w-8 h-8 bg-pink text-white rounded-full flex items-center justify-center text-xs"></i>
+            <div class="p-5 bg-brand/5 border border-brand/20 rounded-3xl relative">
+              <i class="fa-solid fa-quote-right absolute -top-3 -right-3 w-8 h-8 bg-brand text-white rounded-full flex items-center justify-center text-xs"></i>
               <p class="text-sm text-fg leading-relaxed whitespace-pre-wrap">{o.gift_message}</p>
             </div>
           </section>
@@ -1112,7 +1112,7 @@ export function DirectBuyPage(props: {
   const p = props.product;
   const v = props.values;
   const opts = variants(p).filter((x) => x.label);
-  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-pink";
+  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-brand";
   const label = "block text-xs text-muted mb-1.5 px-1";
   return (
     <Layout title={`خرید ${p.title}`} user={props.user} nav="none" header={<TitleBar title="خرید مستقیم" back={`/p/${p.id}`} />} bare>
@@ -1124,7 +1124,7 @@ export function DirectBuyPage(props: {
           <div class="min-w-0">
             <h2 class="text-sm font-bold text-fg truncate">{p.title}</h2>
             <p class="text-[10px] text-muted">{p.shop_name}</p>
-            <p class="text-xs font-bold text-pink mt-1">{toman(p.price)}</p>
+            <p class="text-xs font-bold text-brand mt-1">{toman(p.price)}</p>
           </div>
         </section>
         <Errors errors={props.errors} />
@@ -1177,7 +1177,7 @@ export function DirectBuyPage(props: {
       </form>
       <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom">
-          <button form="direct" class="w-full py-4 bg-pink text-white rounded-2xl font-bold shadow-lg shadow-pink/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <button form="direct" class="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
             ادامه: روش ارسال و پرداخت <i class="fa-solid fa-arrow-left"></i>
           </button>
         </div>

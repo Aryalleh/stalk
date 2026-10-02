@@ -13,10 +13,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- theme variables (used by .ui components below) ---------- */
+/* ---------- theme ---------- */
+/* Tailwind colors (space-separated RGB so opacity modifiers work). Dark navy with a blue brand;
+   --c-brand is overridden by the brand color chosen in /admin/settings. */
 :root {
-  --bg: #17131a; --card: #221c26; --fg: #efe8f0; --muted: #a79daf; --line: rgb(167 157 175 / 0.12);
-  --field: #17131a; --accent: #ff5c93; --accent-fg: #fff; --ok: #1b7f3b; --ok-bg: rgb(27 127 59 / 0.15);
+  --c-ink: 13 19 32; --c-card: 23 32 51; --c-plum: 33 44 66; --c-fg: 231 237 247; --c-muted: 148 163 184; --c-brand: 59 130 246;
+}
+/* Variables for the .ui components below. */
+:root {
+  --bg: rgb(var(--c-ink)); --card: rgb(var(--c-card)); --fg: rgb(var(--c-fg)); --muted: rgb(var(--c-muted)); --line: rgb(var(--c-muted) / 0.14);
+  --field: rgb(var(--c-ink)); --accent: rgb(var(--c-brand)); --accent-fg: #fff; --ok: #1b7f3b; --ok-bg: rgb(27 127 59 / 0.15);
   --warn-bg: rgb(255 176 32 / 0.12); --warn-fg: #ffcf7a; --err-bg: rgb(229 57 53 / 0.14); --err-fg: #ff8a80;
 }
 /* Shop panel: light slate + blue, as in html/shoppanel.html */
@@ -53,7 +59,7 @@
     @apply w-full rounded-xl px-3 py-2.5 text-sm outline-none transition;
     background: var(--field); color: var(--fg); border: 1px solid var(--line);
   }
-  .ui :where(input, textarea, select):focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(255 92 147 / 0.15); }
+  .ui :where(input, textarea, select):focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(var(--c-brand) / 0.18); }
   .ui :where(input[type=file]) { @apply w-full text-xs; color: var(--muted); }
   .ui :where(input[type=checkbox], input[type=radio]) { accent-color: var(--accent); width: auto; }
   .ui textarea { min-height: 88px; }
@@ -76,7 +82,7 @@
   .ui table { @apply w-full text-sm border-collapse; }
   .ui th, .ui td { @apply px-2.5 py-2 text-right align-top; border-bottom: 1px solid var(--line); }
   .ui th { @apply font-medium whitespace-nowrap text-xs; color: var(--muted); }
-  .ui .tag { @apply inline-block text-[11px] px-2 py-0.5 rounded-lg whitespace-nowrap; background: rgb(255 92 147 / 0.12); color: var(--accent); }
+  .ui .tag { @apply inline-block text-[11px] px-2 py-0.5 rounded-lg whitespace-nowrap; background: rgb(var(--c-brand) / 0.12); color: var(--accent); }
   .ui .tag.ok { background: var(--ok-bg); color: var(--ok); }
   .ui .okbox { @apply rounded-xl px-4 py-3 mb-4 text-sm; background: var(--ok-bg); color: var(--ok); }
   .ui .warnbox { @apply rounded-xl px-4 py-3 mb-4 text-sm; background: var(--warn-bg); color: var(--warn-fg); }

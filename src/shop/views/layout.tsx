@@ -1,8 +1,9 @@
 import type { Child } from "hono/jsx";
 import { CSS_URL } from "../../assets";
 import { useSite } from "../../render";
-import { socialLinks } from "../../settings";
+import { brandRgb, socialLinks } from "../../settings";
 import { summary } from "../../schema";
+import { developerHref } from "../../content";
 import { canUseCrm, type User } from "../../session";
 
 // Visual language from the designs in html/: dark ink background, cards #221c26, pink accent,
@@ -29,7 +30,7 @@ document.addEventListener('click', function (e) {
   var s = e.target.closest('[data-share]');
   if (s) { e.preventDefault(); var url = s.getAttribute('data-share') || location.href, title = document.title;
     if (navigator.share) navigator.share({ title: title, url: url }).catch(function () {});
-    else if (navigator.clipboard) { navigator.clipboard.writeText(url); s.classList.add('text-pink'); } }
+    else if (navigator.clipboard) { navigator.clipboard.writeText(url); s.classList.add('text-brand'); } }
   var i = e.target.closest('[data-install]');
   if (i && installPrompt) { e.preventDefault(); installPrompt.prompt(); installPrompt = null; }
   var b = e.target.closest('[data-back]');
@@ -39,7 +40,7 @@ document.addEventListener('click', function (e) {
 export function Avatar(props: { user: { name: string; avatar_key?: string } | null; size?: string; ring?: boolean }) {
   const size = props.size ?? "w-10 h-10";
   const u = props.user;
-  const ring = props.ring ? "border-2 border-pink p-1" : "";
+  const ring = props.ring ? "border-2 border-brand p-1" : "";
   if (u?.avatar_key) {
     return (
       <div class={`${size} rounded-full ${ring} shrink-0`}>
@@ -50,7 +51,7 @@ export function Avatar(props: { user: { name: string; avatar_key?: string } | nu
   const initial = (u?.name ?? "").trim().charAt(0) || "؟";
   return (
     <div class={`${size} rounded-full ${ring} shrink-0`}>
-      <div class="w-full h-full rounded-full bg-card text-pink font-bold flex items-center justify-center">{initial}</div>
+      <div class="w-full h-full rounded-full bg-card text-brand font-bold flex items-center justify-center">{initial}</div>
     </div>
   );
 }
@@ -58,7 +59,7 @@ export function Avatar(props: { user: { name: string; avatar_key?: string } | nu
 function BottomNav(props: { active: NavKey; user: User | null }) {
   // Private pages send signed-out visitors to the login page themselves; crawlers needn't follow.
   const item = (key: NavKey, href: string, icon: string, label: string) => (
-    <a href={href} rel={props.user || !href.startsWith("/me") ? undefined : "nofollow"} class={`flex flex-col items-center gap-1 ${props.active === key ? "text-pink" : "text-muted"}`}>
+    <a href={href} rel={props.user || !href.startsWith("/me") ? undefined : "nofollow"} class={`flex flex-col items-center gap-1 ${props.active === key ? "text-brand" : "text-muted"}`}>
       <i class={`fa-solid ${icon} text-lg`}></i>
       <span class="text-[10px]">{label}</span>
     </a>
@@ -72,7 +73,7 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
           href="/me/wishlists/new"
           rel={props.user ? undefined : "nofollow"}
           aria-label="لیست آرزوی جدید"
-          class="w-14 h-14 bg-pink text-white rounded-full shadow-lg shadow-pink/40 flex items-center justify-center text-xl"
+          class="w-14 h-14 bg-brand text-white rounded-full shadow-lg shadow-brand/40 flex items-center justify-center text-xl"
         >
           <i class="fa-solid fa-plus"></i>
         </a>
@@ -95,11 +96,11 @@ function DesktopNav(props: { user: User | null }) {
           <a href="/panel" class="hover:text-fg">پنل فروشگاه</a>
           {u.is_admin ? <a href="/admin" class="hover:text-fg">مدیریت</a> : null}
           {canUseCrm(u) ? <a href="/crm" class="hover:text-fg">CRM</a> : null}
-          <a href="/me/wishlists/new" class="px-4 py-2 rounded-xl bg-pink text-white font-bold">+ لیست جدید</a>
+          <a href="/me/wishlists/new" class="px-4 py-2 rounded-xl bg-brand text-white font-bold">+ لیست جدید</a>
           <a href="/me" aria-label="پروفایل"><Avatar user={u} size="w-9 h-9" /></a>
         </>
       ) : (
-        <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-pink text-white font-bold">ورود / ثبت‌نام</a>
+        <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-brand text-white font-bold">ورود / ثبت‌نام</a>
       )}
     </div>
   );
@@ -157,7 +158,7 @@ function SeoTags(props: { title: string; seo: Seo }) {
   );
 }
 
-const SOCIAL_ICON: Record<string, [string, string]> = {
+export const SOCIAL_ICON: Record<string, [string, string]> = {
   social_instagram: ["fa-brands fa-instagram", "اینستاگرام"],
   social_telegram: ["fa-brands fa-telegram", "تلگرام"],
   social_bale: ["fa-solid fa-comment-dots", "بله"],
@@ -184,10 +185,20 @@ function Footer() {
           {site.contact_address && <span>{site.contact_address}</span>}
         </address>
       )}
+      {site.developer_name && (
+        <p class="text-[11px] text-muted/80">
+          طراحی و توسعه:{" "}
+          {developerHref(site.developer_link) ? (
+            <a href={developerHref(site.developer_link)} target="_blank" rel="noopener" class="hover:text-fg">{site.developer_name}</a>
+          ) : (
+            site.developer_name
+          )}
+        </p>
+      )}
       {socials.length > 0 && (
         <div class="flex justify-center gap-4 text-base">
           {socials.map((l) => (
-            <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="hover:text-pink">
+            <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="hover:text-brand">
               <i class={SOCIAL_ICON[l.key][0]}></i>
             </a>
           ))}
@@ -244,7 +255,7 @@ export function Layout(props: {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content={props.panel ? "#ffffff" : "#17131a"} />
+        <meta name="theme-color" content={props.panel ? "#ffffff" : "#0d1320"} />
         <title>{title}</title>
         <SeoTags title={title} seo={props.seo ?? {}} />
         <link rel="manifest" href="/manifest.webmanifest" />
@@ -256,13 +267,14 @@ export function Layout(props: {
         <meta name="apple-mobile-web-app-title" content={site.site_name} />
         {HEAD_LINKS}
         <link rel="stylesheet" href={CSS_URL} />
+        {brandRgb(site) && brandRgb(site) !== "59 130 246" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${brandRgb(site)}}` }} />}
         {!props.panel && <Analytics />}
       </head>
       <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
         {props.header ?? (
           <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
             <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-              <a href="/" class="text-xl font-bold text-pink">{site.site_name}</a>
+              <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
               <DesktopNav user={props.user} />
               <a href={props.user ? "/me" : "/login"} rel={props.user ? undefined : "nofollow"} class="md:hidden" aria-label="پروفایل">
                 {props.user ? <Avatar user={props.user} size="w-9 h-9" /> : <span class="text-sm text-muted">ورود</span>}
