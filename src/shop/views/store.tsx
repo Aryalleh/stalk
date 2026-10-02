@@ -23,6 +23,7 @@ import { useSite } from "../../render";
 import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
+import { STEPS, faqs } from "../../content";
 import { Avatar, Errors, IconButton, Layout, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
@@ -78,12 +79,58 @@ function Pager(props: { page: number; hasNext: boolean; base: string }) {
   );
 }
 
-function feedUrl(path: string, q: string, category: string) {
+/** Category pages have clean paths (/c/<name>); searches live under /search?q=…&cat=…. */
+export const categoryPath = (cat: string) => `/c/${encodeURIComponent(cat)}`;
+
+function feedUrl(search: boolean, q: string, category: string) {
+  if (!search) return category ? categoryPath(category) : "/";
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
   if (category) qs.set("cat", category);
   const s = qs.toString();
-  return s ? `${path}?${s}` : path;
+  return s ? `/search?${s}` : "/search";
+}
+
+/** Home page copy under the feed: how it works, categories and common questions (H2/H3 structure). */
+function HomeGuide(props: { categories: string[] }) {
+  const site = useSite();
+  return (
+    <div class="mt-12 space-y-10 text-sm leading-7">
+      <section>
+        <h2 class="text-lg font-bold mb-4">چطور با {site.site_name} کادو بگیری؟</h2>
+        <ol class="grid gap-3 md:grid-cols-4">
+          {STEPS.map(([name, text], i) => (
+            <li class="bg-card rounded-2xl p-4">
+              <h3 class="font-bold mb-1"><span class="text-pink ml-1">{(i + 1).toLocaleString("fa-IR")}.</span>{name}</h3>
+              <p class="text-muted text-xs leading-6">{text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+      {props.categories.length > 0 && (
+        <section>
+          <h2 class="text-lg font-bold mb-4">دسته‌بندی هدیه‌ها</h2>
+          <div class="flex flex-wrap gap-2">
+            {props.categories.map((c) => (
+              <a href={categoryPath(c)} class="px-4 py-2 rounded-xl bg-card text-xs text-fg hover:text-pink">هدیه {c}</a>
+            ))}
+          </div>
+        </section>
+      )}
+      <section>
+        <h2 class="text-lg font-bold mb-4">سوالات پرتکرار</h2>
+        <div class="space-y-3">
+          {faqs(site).slice(0, 4).map(([q, a]) => (
+            <div class="bg-card rounded-2xl p-4">
+              <h3 class="font-bold mb-1">{q}</h3>
+              <p class="text-muted text-xs leading-6">{a}</p>
+            </div>
+          ))}
+        </div>
+        <p class="mt-3 text-xs"><a href="/faq" class="text-pink">همه سوالات متداول</a> · <a href="/about" class="text-pink">درباره {site.site_name}</a></p>
+      </section>
+    </div>
+  );
 }
 
 export type FeaturedShop = Pick<Shop, "name" | "slug" | "description" | "cover_key" | "logo_key">;
@@ -100,10 +147,10 @@ export function HomePage(props: {
   search?: boolean;
 }) {
   const site = useSite();
-  const path = props.search ? "/search" : "/";
+  const search = !!props.search;
   const chip = (label: string, cat: string) => (
     <a
-      href={feedUrl(path, props.q, cat)}
+      href={feedUrl(search, props.q, cat)}
       class={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-medium ${props.category === cat ? "bg-pink text-white" : "bg-card text-muted hover:text-fg"}`}
     >
       {label}
@@ -122,16 +169,17 @@ export function HomePage(props: {
                 <a href="/me" aria-label="پروفایل"><Avatar user={props.user} size="w-10 h-10" /></a>
               </>
             ) : (
-              <a href="/login" class="px-4 py-2 rounded-xl bg-pink text-white text-sm font-bold">ورود / ثبت‌نام</a>
+              <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-pink text-white text-sm font-bold">ورود / ثبت‌نام</a>
             )}
           </div>
         </div>
-        <form method="get" action={path} class="relative">
-          <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-muted"></i>
+        <form method="get" action="/search" class="relative" role="search">
+          <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
           {props.category && <input type="hidden" name="cat" value={props.category} />}
           <input
             type="search"
             name="q"
+            aria-label="جستجوی هدیه"
             value={props.q}
             autofocus={props.search}
             placeholder="جستجوی هدیه، فروشگاه یا برند..."
@@ -152,18 +200,18 @@ export function HomePage(props: {
   const isHome = !props.search && !props.q && !props.category;
   const title = props.search
     ? props.q ? `جستجوی «${props.q}»` : "جستجوی هدیه"
-    : props.category ? `خرید هدیه ${props.category}` : `${site.site_name} | لیست آرزو و خرید کادو آنلاین`;
+    : props.category ? `خرید هدیه و کادو ${props.category}؛ ارسال به سراسر ایران` : `${site.site_name} | لیست آرزو، خرید کادو و هدیه آنلاین از فروشگاه‌ها`;
   const seo: Seo = isHome
     ? { index: props.page === 1, canonical: "/", description: siteDescription(site), jsonLd: [organizationLd(site), websiteLd(site), itemListLd(site, "تازه‌ترین هدیه‌ها", props.products)] }
     : props.category && !props.search && !props.q
       ? {
           index: props.page === 1,
-          canonical: `/?cat=${encodeURIComponent(props.category)}`,
+          canonical: categoryPath(props.category),
           description: `خرید هدیه و کادو ${props.category} از فروشگاه‌های ${site.site_name}؛ به لیست آرزویت اضافه کن یا مستقیم بخر. پرداخت کارت به کارت مستقیم به فروشگاه.`,
           jsonLd: [
-            { "@context": "https://schema.org", "@type": "CollectionPage", name: `هدیه ${props.category}`, url: `${site.origin}/?cat=${encodeURIComponent(props.category)}`, isPartOf: { "@id": `${site.origin}/#website` } },
+            { "@context": "https://schema.org", "@type": "CollectionPage", name: `هدیه ${props.category}`, url: site.origin + categoryPath(props.category), isPartOf: { "@id": `${site.origin}/#website` } },
             itemListLd(site, `هدیه ${props.category}`, props.products),
-            breadcrumbLd(site, [[site.site_name, "/"], [props.category, `/?cat=${encodeURIComponent(props.category)}`]]),
+            breadcrumbLd(site, [[site.site_name, "/"], [props.category, categoryPath(props.category)]]),
           ],
         }
       : { description: siteDescription(site) };
@@ -201,8 +249,10 @@ export function HomePage(props: {
             {props.q && <>نتیجه جستجوی «<b class="text-fg">{props.q}</b>»</>} {props.category && <>در دسته <b class="text-fg">{props.category}</b></>}
           </p>
         )}
+        {isHome && props.products.length > 0 && <h2 class="text-lg font-bold mb-4">تازه‌ترین هدیه‌ها</h2>}
         <Masonry products={props.products} empty={props.search && !props.q && !props.category ? "دنبال چه هدیه‌ای می‌گردی؟" : undefined} />
-        <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(path, props.q, props.category)} />
+        <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(search, props.q, props.category)} />
+        {isHome && props.page === 1 && <HomeGuide categories={props.categories} />}
       </div>
     </Layout>
   );
@@ -285,6 +335,7 @@ export function ProductPage(props: {
   const sizes = guide?.rows.map((r) => r[0]) ?? [];
   const features = p.features.split("\n").map((s) => s.trim()).filter(Boolean);
   const loginHref = `/login?next=/p/${p.id}`;
+  const nofollow = props.user ? undefined : "nofollow";
   const wishHref = !props.user ? loginHref : props.wishlists.length ? "#wish" : `/me/wishlists/new?product=${p.id}`;
   const sheetOpen = !!props.error;
   const site = useSite();
@@ -323,7 +374,7 @@ export function ProductPage(props: {
       },
       breadcrumbLd(site, [
         [site.site_name, "/"],
-        ...(p.category ? ([[p.category, `/?cat=${encodeURIComponent(p.category)}`]] as [string, string][]) : []),
+        ...(p.category ? ([[p.category, categoryPath(p.category)]] as [string, string][]) : []),
         [p.shop_name, `/s/${p.shop_slug}`],
         [p.title, `/p/${p.id}`],
       ]),
@@ -333,7 +384,7 @@ export function ProductPage(props: {
     <header class="fixed top-0 inset-x-0 z-50 px-4 py-4 flex items-center justify-between pointer-events-none">
       <div class="pointer-events-auto"><IconButton icon="fa-chevron-right" label="بازگشت" glass attrs={{ "data-back": "/" }} /></div>
       <div class="flex gap-2 pointer-events-auto">
-        <IconButton icon="fa-heart" label="افزودن به آرزوها" glass href={wishHref} />
+        <IconButton icon="fa-heart" label="افزودن به آرزوها" glass href={wishHref} attrs={nofollow ? { rel: nofollow } : undefined} />
         <IconButton icon="fa-share-nodes" label="اشتراک" glass attrs={{ "data-share": "" }} />
       </div>
     </header>
@@ -449,10 +500,10 @@ export function ProductPage(props: {
 
       <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom flex gap-3">
-          <a href={wishHref} class="flex-[2] py-4 bg-pink text-white text-center rounded-2xl font-bold shadow-lg shadow-pink/20 active:scale-95 transition-transform">
+          <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-pink text-white text-center rounded-2xl font-bold shadow-lg shadow-pink/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
           </a>
-          <a href={props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} class="flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform">
+          <a href={props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} rel={nofollow} class="flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform">
             <i class="fa-solid fa-bag-shopping ml-1"></i> خرید مستقیم
           </a>
         </div>

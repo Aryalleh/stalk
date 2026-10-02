@@ -1,6 +1,8 @@
 import type { Child } from "hono/jsx";
 import { CSS_URL } from "../../assets";
 import { useSite } from "../../render";
+import { socialLinks } from "../../settings";
+import { summary } from "../../schema";
 import { canUseCrm, type User } from "../../session";
 
 // Visual language from the designs in html/: dark ink background, cards #221c26, pink accent,
@@ -8,12 +10,8 @@ import { canUseCrm, type User } from "../../session";
 
 export type NavKey = "home" | "wishes" | "search" | "profile" | "none";
 
-const HEAD_LINKS = (
-  <>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
-  </>
-);
+// Icons and the Vazirmatn font are self-hosted (src/fonts.ts); preloading the font avoids a late text swap.
+const HEAD_LINKS = <link rel="preload" href="/static/fonts/vazirmatn.woff2" as="font" type="font/woff2" crossorigin="anonymous" />;
 
 /** Small client helpers used by several pages: copy-to-clipboard, native share, back, PWA install. */
 const HELPERS = `
@@ -58,8 +56,9 @@ export function Avatar(props: { user: { name: string; avatar_key?: string } | nu
 }
 
 function BottomNav(props: { active: NavKey; user: User | null }) {
+  // Private pages send signed-out visitors to the login page themselves; crawlers needn't follow.
   const item = (key: NavKey, href: string, icon: string, label: string) => (
-    <a href={href} class={`flex flex-col items-center gap-1 ${props.active === key ? "text-pink" : "text-muted"}`}>
+    <a href={href} rel={props.user || !href.startsWith("/me") ? undefined : "nofollow"} class={`flex flex-col items-center gap-1 ${props.active === key ? "text-pink" : "text-muted"}`}>
       <i class={`fa-solid ${icon} text-lg`}></i>
       <span class="text-[10px]">{label}</span>
     </a>
@@ -67,10 +66,11 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
   return (
     <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/90 backdrop-blur-lg border-t border-card px-6 pt-3 safe-bottom flex items-center justify-between">
       {item("home", "/", "fa-store", "فروشگاه")}
-      {item("wishes", props.user ? "/me/wishlists" : "/login?next=/me/wishlists", "fa-gift", "آرزوها")}
+      {item("wishes", "/me/wishlists", "fa-gift", "آرزوها")}
       <div class="relative -top-6">
         <a
-          href={props.user ? "/me/wishlists/new" : "/login?next=/me/wishlists/new"}
+          href="/me/wishlists/new"
+          rel={props.user ? undefined : "nofollow"}
           aria-label="لیست آرزوی جدید"
           class="w-14 h-14 bg-pink text-white rounded-full shadow-lg shadow-pink/40 flex items-center justify-center text-xl"
         >
@@ -78,7 +78,7 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
         </a>
       </div>
       {item("search", "/search", "fa-magnifying-glass", "جستجو")}
-      {item("profile", props.user ? "/me" : "/login?next=/me", "fa-user", "پروفایل")}
+      {item("profile", "/me", "fa-user", "پروفایل")}
     </nav>
   );
 }
@@ -99,7 +99,7 @@ function DesktopNav(props: { user: User | null }) {
           <a href="/me" aria-label="پروفایل"><Avatar user={u} size="w-9 h-9" /></a>
         </>
       ) : (
-        <a href="/login" class="px-4 py-2 rounded-xl bg-pink text-white font-bold">ورود / ثبت‌نام</a>
+        <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-pink text-white font-bold">ورود / ثبت‌نام</a>
       )}
     </div>
   );
@@ -131,7 +131,7 @@ function SeoTags(props: { title: string; seo: Seo }) {
   const seo = props.seo;
   const url = abs(site.origin, seo.canonical ?? site.path);
   const image = abs(site.origin, seo.image || "/static/icon-512.png");
-  const description = (seo.description ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const description = summary(seo.description ?? "", 158);
   return (
     <>
       {description && <meta name="description" content={description} />}
@@ -157,14 +157,61 @@ function SeoTags(props: { title: string; seo: Seo }) {
   );
 }
 
+const SOCIAL_ICON: Record<string, [string, string]> = {
+  social_instagram: ["fa-brands fa-instagram", "اینستاگرام"],
+  social_telegram: ["fa-brands fa-telegram", "تلگرام"],
+  social_bale: ["fa-solid fa-comment-dots", "بله"],
+  social_x: ["fa-brands fa-x-twitter", "ایکس"],
+  social_linkedin: ["fa-brands fa-linkedin", "لینکدین"],
+  social_youtube: ["fa-brands fa-youtube", "یوتیوب"],
+  social_aparat: ["fa-solid fa-film", "آپارات"],
+};
+
 function Footer() {
   const site = useSite();
+  const socials = socialLinks(site);
   return (
-    <footer class="max-w-5xl mx-auto px-4 pt-10 pb-4 text-center text-xs text-muted space-x-reverse space-x-4">
-      <a href="/about" class="hover:text-fg">درباره {site.site_name}</a>
-      <a href="/faq" class="hover:text-fg">سوالات متداول</a>
-      <a href="/search" class="hover:text-fg">جستجوی هدیه</a>
+    <footer class="max-w-5xl mx-auto px-4 pt-10 pb-4 text-center text-xs text-muted space-y-3">
+      <nav class="flex flex-wrap justify-center gap-4" aria-label="پیوندهای سایت">
+        <a href="/about" class="hover:text-fg">درباره {site.site_name}</a>
+        <a href="/faq" class="hover:text-fg">سوالات متداول</a>
+        <a href="/search" class="hover:text-fg">جستجوی هدیه</a>
+      </nav>
+      {(site.contact_phone || site.contact_email || site.contact_address) && (
+        <address class="not-italic flex flex-wrap justify-center gap-x-4 gap-y-1">
+          {site.contact_phone && <a href={`tel:${site.contact_phone.replace(/[^\d+]/g, "")}`} class="hover:text-fg dt">{site.contact_phone}</a>}
+          {site.contact_email && <a href={`mailto:${site.contact_email}`} class="hover:text-fg dt">{site.contact_email}</a>}
+          {site.contact_address && <span>{site.contact_address}</span>}
+        </address>
+      )}
+      {socials.length > 0 && (
+        <div class="flex justify-center gap-4 text-base">
+          {socials.map((l) => (
+            <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="hover:text-pink">
+              <i class={SOCIAL_ICON[l.key][0]}></i>
+            </a>
+          ))}
+        </div>
+      )}
     </footer>
+  );
+}
+
+/** Optional analytics from /admin/settings: GA4 and/or Cloudflare Web Analytics, both loaded async. */
+function Analytics() {
+  const site = useSite();
+  const ga = /^G-[A-Z0-9]{4,20}$/.test(site.ga_measurement_id) ? site.ga_measurement_id : "";
+  const cf = /^[a-f0-9]{32}$/.test(site.cf_analytics_token) ? site.cf_analytics_token : "";
+  return (
+    <>
+      {ga && (
+        <>
+          <script async src={`https://www.googletagmanager.com/gtag/js?id=${ga}`}></script>
+          <script dangerouslySetInnerHTML={{ __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${ga}');` }} />
+        </>
+      )}
+      {cf && <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon={JSON.stringify({ token: cf })}></script>}
+    </>
   );
 }
 
@@ -209,6 +256,7 @@ export function Layout(props: {
         <meta name="apple-mobile-web-app-title" content={site.site_name} />
         {HEAD_LINKS}
         <link rel="stylesheet" href={CSS_URL} />
+        {!props.panel && <Analytics />}
       </head>
       <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
         {props.header ?? (
@@ -216,7 +264,7 @@ export function Layout(props: {
             <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
               <a href="/" class="text-xl font-bold text-pink">{site.site_name}</a>
               <DesktopNav user={props.user} />
-              <a href={props.user ? "/me" : "/login"} class="md:hidden" aria-label="پروفایل">
+              <a href={props.user ? "/me" : "/login"} rel={props.user ? undefined : "nofollow"} class="md:hidden" aria-label="پروفایل">
                 {props.user ? <Avatar user={props.user} size="w-9 h-9" /> : <span class="text-sm text-muted">ورود</span>}
               </a>
             </div>

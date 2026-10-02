@@ -756,6 +756,33 @@ export function AdminSettingsPage(props: {
         <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
         <label>توضیح سایت برای گوگل، دستیارهای هوش مصنوعی و پیش‌نمایش لینک‌ها (حدود ۱۵۰ حرف؛ خالی = متن پیش‌فرض)</label>
         <textarea name="site_description" maxlength={300} style="min-height:70px">{s.site_description}</textarea>
+        <h2 style="margin-top:20px">تماس و شبکه‌های اجتماعی سایت</h2>
+        <p class="muted small" style="margin-top:0">
+          در پایین همه صفحه‌ها نمایش داده می‌شود و برای گوگل و دستیارهای هوش مصنوعی به‌عنوان مشخصات کسب‌وکار منتشر می‌شود (با آدرس و تلفن،
+          به‌عنوان «کسب‌وکار محلی»). خالی بگذارید تا نمایش داده نشود.
+        </p>
+        <div class="two">
+          <div><label>تلفن پشتیبانی</label><input name="contact_phone" value={s.contact_phone} class="ltr" maxlength={30} placeholder="021-12345678" /></div>
+          <div><label>ایمیل</label><input name="contact_email" value={s.contact_email} class="ltr" maxlength={100} placeholder="support@example.com" /></div>
+        </div>
+        <label>آدرس</label>
+        <input name="contact_address" value={s.contact_address} maxlength={200} />
+        <div class="two">
+          <div><label>اینستاگرام</label><input name="social_instagram" value={s.social_instagram} class="ltr" placeholder="@kadoochi" /></div>
+          <div><label>کانال تلگرام</label><input name="social_telegram" value={s.social_telegram} class="ltr" placeholder="@kadoochi" /></div>
+          <div><label>کانال بله</label><input name="social_bale" value={s.social_bale} class="ltr" placeholder="@kadoochi" /></div>
+          <div><label>ایکس (توییتر)</label><input name="social_x" value={s.social_x} class="ltr" placeholder="@kadoochi" /></div>
+          <div><label>لینکدین (نام صفحه شرکت یا لینک)</label><input name="social_linkedin" value={s.social_linkedin} class="ltr" /></div>
+          <div><label>یوتیوب</label><input name="social_youtube" value={s.social_youtube} class="ltr" placeholder="@kadoochi" /></div>
+          <div><label>آپارات</label><input name="social_aparat" value={s.social_aparat} class="ltr" placeholder="kadoochi" /></div>
+        </div>
+
+        <h2 style="margin-top:20px">آمار بازدید (اختیاری)</h2>
+        <div class="two">
+          <div><label>Google Analytics 4 (شناسه G-…)</label><input name="ga_measurement_id" value={s.ga_measurement_id} class="ltr" placeholder="G-XXXXXXXXXX" /></div>
+          <div><label>Cloudflare Web Analytics (توکن)</label><input name="cf_analytics_token" value={s.cf_analytics_token} class="ltr" /></div>
+        </div>
+
         <label>دسته‌بندی محصولات (هر خط یکی؛ در صفحه اول و فرم محصول نمایش داده می‌شود)</label>
         <textarea name="categories" maxlength={1000} style="min-height:150px">{s.categories}</textarea>
         <div class="card" style="margin-top:16px">

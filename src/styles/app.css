@@ -1,3 +1,14 @@
+/* Self-hosted icons and font (served by the Worker, see src/fonts.ts): no third-party CDN blocks the first paint. */
+@import "./fa.css";
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/static/fonts/vazirmatn.woff2") format("woff2-variations"), url("/static/fonts/vazirmatn.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

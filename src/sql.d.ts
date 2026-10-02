@@ -17,3 +17,8 @@ declare module "*.png" {
   const png: ArrayBuffer;
   export default png;
 }
+
+declare module "*.woff2" {
+  const font: ArrayBuffer;
+  export default font;
+}

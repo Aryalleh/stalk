@@ -3,7 +3,7 @@ import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { normCity, now, productImages, productPackages, randomSlug, type Order, type Product, type Shop } from "../db";
 import type { C, Env } from "../../env";
-import { categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
+import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
 import { sendSafirText } from "../../bale/safir";
 import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
@@ -473,6 +473,21 @@ async function saveAdminSettings(c: C): Promise<string> {
   if (!(minutes >= 5 && minutes <= 1440)) return "مهلت واریز باید بین ۵ تا ۱۴۴۰ دقیقه باشد.";
   const values: Partial<Settings> = { site_name: f.site_name.slice(0, 40), site_url: siteUrl, reservation_minutes: String(minutes) };
   if (f.site_description !== undefined) values.site_description = f.site_description.replace(/\s+/g, " ").trim().slice(0, 300);
+  if (f.contact_phone !== undefined) {
+    const one = (k: string, max: number) => (f[k] ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+    const email = one("contact_email", 100);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "ایمیل نامعتبر است.";
+    const ga = one("ga_measurement_id", 30).toUpperCase();
+    if (ga && !/^G-[A-Z0-9]{4,20}$/.test(ga)) return "شناسه Google Analytics باید مثل G-XXXXXXXXXX باشد.";
+    const cf = one("cf_analytics_token", 64).toLowerCase();
+    if (cf && !/^[a-f0-9]{32}$/.test(cf)) return "توکن Cloudflare Web Analytics نامعتبر است (۳۲ کاراکتر).";
+    for (const k of SOCIAL_KEYS) {
+      const v = one(k, 200);
+      if (v && !/^(@?[\w.-]{1,100}|https:\/\/[^\s"<>]{4,200})$/.test(v)) return "آیدی یا لینک شبکه‌های اجتماعی نامعتبر است.";
+      values[k] = v;
+    }
+    Object.assign(values, { contact_phone: one("contact_phone", 30), contact_email: email, contact_address: one("contact_address", 200), ga_measurement_id: ga, cf_analytics_token: cf });
+  }
   if (f.categories !== undefined) {
     const cats = [...new Set(f.categories.split(/\r?\n/).map((x) => x.trim().slice(0, 40)).filter(Boolean))];
     if (cats.length > 30) return "حداکثر ۳۰ دسته‌بندی.";

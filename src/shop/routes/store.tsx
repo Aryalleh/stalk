@@ -20,16 +20,15 @@ import {
 } from "../db";
 import { PUBLIC_IMAGE } from "../images";
 import { sendReceiptToShop } from "../orders";
-import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage, type FeaturedShop, type OrderView } from "../views/store";
+import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
 export const store = new Hono<Env>();
 
 // Home feed and /search share one view: search box, category chips and a masonry of products.
-async function feed(c: C, search: boolean) {
-  const q = (c.req.query("q") ?? "").trim().slice(0, 100);
+async function feed(c: C, search: boolean, cat = c.req.query("cat") ?? "") {
+  const q = search ? (c.req.query("q") ?? "").trim().slice(0, 100) : "";
   const categories = categoryList(c.get("settings"));
-  const cat = c.req.query("cat") ?? "";
   const category = categories.includes(cat) ? cat : "";
   const page = pageParam(c);
   const featuredId = Number(c.get("settings").featured_shop_id) || 0;
@@ -55,7 +54,19 @@ async function feed(c: C, search: boolean) {
   );
 }
 
-store.get("/", (c) => feed(c, false));
+store.get("/", async (c) => {
+  // Old/alternate URLs: home searches live under /search, category pages under /c/<name>.
+  const q = c.req.query("q");
+  if (q) return c.redirect(`/search?${new URLSearchParams({ q, ...(c.req.query("cat") ? { cat: c.req.query("cat")! } : {}) })}`, 301);
+  const cat = c.req.query("cat");
+  if (cat) return c.redirect(categoryPath(cat), 301);
+  return feed(c, false, "");
+});
+store.get("/c/:cat", async (c) => {
+  const cat = c.req.param("cat");
+  if (!categoryList(c.get("settings")).includes(cat)) return c.notFound();
+  return feed(c, false, cat);
+});
 store.get("/search", (c) => feed(c, true));
 
 store.get("/p/:id{[0-9]+}", async (c) => {

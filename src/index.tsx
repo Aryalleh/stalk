@@ -16,11 +16,25 @@ import { admin, panel } from "./shop/routes/panel";
 import { bot } from "./bale/bot";
 import { store } from "./shop/routes/store";
 import { miniapp } from "./bale/miniapp";
+import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { seo } from "./seo";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
+
+// Plain-http visits get a permanent redirect to https (local development excepted).
+app.use(async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.protocol === "http:" && !["localhost", "127.0.0.1"].includes(url.hostname)) {
+    url.protocol = "https:";
+    return c.redirect(url.toString(), 301);
+  }
+  await next();
+});
+
+// Static files that need neither the database nor a session.
+app.route("/", fonts);
 
 app.get("/static/app.css", (c) =>
   c.body(appCss, 200, { "Content-Type": "text/css; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable" }),

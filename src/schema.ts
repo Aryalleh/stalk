@@ -1,19 +1,41 @@
 import type { Site } from "./render";
-import { siteDescription } from "./settings";
+import { siteDescription, socialLinks } from "./settings";
 
 // schema.org JSON-LD builders shared by the pages (search engines and AI answer engines read these).
 
 export function organizationLd(site: Site) {
-  const sameAs = [site.bale_bot_username && `https://ble.ir/${site.bale_bot_username}`, site.telegram_bot_username && `https://t.me/${site.telegram_bot_username}`].filter(Boolean);
+  const sameAs = [
+    ...socialLinks(site).map((l) => l.url),
+    site.bale_bot_username && `https://ble.ir/${site.bale_bot_username}`,
+    site.telegram_bot_username && `https://t.me/${site.telegram_bot_username}`,
+  ].filter(Boolean);
+  const hasPlace = !!(site.contact_address && site.contact_phone);
   return {
     "@context": "https://schema.org",
-    "@type": "Organization",
+    // With a real address and phone the business is published as a LocalBusiness (local search).
+    "@type": hasPlace ? "LocalBusiness" : "Organization",
     "@id": `${site.origin}/#organization`,
     name: site.site_name,
     url: `${site.origin}/`,
     logo: `${site.origin}/static/icon-512.png`,
+    ...(hasPlace ? { image: `${site.origin}/static/icon-512.png` } : {}),
     description: siteDescription(site),
     areaServed: { "@type": "Country", name: "Iran" },
+    ...(site.contact_phone ? { telephone: site.contact_phone } : {}),
+    ...(site.contact_email ? { email: site.contact_email } : {}),
+    ...(site.contact_address ? { address: { "@type": "PostalAddress", streetAddress: site.contact_address, addressCountry: "IR" } } : {}),
+    ...(site.contact_phone || site.contact_email
+      ? {
+          contactPoint: {
+            "@type": "ContactPoint",
+            contactType: "customer support",
+            availableLanguage: ["fa"],
+            areaServed: "IR",
+            ...(site.contact_phone ? { telephone: site.contact_phone } : {}),
+            ...(site.contact_email ? { email: site.contact_email } : {}),
+          },
+        }
+      : {}),
     ...(sameAs.length ? { sameAs } : {}),
   };
 }

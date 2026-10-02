@@ -15,6 +15,20 @@ export const DEFAULTS = {
   categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line
   featured_shop_id: "", // the "shop of the week" banner on the home page
   site_description: "", // meta description of the home page (search engines, AI answers, link previews); empty = default text
+  // Public contact details and profiles: shown in the footer and published as Organization data.
+  contact_phone: "",
+  contact_email: "",
+  contact_address: "",
+  social_instagram: "",
+  social_telegram: "",
+  social_bale: "",
+  social_x: "",
+  social_linkedin: "",
+  social_youtube: "",
+  social_aparat: "",
+  // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.
+  ga_measurement_id: "",
+  cf_analytics_token: "",
 };
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -63,7 +77,26 @@ export const categoryList = (s: Settings) =>
     .map((c) => c.trim())
     .filter(Boolean);
 
-/** Home page description for search engines and link previews. */
+/** Home page description for search engines and link previews (kept within ~155 characters). */
 export const siteDescription = (s: Settings) =>
   s.site_description ||
-  `${s.site_name}: لیست آرزوی آنلاین بساز، لینکش را برای دوستانت بفرست و از فروشگاه‌های ایرانی کادو بگیر. پرداخت کارت به کارت مستقیم به حساب فروشگاه و ارسال به آدرس محرمانه گیرنده.`;
+  `${s.site_name}: لیست آرزو بساز، لینکش را بفرست و از فروشگاه‌های ایرانی کادو بگیر؛ پرداخت کارت به کارت به خود فروشگاه و ارسال به آدرس محرمانه.`;
+
+export const SOCIAL_KEYS = ["social_instagram", "social_telegram", "social_bale", "social_x", "social_linkedin", "social_youtube", "social_aparat"] as const;
+
+/** Full profile URLs from what the admin typed (a handle like @name or a full link). */
+export function socialLinks(s: Settings): { key: (typeof SOCIAL_KEYS)[number]; url: string }[] {
+  const base: Record<(typeof SOCIAL_KEYS)[number], string> = {
+    social_instagram: "https://instagram.com/",
+    social_telegram: "https://t.me/",
+    social_bale: "https://ble.ir/",
+    social_x: "https://x.com/",
+    social_linkedin: "https://www.linkedin.com/company/",
+    social_youtube: "https://www.youtube.com/@",
+    social_aparat: "https://www.aparat.com/",
+  };
+  return SOCIAL_KEYS.filter((k) => s[k]).map((k) => {
+    const v = s[k].trim();
+    return { key: k, url: /^https?:\/\//.test(v) ? v : base[k] + v.replace(/^@/, "") };
+  });
+}
