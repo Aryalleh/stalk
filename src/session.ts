@@ -18,10 +18,15 @@ export interface User {
   show_received: number;
   show_givers: number;
   show_birthday: number;
+  accent: string; // "blue" | "pink" | "" (site default)
+  theme: string; // "dark" | "light" | "" (dark)
 }
 
+export const ACCENTS = { blue: "59 130 246", pink: "255 92 147" } as const;
+export type Accent = keyof typeof ACCENTS;
+
 export const USER_COLUMNS =
-  "id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key, first_name, last_name, birth_date, username, show_received, show_givers, show_birthday";
+  "id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key, first_name, last_name, birth_date, username, show_received, show_givers, show_birthday, accent, theme";
 
 export async function sessionUser(db: D1Database, token: string | undefined): Promise<User | null> {
   const id = await sessionUserId(db, token);

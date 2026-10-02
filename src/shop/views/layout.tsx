@@ -4,7 +4,7 @@ import { useSite } from "../../render";
 import { brandRgb, socialLinks } from "../../settings";
 import { summary } from "../../schema";
 import { developerHref } from "../../content";
-import { canUseCrm, type User } from "../../session";
+import { ACCENTS, canUseCrm, type Accent, type User } from "../../session";
 
 // Visual language from the designs in html/: dark ink background, cards #221c26, pink accent,
 // sticky blurred header, bottom tab bar with a raised "+" button on phones.
@@ -250,12 +250,15 @@ export function Layout(props: {
   const nav = props.nav ?? "home";
   const showNav = nav !== "none" && !props.panel;
   const title = props.fullTitle ? props.title : `${props.title} · ${site.site_name}`;
+  // The signed-in person's own look wins over the site's brand color.
+  const light = props.user?.theme === "light" && !props.panel;
+  const accent = ACCENTS[props.user?.accent as Accent] ?? brandRgb(site);
   return (
-    <html lang="fa" dir="rtl">
+    <html lang="fa" dir="rtl" class={light ? "theme-light" : undefined}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content={props.panel ? "#ffffff" : "#0d1320"} />
+        <meta name="theme-color" content={props.panel || light ? "#ffffff" : "#0d1320"} />
         <title>{title}</title>
         <SeoTags title={title} seo={props.seo ?? {}} />
         <link rel="manifest" href="/manifest.webmanifest" />
@@ -267,7 +270,7 @@ export function Layout(props: {
         <meta name="apple-mobile-web-app-title" content={site.site_name} />
         {HEAD_LINKS}
         <link rel="stylesheet" href={CSS_URL} />
-        {brandRgb(site) && brandRgb(site) !== "59 130 246" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${brandRgb(site)}}` }} />}
+        {accent && accent !== "59 130 246" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${accent}}` }} />}
         {!props.panel && <Analytics />}
       </head>
       <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
@@ -293,7 +296,7 @@ export function Layout(props: {
 
 /** Round icon button used in headers (back, share, settings...). */
 export function IconButton(props: { icon: string; label: string; href?: string; attrs?: Record<string, string>; glass?: boolean }) {
-  const cls = `w-10 h-10 flex items-center justify-center rounded-full ${props.glass ? "bg-ink/40 backdrop-blur-md text-white" : "bg-card text-muted"}`;
+  const cls = `w-10 h-10 flex items-center justify-center rounded-full ${props.glass ? "bg-black/35 backdrop-blur-md text-white" : "bg-card text-muted"}`;
   return (
     <a href={props.href ?? "#"} aria-label={props.label} class={cls} {...(props.attrs ?? {})}>
       <i class={`fa-solid ${props.icon}`}></i>

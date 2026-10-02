@@ -71,8 +71,36 @@ export function ProfileFields(props: { values: Record<string, string>; username?
   );
 }
 
+/** Accent color and dark/light theme picker (values: accent = blue|pink, theme = dark|light). */
+export function LookFields(props: { values: Record<string, string> }) {
+  const accent = props.values.accent === "pink" ? "pink" : "blue";
+  const theme = props.values.theme === "light" ? "light" : "dark";
+  const option = (name: string, value: string, checked: boolean, swatch: string, label: string) => (
+    <label class="flex-1 !flex items-center gap-2 p-3 rounded-xl cursor-pointer border-2 border-transparent bg-card has-[:checked]:border-brand" style="margin:0">
+      <input type="radio" name={name} value={value} checked={checked} class="sr-only" />
+      <span class="block w-6 h-6 rounded-full shrink-0" style={swatch}></span>
+      <span class="text-sm" style="color:var(--fg)">{label}</span>
+    </label>
+  );
+  return (
+    <>
+      <label>رنگ دلخواه</label>
+      <div class="flex gap-2">
+        {option("accent", "blue", accent === "blue", "background:#3b82f6", "آبی")}
+        {option("accent", "pink", accent === "pink", "background:#ff5c93", "صورتی")}
+      </div>
+      <label>تم</label>
+      <div class="flex gap-2">
+        {option("theme", "dark", theme === "dark", "background:#0d1320;border:2px solid #334155", "تیره")}
+        {option("theme", "light", theme === "light", "background:#f4f6fa;border:2px solid #cbd5e1", "روشن")}
+      </div>
+      <p class="small muted" style="margin:4px 0 0">بعداً هم از تنظیمات حساب قابل تغییر است.</p>
+    </>
+  );
+}
+
 /** Form values of a user's profile fields. */
-export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_date" | "username">): Record<string, string> {
+export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_date" | "username" | "accent" | "theme">): Record<string, string> {
   const [y, m, d] = (u.birth_date || "").split("-");
   return {
     first_name: u.first_name,
@@ -81,6 +109,8 @@ export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_
     birth_month: m ? String(Number(m)) : "",
     birth_day: d ? String(Number(d)) : "",
     username: u.username ?? "",
+    accent: u.accent,
+    theme: u.theme,
   };
 }
 
@@ -92,6 +122,7 @@ export function CompleteProfilePage(props: { user: User; next: string; values: R
       <form method="post" action="/me/complete" class="space-y-2">
         <input type="hidden" name="next" value={props.next} />
         <ProfileFields values={props.values} username origin={props.origin} />
+        <LookFields values={props.values} />
         <button class="w-full py-4 mt-4 rounded-2xl text-base font-bold shadow-lg shadow-brand/20">ذخیره و ادامه</button>
       </form>
     </AuthShell>
@@ -139,6 +170,7 @@ export function CodeLoginPage(props: {
             <div>
               <p class="text-xs text-muted text-center">حساب جدید — مشخصات خود را وارد کنید:</p>
               <ProfileFields values={props.values ?? {}} />
+              <LookFields values={props.values ?? {}} />
             </div>
           )}
           <button class={big}>{props.isNew ? "ساخت حساب و ورود" : "ورود"}</button>
@@ -399,6 +431,8 @@ export function ProfileSettingsPage(props: {
           </div>
         </div>
         <ProfileFields values={props.values ?? profileValues(u)} username origin={props.origin} />
+        <h2 style="margin-top:20px">ظاهر سایت برای شما</h2>
+        <LookFields values={props.values ?? profileValues(u)} />
         <label>شماره موبایل (ورود با کد بله)</label>
         <input value={u.phone} class="ltr" disabled />
         <h2 style="margin-top:20px">پروفایل عمومی</h2>

@@ -84,7 +84,9 @@ function readProfile(f: Record<string, string>) {
   const last = (f.last_name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
   const birth = birthDate(f.birth_year, f.birth_month, f.birth_day);
   const error = !first || !last ? "نام و نام خانوادگی را وارد کنید." : !birth ? "تاریخ تولد را درست انتخاب کنید." : "";
-  return { first, last, birth: birth ?? "", error };
+  const accent = f.accent === "pink" ? "pink" : "blue";
+  const theme = f.theme === "light" ? "light" : "dark";
+  return { first, last, birth: birth ?? "", accent, theme, error };
 }
 
 account.post("/login/verify", async (c) => {
@@ -101,10 +103,10 @@ account.post("/login/verify", async (c) => {
   if (existing) return startSession(c, existing.id, next);
   const name = fullName(profile.first, profile.last);
   const row = await c.env.DB.prepare(
-    `INSERT INTO users (phone, name, first_name, last_name, birth_date, password_hash, created_at) VALUES (?, ?, ?, ?, ?, '!', ?)
+    `INSERT INTO users (phone, name, first_name, last_name, birth_date, accent, theme, password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, '!', ?)
      ON CONFLICT (phone) DO NOTHING RETURNING id`,
   )
-    .bind(phone, name, profile.first, profile.last, profile.birth, now())
+    .bind(phone, name, profile.first, profile.last, profile.birth, profile.accent, profile.theme, now())
     .first<{ id: number }>();
   const id = row?.id ?? (await userByPhone(c, phone))!.id;
   await assignUsername(c.env.DB, id);
@@ -142,9 +144,9 @@ async function saveProfile(c: C, userId: number, f: Record<string, string>, extr
   if (taken) return "این نام کاربری قبلاً گرفته شده است.";
   const cols = Object.keys(extra);
   await c.env.DB.prepare(
-    `UPDATE users SET first_name = ?, last_name = ?, name = ?, birth_date = ?, username = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
+    `UPDATE users SET first_name = ?, last_name = ?, name = ?, birth_date = ?, username = ?, accent = ?, theme = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
   )
-    .bind(p.first, p.last, fullName(p.first, p.last), p.birth, username, ...Object.values(extra), userId)
+    .bind(p.first, p.last, fullName(p.first, p.last), p.birth, username, p.accent, p.theme, ...Object.values(extra), userId)
     .run();
   return "";
 }

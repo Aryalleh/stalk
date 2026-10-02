@@ -229,7 +229,7 @@ export function HomePage(props: {
             <div class="absolute inset-0 bg-gradient-to-t from-ink to-transparent"></div>
             <div class="absolute bottom-4 right-5 left-5">
               <span class="text-[10px] bg-brand text-white px-2 py-0.5 rounded-full mb-2 inline-block">فروشگاه هفته</span>
-              <h2 class="text-xl font-bold text-white mb-1">{f.name}</h2>
+              <h2 class="text-xl font-bold text-fg mb-1">{f.name}</h2>
               {f.description && <p class="text-xs text-muted line-clamp-1">{f.description}</p>}
             </div>
           </a>
