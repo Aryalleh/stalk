@@ -1,5 +1,6 @@
 import type { User } from "../../session";
-import type { ContactRow, FieldDef } from "../db";
+import type { BaleLink } from "../../bale/links";
+import type { ContactRow, CrmMessage, FieldDef } from "../db";
 import { CONTACT_KEY, CORE_FIELDS, SECTIONS, contactName, type ContactData } from "../fields";
 import type { Extras, LogRow, Snapshot } from "../history";
 import { formatJalali } from "../../../lib/jalali";
@@ -40,7 +41,10 @@ export function ListPage(props: { user: User; q: string; page: number; rows: Con
             <tbody>
               {props.rows.map((c) => (
                 <tr>
-                  <td><a href={`/crm/contacts/${c.id}`}>{contactName(c)}</a></td>
+                  <td>
+                    <a href={`/crm/contacts/${c.id}`}>{contactName(c)}</a>
+                    {c.bale_linked ? <span class="tag" title="به بات بله وصل است" style="margin-inline-start:6px">بله ✓</span> : null}
+                  </td>
                   <td class="ltr nowrap">{c.phone}</td>
                   <td class="ltr">{c.national_code}</td>
                   <td class="ltr">{c.telegram_id}</td>
@@ -89,6 +93,8 @@ export function ContactPage(props: {
   formErrors?: string[];
   logs?: LogRow[];
   saved?: boolean;
+  messaging?: Messaging;
+  notice?: { ok: boolean; text: string };
 }) {
   const c = props.contact;
   const title = c ? contactName(c) : "مخاطب جدید";
@@ -132,12 +138,100 @@ export function ContactPage(props: {
             </div>
             <LogTable logs={props.logs ?? []} showContact={false} />
           </div>
+          {props.messaging && <MessagingCard contactId={c.id} m={props.messaging} notice={props.notice} />}
           <form method="post" action={`/crm/contacts/${c.id}/delete`} onsubmit="return confirm('این مخاطب حذف شود؟ سابقه تغییراتش باقی می‌ماند.')">
             <button class="danger">حذف مخاطب</button>
           </form>
         </>
       )}
     </Layout>
+  );
+}
+
+export interface Messaging {
+  phones: { field: string; label: string; phone: string; link: BaleLink | null }[];
+  botReady: boolean;
+  safirReady: boolean;
+  invite: string;
+  messages: CrmMessage[];
+}
+
+function MessagingCard(props: { contactId: number; m: Messaging; notice?: { ok: boolean; text: string } }) {
+  const { m } = props;
+  const anyLinked = m.phones.some((p) => p.link);
+  const canSend = (m.botReady && anyLinked) || m.safirReady;
+  return (
+    <div class="card" id="messages">
+      <h2>پیام در بله</h2>
+      {props.notice && <div class={props.notice.ok ? "okbox" : "errbox"}>{props.notice.text}</div>}
+      {m.phones.length === 0 ? (
+        <p class="muted">این مخاطب شماره موبایل ندارد.</p>
+      ) : (
+        <table>
+          <tbody>
+            {m.phones.map((p) => (
+              <tr>
+                <td>{p.label}</td>
+                <td class="ltr">{p.phone}</td>
+                <td>
+                  {p.link ? (
+                    <span class="tag">✓ وصل به بات{p.link.name ? ` (${p.link.name})` : ""} — پیام رایگان</span>
+                  ) : (
+                    <span class="muted small">به بات وصل نیست{m.safirReady ? " — فقط از طریق سفیر (هزینه‌دار)" : ""}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {m.invite && m.phones.some((p) => !p.link) && (
+        <p class="muted small">
+          برای پیام رایگان، این لینک را برای مخاطب بفرستید تا شماره‌اش را با بات به اشتراک بگذارد:{" "}
+          <span class="dt">{m.invite}</span>
+        </p>
+      )}
+      {!m.botReady && !m.safirReady && <p class="muted small">بات بله یا سفیر در تنظیمات سایت فعال نشده است.</p>}
+      {m.phones.length > 0 && canSend && (
+        <form method="post" action={`/crm/contacts/${props.contactId}/message`}>
+          <label>به شماره</label>
+          <select name="phone" style="max-width:320px">
+            {m.phones.map((p) => (
+              <option value={p.phone}>{p.label}: {p.phone}{p.link ? " (بات)" : ""}</option>
+            ))}
+          </select>
+          <label>متن پیام</label>
+          <textarea name="text" required maxlength={4000}></textarea>
+          <p class="row">
+            {m.botReady && anyLinked && <button name="channel" value="bot">ارسال رایگان با بات</button>}
+            {m.safirReady && (
+              <button name="channel" value="safir" class="secondary" onclick="return confirm('ارسال از طریق سفیر هزینه دارد. ادامه می‌دهید؟')">
+                ارسال با سفیر (هزینه‌دار)
+              </button>
+            )}
+          </p>
+        </form>
+      )}
+      {m.messages.length > 0 && (
+        <div class="wrap">
+          <table>
+            <thead><tr><th>زمان</th><th>شماره</th><th>روش</th><th>متن</th><th>وضعیت</th><th>فرستنده</th></tr></thead>
+            <tbody>
+              {m.messages.map((x) => (
+                <tr>
+                  <td class="nowrap"><span class="dt">{formatJalali(x.sent_at)}</span></td>
+                  <td class="ltr">{x.phone}</td>
+                  <td>{x.channel === "bot" ? "بات" : "سفیر"}</td>
+                  <td style="white-space:pre-wrap">{x.text}</td>
+                  <td>{x.status === "sent" ? <span class="tag">ارسال شد</span> : <span class="err">ناموفق: {x.error}</span>}</td>
+                  <td class="muted">{x.username}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -6,26 +6,29 @@ import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import type { C, Env } from "../../env";
 import { SESSION_COOKIE } from "../../session";
-import { LoginPage, MyWishlistsPage, RegisterPage, WishlistFormPage } from "../views/account";
+import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
+import { SafirError, sendSafirOtp } from "../../bale/safir";
+import { safirReady } from "../../settings";
+import { CodeLoginPage, LoginPage, MyWishlistsPage, RegisterPage, WishlistFormPage } from "../views/account";
 import { SetupPage } from "../views/panel";
 import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
 
 export const account = new Hono<Env>();
 const MOBILE = /^09\d{9}$/;
 
-account.get("/login", (c) => render(c, <LoginPage next={safeNext(c.req.query("next"))} />));
+account.get("/login", (c) => render(c, <LoginPage next={safeNext(c.req.query("next"))} codeLogin={safirReady(c.get("settings"))} />));
 
 account.post("/login", async (c) => {
   const f = await form(c);
   const phone = normalizePhone(f.phone);
   const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE phone = ?").bind(phone).first<{ id: number; password_hash: string }>();
   if (!user || !(await verifyPassword(f.password ?? "", user.password_hash))) {
-    return render(c, <LoginPage next={safeNext(f.next)} phone={f.phone} error="شماره موبایل یا رمز عبور اشتباه است." />, 401);
+    return render(c, <LoginPage next={safeNext(f.next)} phone={f.phone} codeLogin={safirReady(c.get("settings"))} error="شماره موبایل یا رمز عبور اشتباه است." />, 401);
   }
   return startSession(c, user.id, f.next);
 });
 
-account.get("/register", (c) => render(c, <RegisterPage next={safeNext(c.req.query("next"))} />));
+account.get("/register", (c) => render(c, <RegisterPage next={safeNext(c.req.query("next"))} codeLogin={safirReady(c.get("settings"))} />));
 
 account.post("/register", async (c) => {
   const f = await form(c);
@@ -41,6 +44,61 @@ account.post("/register", async (c) => {
     .first<{ id: number }>();
   if (!row) return fail(["این شماره قبلاً ثبت‌نام کرده است. وارد شوید."]);
   return startSession(c, row.id, f.next);
+});
+
+// ---------- login / sign-up with a one-time code sent in Bale (Safir) ----------
+
+account.get("/login/code", (c) => {
+  if (!safirReady(c.get("settings"))) return c.redirect("/login");
+  return render(c, <CodeLoginPage next={safeNext(c.req.query("next"))} step="phone" />);
+});
+
+account.post("/login/code", async (c) => {
+  const s = c.get("settings");
+  if (!safirReady(s)) return c.redirect("/login");
+  const f = await form(c);
+  const next = safeNext(f.next);
+  const phone = normalizePhone(f.phone ?? "");
+  const again = (error: string) => render(c, <CodeLoginPage next={next} step="phone" phone={f.phone} error={error} />, 400);
+  if (!MOBILE.test(phone)) return again("شماره موبایل نامعتبر است.");
+  const issued = await issueCode(c.env.DB, phone);
+  if ("wait" in issued) return again(issued.wait);
+  try {
+    await sendSafirOtp(s, phone, issued.code);
+  } catch (e) {
+    await cancelCode(c.env.DB, phone);
+    console.error(e);
+    return again(e instanceof SafirError ? e.message : "ارسال کد ناموفق بود؛ دوباره تلاش کنید.");
+  }
+  return c.redirect(`/login/code/verify?phone=${phone}&next=${encodeURIComponent(next)}`);
+});
+
+const userByPhone = (c: C, phone: string) => c.env.DB.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+
+account.get("/login/code/verify", async (c) => {
+  const phone = normalizePhone(c.req.query("phone") ?? "");
+  if (!MOBILE.test(phone)) return c.redirect("/login/code");
+  const isNew = !(await userByPhone(c, phone));
+  return render(c, <CodeLoginPage next={safeNext(c.req.query("next"))} step="code" phone={phone} isNew={isNew} />);
+});
+
+account.post("/login/code/verify", async (c) => {
+  const f = await form(c);
+  const next = safeNext(f.next);
+  const phone = normalizePhone(f.phone ?? "");
+  if (!MOBILE.test(phone)) return c.redirect("/login/code");
+  const existing = await userByPhone(c, phone);
+  const fail = (error: string) => render(c, <CodeLoginPage next={next} step="code" phone={phone} isNew={!existing} name={f.name} error={error} />, 400);
+  if (!existing && !f.name) return fail("نام و نام خانوادگی را وارد کنید.");
+  const ok = await verifyCode(c.env.DB, phone, normalizeDigits(f.code ?? ""));
+  if (ok !== true) return fail(ok);
+  if (existing) return startSession(c, existing.id, next);
+  // New account without a password ("!" never matches a hash); they can always log in with a code.
+  const row = await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, created_at) VALUES (?, ?, '!', ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
+    .bind(phone, f.name.slice(0, 80), now())
+    .first<{ id: number }>();
+  const id = row?.id ?? (await userByPhone(c, phone))!.id;
+  return startSession(c, id, next);
 });
 
 account.post("/logout", async (c) => {

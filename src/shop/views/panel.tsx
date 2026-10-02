@@ -368,6 +368,7 @@ export function AdminSettingsPage(props: {
   user: User;
   s: Settings;
   webhookBase: string;
+  linkedCount: number;
   error?: string;
   ok?: string;
 }) {
@@ -406,6 +407,15 @@ export function AdminSettingsPage(props: {
       <AdminTabs on="/admin/settings" />
       <Errors errors={[props.error]} />
       {props.ok && <div class="okbox">{props.ok}</div>}
+      {s.bale_bot_username && (
+        <div class="card">
+          <h2>اتصال شماره‌ها به بله</h2>
+          <p style="margin:0">
+            {props.linkedCount.toLocaleString("fa-IR")} شماره به بات وصل شده‌اند. لینک دعوت (برای مشتری‌ها بفرستید):{" "}
+            <a class="dt" href={`https://ble.ir/${s.bale_bot_username}?start=link`}>{`https://ble.ir/${s.bale_bot_username}?start=link`}</a>
+          </p>
+        </div>
+      )}
       <form method="post" action="/admin/settings" class="card">
         <h2>عمومی</h2>
         <label>نام سایت</label>
@@ -416,6 +426,26 @@ export function AdminSettingsPage(props: {
         <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
         {bot("bale", "بله", "@BotFather در بله")}
         {bot("telegram", "تلگرام", "@BotFather در تلگرام")}
+
+        <h2 style="margin-top:20px">سفیر بله (کد ورود و پیام به شماره)</h2>
+        <p class="muted small" style="margin-top:0">
+          از پنل کسب‌وکار بله بعد از ساخت «سفیر» بگیرید. با آن، کاربران با کد یکبار مصرف وارد می‌شوند و CRM می‌تواند به شماره‌هایی که هنوز به بات
+          وصل نیستند پیام بدهد (هزینه‌دار). پیام به شماره‌های وصل‌شده از طریق بات و رایگان است.
+        </p>
+        {s.safir_api_key && <p class="small">کلید فعلی: <span class="dt">{mask(s.safir_api_key)}</span></p>}
+        <label>{s.safir_api_key ? "کلید API جدید (برای نگه‌داشتن کلید فعلی خالی بگذارید)" : "کلید API (api-access-key)"}</label>
+        <input name="safir_api_key" class="ltr" autocomplete="off" />
+        {s.safir_api_key && (
+          <label class="row" style="color:var(--text)">
+            <input type="checkbox" name="safir_remove" value="1" style="width:auto" /> حذف کلید
+          </label>
+        )}
+        <label>شناسه عددی بازوی فرستنده (bot_id)</label>
+        <input name="safir_bot_id" value={s.safir_bot_id} class="ltr" inputmode="numeric" style="max-width:220px" />
+        {s.safir_api_key && s.safir_bot_id && (
+          <p><button class="secondary" formaction="/admin/settings/test-safir">ارسال پیام آزمایشی سفیر به شماره من</button></p>
+        )}
+
         <p style="margin-top:20px"><button>ذخیره</button></p>
       </form>
     </Layout>

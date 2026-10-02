@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { render } from "../render";
 import { hashPassword } from "../../lib/auth";
+import { inviteLink, linksFor } from "../bale/links";
+import { sendSafirText } from "../bale/safir";
+import { safirReady } from "../settings";
+import { sendBotMessage } from "../shop/notify";
 import { normalizePhone } from "../../lib/normalize";
 import type { C as Ctx, Env } from "../env";
 import { canUseCrm, type User } from "../session";
@@ -8,14 +12,17 @@ import {
   DuplicateNationalCode,
   PAGE_SIZE,
   allContactsWithExtras,
+  contactMessages,
   deleteContact,
   getContact,
   getExtras,
   getFieldDefs,
   getLogs,
+  logMessage,
   recentLogs,
   saveContact,
   searchContacts,
+  type ContactRow,
 } from "./db";
 import { CORE_FIELDS, CORE_NAMES, cleanContact, contactName, fieldLabel } from "./fields";
 import { buildSnapshot, type Extras } from "./history";
@@ -28,6 +35,7 @@ import {
   ListPage,
   SnapshotPage,
   UsersPage,
+  type Messaging,
 } from "./views/pages";
 
 // Mounted at /crm. Uses the site-wide login; only staff and platform admins get in.
@@ -111,10 +119,76 @@ crm.get("/contacts/:id{[0-9]+}", async (c) => {
   const id = idParam(c);
   const contact = await getContact(c.env.DB, id);
   if (!contact) return c.notFound();
-  const [extras, defs, logs] = await Promise.all([getExtras(c.env.DB, id), getFieldDefs(c.env.DB), getLogs(c.env.DB, id)]);
+  const [extras, defs, logs, messaging] = await Promise.all([
+    getExtras(c.env.DB, id),
+    getFieldDefs(c.env.DB),
+    getLogs(c.env.DB, id),
+    messagingInfo(c, contact),
+  ]);
   return render(c, 
-    <ContactPage user={me(c)} contact={contact} data={contact} extras={extras} defs={defs} logs={logs} saved={c.req.query("saved") === "1"} />,
+    <ContactPage
+      user={me(c)}
+      contact={contact}
+      data={contact}
+      extras={extras}
+      defs={defs}
+      logs={logs}
+      saved={c.req.query("saved") === "1"}
+      messaging={messaging}
+      notice={MESSAGE_NOTICES[c.req.query("msg") ?? ""]}
+    />,
   );
+});
+
+// ---------- messaging contacts in Bale ----------
+
+const PHONE_FIELDS = ["phone", "phone2", "father_phone"] as const;
+const MESSAGE_NOTICES: Record<string, { ok: boolean; text: string }> = {
+  sent: { ok: true, text: "پیام ارسال شد." },
+  failed: { ok: false, text: "ارسال پیام ناموفق بود؛ جزئیات در جدول پیام‌ها." },
+};
+
+async function messagingInfo(c: C, contact: ContactRow): Promise<Messaging> {
+  const s = c.get("settings");
+  const phones = PHONE_FIELDS.map((f) => ({ field: f, label: fieldLabel(f), phone: contact[f] })).filter((p) => /^09\d{9}$/.test(p.phone));
+  const [links, messages] = await Promise.all([linksFor(c.env.DB, phones.map((p) => p.phone)), contactMessages(c.env.DB, contact.id)]);
+  return {
+    phones: phones.map((p) => ({ ...p, link: links.get(p.phone) ?? null })),
+    botReady: !!s.bale_bot_token,
+    safirReady: safirReady(s),
+    invite: inviteLink(s.bale_bot_username),
+    messages,
+  };
+}
+
+crm.post("/contacts/:id{[0-9]+}/message", async (c) => {
+  const id = idParam(c);
+  const contact = await getContact(c.env.DB, id);
+  if (!contact) return c.notFound();
+  const s = c.get("settings");
+  const f = await c.req.parseBody();
+  const phone = String(f.phone ?? "");
+  const text = String(f.text ?? "").trim().slice(0, 4000);
+  const channel = f.channel === "safir" ? "safir" : "bot";
+  if (!text || !PHONE_FIELDS.some((k) => contact[k] === phone)) return c.redirect(`/crm/contacts/${id}`);
+
+  let error = "";
+  try {
+    if (channel === "bot") {
+      const link = (await linksFor(c.env.DB, [phone])).get(phone);
+      if (!link) throw new Error("این شماره هنوز به بات بله وصل نشده است.");
+      await sendBotMessage(s, "bale", link.chat_id, text);
+    } else {
+      await sendSafirText(s, phone, text);
+    }
+  } catch (e) {
+    error = (e as Error).message.slice(0, 300);
+  }
+  const user = me(c);
+  await logMessage(c.env.DB, {
+    contact_id: id, phone, channel, text, status: error ? "failed" : "sent", error, user_id: user.id, username: user.name,
+  });
+  return c.redirect(`/crm/contacts/${id}?msg=${error ? "failed" : "sent"}#messages`);
 });
 
 crm.post("/contacts/:id{[0-9]+}", (c) => handleSave(c, idParam(c)));

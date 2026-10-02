@@ -23,10 +23,10 @@ async function callBot(token: string, kind: BotKind, method: string, body?: obje
   return data.result;
 }
 
-export async function sendBotMessage(s: Settings, kind: BotKind, chatId: string, text: string) {
+export async function sendBotMessage(s: Settings, kind: BotKind, chatId: string, text: string, replyMarkup?: object) {
   const token = botToken(s, kind);
   if (!token) throw new Error(`${kind} bot token is not configured`);
-  await callBot(token, kind, "sendMessage", { chat_id: chatId, text });
+  await callBot(token, kind, "sendMessage", { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
 }
 
 /** Check a token and point the bot's webhook at this site. Returns the bot's username. */

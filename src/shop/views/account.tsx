@@ -3,7 +3,7 @@ import { STATUS_LABEL, toman, type ItemView, type Order, type Wishlist } from ".
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
 
-export function LoginPage(props: { next: string; error?: string; phone?: string }) {
+export function LoginPage(props: { next: string; error?: string; phone?: string; codeLogin?: boolean }) {
   return (
     <Layout title="ورود" user={null}>
       <div class="card" style="max-width:400px;margin:40px auto">
@@ -17,18 +17,24 @@ export function LoginPage(props: { next: string; error?: string; phone?: string 
           <input name="password" type="password" class="ltr" autocomplete="current-password" required />
           <p><button>ورود</button></p>
         </form>
+        {props.codeLogin && (
+          <p><a class="btn secondary" href={`/login/code?next=${encodeURIComponent(props.next)}`}>ورود یا ثبت‌نام با کد یکبار مصرف بله</a></p>
+        )}
         <p class="small">حساب ندارید؟ <a href={`/register?next=${encodeURIComponent(props.next)}`}>ثبت‌نام</a></p>
       </div>
     </Layout>
   );
 }
 
-export function RegisterPage(props: { next: string; errors?: string[]; values?: Record<string, string> }) {
+export function RegisterPage(props: { next: string; errors?: string[]; values?: Record<string, string>; codeLogin?: boolean }) {
   const v = props.values ?? {};
   return (
     <Layout title="ثبت‌نام" user={null}>
       <div class="card" style="max-width:400px;margin:40px auto">
         <h1>ثبت‌نام</h1>
+        {props.codeLogin && (
+          <p><a class="btn secondary" href={`/login/code?next=${encodeURIComponent(props.next)}`}>ثبت‌نام سریع با کد یکبار مصرف بله (بدون رمز)</a></p>
+        )}
         <Errors errors={props.errors} />
         <form method="post" action="/register">
           <input type="hidden" name="next" value={props.next} />
@@ -40,6 +46,50 @@ export function RegisterPage(props: { next: string; errors?: string[]; values?: 
           <input name="password" type="password" class="ltr" minlength={8} autocomplete="new-password" required />
           <p><button>ثبت‌نام</button></p>
         </form>
+      </div>
+    </Layout>
+  );
+}
+
+export function CodeLoginPage(props: {
+  next: string;
+  step: "phone" | "code";
+  phone?: string;
+  isNew?: boolean;
+  name?: string;
+  error?: string;
+}) {
+  return (
+    <Layout title="ورود با کد بله" user={null}>
+      <div class="card" style="max-width:400px;margin:40px auto">
+        <h1>ورود با کد یکبار مصرف</h1>
+        <Errors errors={[props.error]} />
+        {props.step === "phone" ? (
+          <form method="post" action="/login/code">
+            <input type="hidden" name="next" value={props.next} />
+            <p class="muted small" style="margin-top:0">کد ورود در پیام‌رسان بله برای شما ارسال می‌شود.</p>
+            <label>شماره موبایل</label>
+            <input name="phone" value={props.phone ?? ""} class="ltr" inputmode="tel" autocomplete="tel" required autofocus />
+            <p><button>ارسال کد</button></p>
+          </form>
+        ) : (
+          <form method="post" action="/login/code/verify">
+            <input type="hidden" name="next" value={props.next} />
+            <input type="hidden" name="phone" value={props.phone} />
+            <p class="muted small" style="margin-top:0">
+              کد ۶ رقمی به بله شماره <span class="dt">{props.phone}</span> ارسال شد. <a href={`/login/code?next=${encodeURIComponent(props.next)}`}>تغییر شماره</a>
+            </p>
+            <label>کد</label>
+            <input name="code" class="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength={6} required autofocus />
+            {props.isNew && (
+              <>
+                <label>نام و نام خانوادگی (حساب جدید)</label>
+                <input name="name" value={props.name ?? ""} required maxlength={80} />
+              </>
+            )}
+            <p><button>{props.isNew ? "ساخت حساب و ورود" : "ورود"}</button></p>
+          </form>
+        )}
       </div>
     </Layout>
   );

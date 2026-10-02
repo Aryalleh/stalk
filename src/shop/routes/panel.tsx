@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { render } from "../../render";
-import { safeEqual } from "../../../lib/auth";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { confirmPayment, now, randomSlug, rejectPayment, type Order, type Product, type Shop } from "../db";
 import type { C, Env } from "../../env";
 import { loadSettings, reservationMinutes, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
-import { botToken, connectBot, notifyShop, sendBotMessage, type BotKind } from "../notify";
+import { sendSafirText } from "../../bale/safir";
+import { botToken, connectBot, notifyShop, type BotKind } from "../notify";
 import { sendShopMessage } from "./store";
 import { AdminPage, AdminSettingsPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam } from "./helpers";
@@ -276,7 +276,9 @@ admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
 
 async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
   const s = await loadSettings(c.env.DB);
-  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} {...extra} />, status);
+  c.set("settings", s); // reflect just-saved values (e.g. site name) in the layout
+  const linked = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM bale_links").first<{ n: number }>();
+  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} {...extra} />, status);
 }
 
 admin.get("/admin/settings", (c) => settingsPage(c));
@@ -304,9 +306,29 @@ async function saveAdminSettings(c: C): Promise<string> {
       }
     }
   }
+  if (f.safir_remove === "1") values.safir_api_key = "";
+  else if (f.safir_api_key) {
+    if (!/^[\w.:-]{10,300}$/.test(f.safir_api_key)) return "کلید سفیر نامعتبر به نظر می‌رسد.";
+    values.safir_api_key = f.safir_api_key;
+  }
+  const botId = normalizeDigits(f.safir_bot_id ?? "");
+  if (botId && !/^\d{1,20}$/.test(botId)) return "شناسه بازو باید عدد باشد.";
+  values.safir_bot_id = botId;
   await saveSiteSettings(c.env.DB, values);
   return "";
 }
+
+admin.post("/admin/settings/test-safir", async (c) => {
+  const error = await saveAdminSettings(c);
+  if (error) return settingsPage(c, { error }, 400);
+  const s = await loadSettings(c.env.DB);
+  try {
+    await sendSafirText(s, currentUser(c).phone, `✅ پیام آزمایشی سفیر از ${s.site_name}`);
+    return settingsPage(c, { ok: `پیام آزمایشی به ${currentUser(c).phone} در بله ارسال شد.` });
+  } catch (e) {
+    return settingsPage(c, { error: `ارسال ناموفق: ${(e as Error).message}` }, 400);
+  }
+});
 
 admin.post("/admin/settings", async (c) => {
   const error = await saveAdminSettings(c);
@@ -331,27 +353,4 @@ admin.post("/admin/settings/connect/:kind{bale|telegram}", async (c) => {
   } catch (e) {
     return settingsPage(c, { error: `اتصال ناموفق: ${(e as Error).message}` }, 400);
   }
-});
-
-// ---------- bot webhook: replies with the chat id so shops can paste it into settings ----------
-// Registered automatically from /admin/settings ("connect").
-
-export const bot = new Hono<Env>();
-
-bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
-  const kind = c.req.param("kind") as BotKind;
-  const s = c.get("settings");
-  if (!s.bot_webhook_secret || !safeEqual(c.req.param("secret"), s.bot_webhook_secret) || !botToken(s, kind)) {
-    return c.text("forbidden", 403);
-  }
-  const update = (await c.req.json().catch(() => null)) as { message?: { chat?: { id?: number } } } | null;
-  const chatId = update?.message?.chat?.id;
-  if (chatId !== undefined) {
-    c.executionCtx.waitUntil(
-      sendBotMessage(s, kind, String(chatId), `سلام! شناسه چت شما: ${chatId}\nاین عدد را در «پنل فروشگاه ← تنظیمات» وارد کنید تا سفارش‌های جدید اینجا اطلاع داده شود.`).catch(
-        (e) => console.error(e),
-      ),
-    );
-  }
-  return c.json({ ok: true });
 });

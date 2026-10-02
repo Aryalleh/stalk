@@ -7,7 +7,8 @@ import type { Env } from "./env";
 import { SESSION_COOKIE, sessionUser } from "./session";
 import { loadSettings } from "./settings";
 import { account } from "./shop/routes/account";
-import { admin, bot, panel } from "./shop/routes/panel";
+import { admin, panel } from "./shop/routes/panel";
+import { bot } from "./bale/bot";
 import { store } from "./shop/routes/store";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.

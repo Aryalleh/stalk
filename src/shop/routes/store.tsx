@@ -151,7 +151,12 @@ store.post("/order/:token/transfer", async (c) => {
 /** Message the shop on its bot channels and record the outcome on the order. */
 export async function sendShopMessage(c: C, orderId: number, kind: "transfer" | "ship") {
   const o = await c.env.DB.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
-  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(o!.shop_id).first<Shop>();
+  const shop = await c.env.DB.prepare(
+    `SELECT s.*, COALESCE(NULLIF(s.bale_chat_id, ''), l.chat_id, '') AS bale_chat_id
+     FROM shops s JOIN users u ON u.id = s.owner_id LEFT JOIN bale_links l ON l.phone = u.phone WHERE s.id = ?`,
+  )
+    .bind(o!.shop_id)
+    .first<Shop>(); // falls back to the owner's linked Bale chat when the shop set no chat id
   let error = "";
   try {
     error = await notifyShop(c.get("settings"), shop!, kind === "transfer" ? transferMessage(o!, siteUrl(c)) : shipMessage(o!, siteUrl(c)));

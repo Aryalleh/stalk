@@ -10,13 +10,15 @@ export const DEFAULTS = {
   telegram_bot_token: "",
   telegram_bot_username: "",
   bot_webhook_secret: "", // generated automatically
+  safir_api_key: "", // Bale Safir (business panel) api-access-key: OTP and paid messages by phone
+  safir_bot_id: "", // numeric id of the bot Safir sends as
 };
 
 export type SettingKey = keyof typeof DEFAULTS;
 export type Settings = Record<SettingKey, string>;
 
 /** Keys whose values are secret: never rendered back into pages. */
-export const SECRET_KEYS: SettingKey[] = ["bale_bot_token", "telegram_bot_token", "bot_webhook_secret"];
+export const SECRET_KEYS: SettingKey[] = ["bale_bot_token", "telegram_bot_token", "bot_webhook_secret", "safir_api_key"];
 
 export async function loadSettings(db: D1Database): Promise<Settings> {
   const { results } = await db.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
@@ -49,3 +51,5 @@ export function reservationMinutes(s: Settings) {
 
 /** Last 4 chars of a secret for display, e.g. "••••abcd". */
 export const mask = (v: string) => (v ? `••••${v.slice(-4)}` : "");
+
+export const safirReady = (s: Settings) => !!(s.safir_api_key && s.safir_bot_id);

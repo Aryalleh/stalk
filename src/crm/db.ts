@@ -3,7 +3,7 @@ import { CONTACT_KEY, CORE_NAMES, contactName, type ContactData } from "./fields
 import { diffContact, type Extras, type LogEntry, type LogRow } from "./history";
 import { normalizePhone, toLatinDigits } from "../../lib/normalize";
 
-export type ContactRow = ContactData & { id: number; created_at: string; updated_at: string; created_by: number | null };
+export type ContactRow = ContactData & { id: number; created_at: string; updated_at: string; created_by: number | null; bale_linked?: number };
 export interface FieldDef {
   id: number;
   name: string;
@@ -12,6 +12,9 @@ export interface FieldDef {
 export class DuplicateNationalCode extends Error {}
 
 export const PAGE_SIZE = 50;
+
+/** Columns for list views: the contact plus whether any of its phones is linked to Bale. */
+const LIST_COLUMNS = `c.*, EXISTS (SELECT 1 FROM bale_links l WHERE l.phone <> '' AND l.phone IN (c.phone, c.phone2, c.father_phone)) AS bale_linked`;
 
 export async function getContact(db: D1Database, id: number) {
   return db.prepare("SELECT * FROM contacts WHERE id = ?").bind(id).first<ContactRow>();
@@ -150,7 +153,7 @@ export async function searchContacts(db: D1Database, q: string, page: number) {
   const offset = (page - 1) * PAGE_SIZE;
   if (!term) {
     const { results } = await db
-      .prepare("SELECT * FROM contacts ORDER BY updated_at DESC LIMIT ? OFFSET ?")
+      .prepare(`SELECT ${LIST_COLUMNS} FROM contacts c ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
       .bind(PAGE_SIZE + 1, offset)
       .all<ContactRow>();
     return results;
@@ -161,7 +164,7 @@ export async function searchContacts(db: D1Database, q: string, page: number) {
   conds.push("EXISTS (SELECT 1 FROM extra_values e WHERE e.contact_id = c.id AND e.value LIKE ?1 ESCAPE '\\')");
   conds.push("phone = ?2", "phone2 = ?2", "father_phone = ?2");
   const { results } = await db
-    .prepare(`SELECT * FROM contacts c WHERE ${conds.join(" OR ")} ORDER BY updated_at DESC LIMIT ?3 OFFSET ?4`)
+    .prepare(`SELECT ${LIST_COLUMNS} FROM contacts c WHERE ${conds.join(" OR ")} ORDER BY updated_at DESC LIMIT ?3 OFFSET ?4`)
     .bind(like, phone, PAGE_SIZE + 1, offset)
     .all<ContactRow>();
   return results;
@@ -178,4 +181,34 @@ export async function allContactsWithExtras(db: D1Database) {
     byContact.get(r.contact_id)!.set(r.field_id, r.value);
   }
   return (contacts.results as ContactRow[]).map((c) => ({ contact: c, extras: byContact.get(c.id) ?? new Map() }));
+}
+
+export interface CrmMessage {
+  id: number;
+  contact_id: number;
+  phone: string;
+  channel: "bot" | "safir";
+  text: string;
+  status: "sent" | "failed";
+  error: string;
+  username: string;
+  sent_at: string;
+}
+
+export async function contactMessages(db: D1Database, contactId: number) {
+  const { results } = await db
+    .prepare("SELECT * FROM crm_messages WHERE contact_id = ? ORDER BY sent_at DESC, id DESC LIMIT 100")
+    .bind(contactId)
+    .all<CrmMessage>();
+  return results;
+}
+
+export async function logMessage(db: D1Database, m: Omit<CrmMessage, "id" | "sent_at"> & { user_id: number }) {
+  await db
+    .prepare(
+      `INSERT INTO crm_messages (contact_id, phone, channel, text, status, error, user_id, username, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(m.contact_id, m.phone, m.channel, m.text, m.status, m.error, m.user_id, m.username, new Date().toISOString())
+    .run();
 }
