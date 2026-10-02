@@ -6,12 +6,12 @@
 |---|---|
 | `/` | سایت عمومی خرید کادو از لیست آرزو |
 | `/panel` | پنل فروشگاه‌ها |
-| `/admin` | مدیریت پلتفرم (تأیید فروشگاه‌ها، آمار فروش) |
+| `/admin` | مدیریت پلتفرم (تأیید فروشگاه‌ها، آمار فروش، **تنظیمات سایت**) |
 | `/crm` | CRM داخلی مخاطبین — فقط مدیر و کاربرانی که دسترسی CRM دارند |
 
 حساب کاربری برای همه یکی است (ورود با موبایل و رمز). مدیر پلتفرم از `/crm/users` به هر کاربر دسترسی CRM می‌دهد.
 
-> «کادوچی» اسم موقت است؛ در `src/shop/views/layout.tsx` عوضش کنید.
+> نام سایت («کادوچی» پیش‌فرض) از `/admin/settings` عوض می‌شود.
 
 ## فروشگاه کادو
 
@@ -43,25 +43,23 @@ npx wrangler login
 npx wrangler d1 create app                    # database_id را در wrangler.jsonc بگذارید
 npx wrangler r2 bucket create gift-shop-images
 npm run db:migrate:remote
-# در wrangler.jsonc مقدار SITE_URL را آدرس واقعی سایت بگذارید
-npx wrangler secret put SETUP_TOKEN
-npx wrangler secret put BALE_BOT_TOKEN        # از @BotFather در بله
-npx wrangler secret put BOT_WEBHOOK_SECRET    # یک رشته تصادفی
 npm run deploy
 ```
-- اولین مدیر: `/setup` با `SETUP_TOKEN`.
-- وصل کردن بات (تا به فروشگاه‌ها شناسه چتشان را بگوید):
-  `https://tapi.bale.ai/bot<TOKEN>/setWebhook?url=<SITE_URL>/bot/bale/<BOT_WEBHOOK_SECRET>`
-  (تلگرام: `TELEGRAM_BOT_TOKEN` و `api.telegram.org` با مسیر `/bot/telegram/...`)
-- برای CRM می‌توانید Cloudflare Access را فقط روی مسیر `/crm*` بگذارید تا یک لایه امنیتی دیگر داشته باشد.
-- بکاپ: `npx wrangler d1 export app --remote --output backup.sql`
+هیچ secret یا متغیری لازم نیست. بعد از دیپلوی:
+1. **فوراً** `/setup` را باز کنید و مدیر پلتفرم را بسازید (اولین کسی که این فرم را پر کند مدیر می‌شود؛ بعد صفحه بسته می‌شود).
+2. در **`/admin/settings`** همه تنظیمات از داخل سایت عوض می‌شود:
+   - نام سایت، آدرس سایت (برای لینک‌های داخل پیام‌های بات)، مهلت واریز خریدار
+   - توکن بات بله و تلگرام ← دکمه «اتصال» توکن را بررسی و webhook را خودکار تنظیم می‌کند (روی https).
+   توکن‌ها بعد از ذخیره فقط به صورت `••••abcd` نمایش داده می‌شوند.
+3. برای CRM می‌توانید Cloudflare Access را فقط روی مسیر `/crm*` بگذارید تا یک لایه امنیتی دیگر داشته باشد.
+
+بکاپ: `npx wrangler d1 export app --remote --output backup.sql`
 
 ## اجرای محلی
 ```bash
 npm install
-echo 'SETUP_TOKEN="local"' > .dev.vars
 npm run db:migrate:local
-npm run dev                                   # http://localhost:8787
+npm run dev                                   # http://localhost:8787 ← /setup
 ```
 تست‌ها: `npm test` — بررسی تایپ: `npm run typecheck`
 
@@ -69,7 +67,7 @@ npm run dev                                   # http://localhost:8787
 | مسیر | کار |
 |---|---|
 | `src/index.tsx` | ورودی Worker؛ سایت روی `/` و CRM روی `/crm` |
-| `src/session.ts`, `src/env.ts` | حساب کاربری مشترک و تنظیمات |
+| `src/session.ts`, `src/settings.ts` | حساب کاربری مشترک؛ تنظیمات سایت (در D1، قابل ویرایش از وب) |
 | `src/shop/` | فروشگاه: `db.ts` (رزرو/تأیید واریز)، `notify.ts` (بله/تلگرام)، `routes/`، `views/` |
 | `src/crm/` | CRM: `db.ts` (ذخیره + لاگ در یک تراکنش)، `history.ts` (وضعیت در تاریخ)، `fields.ts`، `views/` |
 | `lib/` | رمز و نشست، تاریخ شمسی، نرمال‌سازی شماره/کارت |

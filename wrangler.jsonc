@@ -13,10 +13,6 @@
     }
   ],
   // Product images and transfer receipts. Create with: npx wrangler r2 bucket create gift-shop-images
-  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "gift-shop-images" }],
-  "vars": {
-    // Public base URL, used in links sent to shops.
-    "SITE_URL": "http://localhost:8787"
-  }
-  // Secrets (npx wrangler secret put ...): SETUP_TOKEN, BALE_BOT_TOKEN, TELEGRAM_BOT_TOKEN, BOT_WEBHOOK_SECRET
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "gift-shop-images" }]
+  // No vars or secrets: site name, bot tokens etc. are edited at /admin/settings and stored in D1.
 }

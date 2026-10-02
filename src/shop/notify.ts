@@ -1,4 +1,4 @@
-import type { Bindings } from "../env";
+import type { Settings } from "../settings";
 
 // Bale's bot API is Telegram-compatible; only the host differs.
 const BOT_API = {
@@ -6,20 +6,34 @@ const BOT_API = {
   telegram: "https://api.telegram.org/bot",
 } as const;
 export type BotKind = keyof typeof BOT_API;
+export const BOT_KINDS: BotKind[] = ["bale", "telegram"];
 
-export function botToken(env: Bindings, kind: BotKind) {
-  return kind === "bale" ? env.BALE_BOT_TOKEN : env.TELEGRAM_BOT_TOKEN;
+export function botToken(s: Settings, kind: BotKind) {
+  return kind === "bale" ? s.bale_bot_token : s.telegram_bot_token;
 }
 
-export async function sendBotMessage(env: Bindings, kind: BotKind, chatId: string, text: string) {
-  const token = botToken(env, kind);
-  if (!token) throw new Error(`${kind} bot token is not configured`);
-  const res = await fetch(`${BOT_API[kind]}${token}/sendMessage`, {
+async function callBot(token: string, kind: BotKind, method: string, body?: object) {
+  const res = await fetch(`${BOT_API[kind]}${token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify(body ?? {}),
   });
-  if (!res.ok) throw new Error(`${kind} sendMessage ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: unknown; description?: string };
+  if (!res.ok || !data.ok) throw new Error(`${kind} ${method} ${res.status}: ${data.description ?? "error"}`);
+  return data.result;
+}
+
+export async function sendBotMessage(s: Settings, kind: BotKind, chatId: string, text: string) {
+  const token = botToken(s, kind);
+  if (!token) throw new Error(`${kind} bot token is not configured`);
+  await callBot(token, kind, "sendMessage", { chat_id: chatId, text });
+}
+
+/** Check a token and point the bot's webhook at this site. Returns the bot's username. */
+export async function connectBot(kind: BotKind, token: string, webhookUrl: string) {
+  const me = (await callBot(token, kind, "getMe")) as { username?: string };
+  await callBot(token, kind, "setWebhook", { url: webhookUrl });
+  return me.username ?? "";
 }
 
 export interface OrderInfo {
@@ -79,12 +93,12 @@ export function shipMessage(o: OrderInfo, siteUrl: string) {
 }
 
 /** Send to every channel the shop configured. Returns an error summary ("" if all succeeded). */
-export async function notifyShop(env: Bindings, shop: { bale_chat_id: string; telegram_chat_id: string }, text: string) {
+export async function notifyShop(s: Settings, shop: { bale_chat_id: string; telegram_chat_id: string }, text: string) {
   const targets: [BotKind, string][] = [];
   if (shop.bale_chat_id) targets.push(["bale", shop.bale_chat_id]);
   if (shop.telegram_chat_id) targets.push(["telegram", shop.telegram_chat_id]);
   if (!targets.length) return "no channel configured";
-  const results = await Promise.allSettled(targets.map(([k, id]) => sendBotMessage(env, k, id, text)));
+  const results = await Promise.allSettled(targets.map(([k, id]) => sendBotMessage(s, k, id, text)));
   return results
     .map((r, i) => (r.status === "rejected" ? `${targets[i][0]}: ${(r.reason as Error).message}` : ""))
     .filter(Boolean)

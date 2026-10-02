@@ -1,11 +1,13 @@
 import { Hono } from "hono";
+import { render } from "../../render";
 import { safeEqual } from "../../../lib/auth";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { confirmPayment, now, randomSlug, rejectPayment, type Order, type Product, type Shop } from "../db";
 import type { C, Env } from "../../env";
-import { botToken, notifyShop, sendBotMessage, type BotKind } from "../notify";
+import { loadSettings, reservationMinutes, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
+import { botToken, connectBot, notifyShop, sendBotMessage, type BotKind } from "../notify";
 import { sendShopMessage } from "./store";
-import { AdminPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
+import { AdminPage, AdminSettingsPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
 import { currentUser, form, intParam } from "./helpers";
 
 export const panel = new Hono<Env>();
@@ -14,7 +16,7 @@ const myShop = (c: C) => c.env.DB.prepare("SELECT * FROM shops WHERE owner_id = 
 
 panel.get("/panel/register", async (c) => {
   if (await myShop(c)) return c.redirect("/panel");
-  return c.html(<ShopRegisterPage user={currentUser(c)} />);
+  return render(c, <ShopRegisterPage user={currentUser(c)} />);
 });
 
 panel.post("/panel/register", async (c) => {
@@ -26,13 +28,13 @@ panel.post("/panel/register", async (c) => {
   if (!f.name) errors.push("نام فروشگاه لازم است.");
   if (!/^[a-z0-9-]{3,40}$/.test(slug)) errors.push("آدرس صفحه باید ۳ تا ۴۰ حرف انگلیسی کوچک، عدد یا - باشد.");
   if (!/^\+?\d{5,15}$/.test(phone)) errors.push("تلفن نامعتبر است.");
-  if (errors.length) return c.html(<ShopRegisterPage user={currentUser(c)} values={f} errors={errors} />, 400);
+  if (errors.length) return render(c, <ShopRegisterPage user={currentUser(c)} values={f} errors={errors} />, 400);
   try {
     await c.env.DB.prepare("INSERT INTO shops (owner_id, name, slug, description, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(currentUser(c).id, f.name, slug, f.description ?? "", phone, now())
       .run();
   } catch {
-    return c.html(<ShopRegisterPage user={currentUser(c)} values={f} errors={["این آدرس صفحه قبلاً گرفته شده است."]} />, 400);
+    return render(c, <ShopRegisterPage user={currentUser(c)} values={f} errors={["این آدرس صفحه قبلاً گرفته شده است."]} />, 400);
   }
   return c.redirect("/panel");
 });
@@ -69,7 +71,7 @@ panel.get("/panel", async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT * FROM orders WHERE shop_id = ? AND status IN ${statuses} ORDER BY reported_at DESC LIMIT 200`)
     .bind(shop.id)
     .all<Order>();
-  return c.html(<OrdersPage user={currentUser(c)} shop={shop} orders={results} filter={ORDER_FILTERS.some(([f]) => f === filter) ? filter : "todo"} counts={counts} />);
+  return render(c, <OrdersPage user={currentUser(c)} shop={shop} orders={results} filter={ORDER_FILTERS.some(([f]) => f === filter) ? filter : "todo"} counts={counts} />);
 });
 
 /** Orders the shop may see: anything the giver has reported a transfer for. */
@@ -88,7 +90,7 @@ const SAVED_MESSAGES: Record<string, string> = {
 panel.get("/panel/orders/:id{[0-9]+}", async (c) => {
   const order = await shopOrder(c);
   if (!order) return c.notFound();
-  return c.html(<OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />);
+  return render(c, <OrderDetailPage user={currentUser(c)} shop={shopOf(c)} order={order} saved={SAVED_MESSAGES[c.req.query("done") ?? ""]} />);
 });
 
 panel.get("/panel/orders/:id{[0-9]+}/receipt", async (c) => {
@@ -137,7 +139,7 @@ panel.post("/panel/orders/:id{[0-9]+}/delivered", async (c) => {
 
 panel.get("/panel/products", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT * FROM products WHERE shop_id = ? ORDER BY created_at DESC").bind(shopOf(c).id).all<Product>();
-  return c.html(<ProductsPage user={currentUser(c)} shop={shopOf(c)} products={results} />);
+  return render(c, <ProductsPage user={currentUser(c)} shop={shopOf(c)} products={results} />);
 });
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -163,7 +165,7 @@ async function saveProduct(c: C, product: Product | null) {
       await c.env.IMAGES.put(imageKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
     }
   }
-  if (errors.length) return c.html(<ProductFormPage user={currentUser(c)} shop={shop} product={product} values={values} errors={errors} />, 400);
+  if (errors.length) return render(c, <ProductFormPage user={currentUser(c)} shop={shop} product={product} values={values} errors={errors} />, 400);
 
   const t = now();
   if (product) {
@@ -179,7 +181,7 @@ async function saveProduct(c: C, product: Product | null) {
   return c.redirect("/panel/products");
 }
 
-panel.get("/panel/products/new", (c) => c.html(<ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={null} values={{}} />));
+panel.get("/panel/products/new", (c) => render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={null} values={{}} />));
 panel.post("/panel/products/new", (c) => saveProduct(c, null));
 
 const ownProduct = (c: C) =>
@@ -189,7 +191,7 @@ panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   const p = await ownProduct(c);
   if (!p) return c.notFound();
   const values = { title: p.title, description: p.description, price: String(p.price), is_active: String(p.is_active) };
-  return c.html(<ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={p} values={values} />);
+  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={p} values={values} />);
 });
 
 panel.post("/panel/products/:id{[0-9]+}", async (c) => {
@@ -200,7 +202,13 @@ panel.post("/panel/products/:id{[0-9]+}", async (c) => {
 
 // ---------- settings ----------
 
-const bots = (c: C) => ({ bale: !!c.env.BALE_BOT_TOKEN, telegram: !!c.env.TELEGRAM_BOT_TOKEN });
+const bots = (c: C) => {
+  const s = c.get("settings");
+  return {
+    bale: { on: !!s.bale_bot_token, username: s.bale_bot_username },
+    telegram: { on: !!s.telegram_bot_token, username: s.telegram_bot_username },
+  };
+};
 
 async function saveSettings(c: C) {
   const f = await form(c);
@@ -218,19 +226,19 @@ async function saveSettings(c: C) {
   return { error: "" };
 }
 
-panel.get("/panel/settings", (c) => c.html(<SettingsPage user={currentUser(c)} shop={shopOf(c)} bots={bots(c)} />));
+panel.get("/panel/settings", (c) => render(c, <SettingsPage user={currentUser(c)} shop={shopOf(c)} bots={bots(c)} />));
 
 panel.post("/panel/settings", async (c) => {
   const { error } = await saveSettings(c);
   const shop = (await myShop(c))!;
-  return c.html(<SettingsPage user={currentUser(c)} shop={shop} bots={bots(c)} error={error} ok={error ? undefined : "ذخیره شد."} />, error ? 400 : 200);
+  return render(c, <SettingsPage user={currentUser(c)} shop={shop} bots={bots(c)} error={error} ok={error ? undefined : "ذخیره شد."} />, error ? 400 : 200);
 });
 
 panel.post("/panel/settings/test", async (c) => {
   const saved = await saveSettings(c);
   const shop = (await myShop(c))!;
-  const error = saved.error || (await notifyShop(c.env, shop, `✅ پیام آزمایشی برای فروشگاه «${shop.name}». سفارش‌های کادویی جدید اینجا اعلام می‌شوند.`));
-  return c.html(<SettingsPage user={currentUser(c)} shop={shop} bots={bots(c)} error={error ? `ارسال ناموفق: ${error}` : undefined} ok={error ? undefined : "پیام آزمایشی ارسال شد."} />);
+  const error = saved.error || (await notifyShop(c.get("settings"), shop, `✅ پیام آزمایشی برای فروشگاه «${shop.name}». سفارش‌های کادویی جدید اینجا اعلام می‌شوند.`));
+  return render(c, <SettingsPage user={currentUser(c)} shop={shop} bots={bots(c)} error={error ? `ارسال ناموفق: ${error}` : undefined} ok={error ? undefined : "پیام آزمایشی ارسال شد."} />);
 });
 
 // ---------- platform admin ----------
@@ -253,7 +261,7 @@ admin.get("/admin", async (c) => {
        GROUP BY s.id ORDER BY total DESC`,
     ),
   ]);
-  return c.html(<AdminPage user={currentUser(c)} shops={shops.results as never} stats={stats.results as never} />);
+  return render(c, <AdminPage user={currentUser(c)} shops={shops.results as never} stats={stats.results as never} />);
 });
 
 admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
@@ -264,21 +272,83 @@ admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
   return c.redirect("/admin");
 });
 
+// ---------- site settings (admin) ----------
+
+async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
+  const s = await loadSettings(c.env.DB);
+  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} {...extra} />, status);
+}
+
+admin.get("/admin/settings", (c) => settingsPage(c));
+
+/** Save the form; a blank token field keeps the current token. */
+async function saveAdminSettings(c: C): Promise<string> {
+  const f = await form(c);
+  const current = c.get("settings");
+  const siteUrl = (f.site_url ?? "").replace(/\/+$/, "");
+  if (!f.site_name) return "نام سایت لازم است.";
+  if (siteUrl && !/^https?:\/\/[^\s/]+$/.test(siteUrl)) return "آدرس سایت باید مثل https://example.com باشد (بدون مسیر).";
+  const minutes = Math.floor(Number(normalizeDigits(f.reservation_minutes ?? "")));
+  if (!(minutes >= 5 && minutes <= 1440)) return "مهلت واریز باید بین ۵ تا ۱۴۴۰ دقیقه باشد.";
+  const values: Partial<Settings> = { site_name: f.site_name.slice(0, 40), site_url: siteUrl, reservation_minutes: String(minutes) };
+  for (const kind of ["bale", "telegram"] as const) {
+    const token = (f[`${kind}_bot_token`] ?? "").trim();
+    if (f[`${kind}_bot_remove`] === "1") {
+      values[`${kind}_bot_token`] = "";
+      values[`${kind}_bot_username`] = "";
+    } else if (token) {
+      if (!/^[\w:-]{20,200}$/.test(token)) return `توکن بات ${kind === "bale" ? "بله" : "تلگرام"} نامعتبر به نظر می‌رسد.`;
+      if (token !== current[`${kind}_bot_token`]) {
+        values[`${kind}_bot_token`] = token;
+        values[`${kind}_bot_username`] = ""; // must reconnect
+      }
+    }
+  }
+  await saveSiteSettings(c.env.DB, values);
+  return "";
+}
+
+admin.post("/admin/settings", async (c) => {
+  const error = await saveAdminSettings(c);
+  return settingsPage(c, error ? { error } : { ok: "ذخیره شد." }, error ? 400 : 200);
+});
+
+admin.post("/admin/settings/connect/:kind{bale|telegram}", async (c) => {
+  const kind = c.req.param("kind") as BotKind;
+  const error = await saveAdminSettings(c);
+  if (error) return settingsPage(c, { error }, 400);
+  const s = await loadSettings(c.env.DB);
+  const token = botToken(s, kind);
+  if (!token) return settingsPage(c, { error: "اول توکن را وارد و ذخیره کنید." }, 400);
+  const base = (s.site_url || new URL(c.req.url).origin).replace(/\/$/, "");
+  if (!base.startsWith("https://")) {
+    return settingsPage(c, { error: "بات فقط به آدرس https وصل می‌شود؛ سایت را روی دامنه واقعی باز کنید یا «آدرس سایت» را تنظیم کنید." }, 400);
+  }
+  try {
+    const username = await connectBot(kind, token, `${base}/bot/${kind}/${await webhookSecret(c.env.DB, s)}`);
+    await saveSiteSettings(c.env.DB, { [`${kind}_bot_username`]: username });
+    return settingsPage(c, { ok: `بات @${username} وصل شد. فروشگاه‌ها با فرستادن /start به آن، شناسه چتشان را می‌گیرند.` });
+  } catch (e) {
+    return settingsPage(c, { error: `اتصال ناموفق: ${(e as Error).message}` }, 400);
+  }
+});
+
 // ---------- bot webhook: replies with the chat id so shops can paste it into settings ----------
-// Register with: https://tapi.bale.ai/bot<TOKEN>/setWebhook?url=<SITE_URL>/bot/bale/<BOT_WEBHOOK_SECRET>
+// Registered automatically from /admin/settings ("connect").
 
 export const bot = new Hono<Env>();
 
 bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
   const kind = c.req.param("kind") as BotKind;
-  if (!c.env.BOT_WEBHOOK_SECRET || !safeEqual(c.req.param("secret"), c.env.BOT_WEBHOOK_SECRET) || !botToken(c.env, kind)) {
+  const s = c.get("settings");
+  if (!s.bot_webhook_secret || !safeEqual(c.req.param("secret"), s.bot_webhook_secret) || !botToken(s, kind)) {
     return c.text("forbidden", 403);
   }
   const update = (await c.req.json().catch(() => null)) as { message?: { chat?: { id?: number } } } | null;
   const chatId = update?.message?.chat?.id;
   if (chatId !== undefined) {
     c.executionCtx.waitUntil(
-      sendBotMessage(c.env, kind, String(chatId), `سلام! شناسه چت شما: ${chatId}\nاین عدد را در «پنل فروشگاه ← تنظیمات» وارد کنید تا سفارش‌های جدید اینجا اطلاع داده شود.`).catch(
+      sendBotMessage(s, kind, String(chatId), `سلام! شناسه چت شما: ${chatId}\nاین عدد را در «پنل فروشگاه ← تنظیمات» وارد کنید تا سفارش‌های جدید اینجا اطلاع داده شود.`).catch(
         (e) => console.error(e),
       ),
     );

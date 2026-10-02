@@ -1,5 +1,3 @@
-/** How long a giver has to make the card-to-card transfer and report it. */
-export const RESERVATION_MINUTES = 30;
 /** Orders that count as bought (shop confirmed the money). */
 const SOLD = "('paid', 'shipped', 'delivered')";
 /** SQL condition (alias o, ?now param) for orders that occupy a unit: bought, reported, or a live hold. */
@@ -136,9 +134,9 @@ export interface GiverInput {
  * Atomically create a pending order holding one unit of the item, only if a unit is still free
  * (quantity > bought + reported + live holds). Returns null when the item is taken or not buyable.
  */
-export async function reserveItem(db: D1Database, itemId: number, giver: GiverInput) {
+export async function reserveItem(db: D1Database, itemId: number, giver: GiverInput, holdMinutes: number) {
   const t = now();
-  const expires = new Date(Date.now() + RESERVATION_MINUTES * 60_000).toISOString();
+  const expires = new Date(Date.now() + holdMinutes * 60_000).toISOString();
   return db
     .prepare(
       `INSERT INTO orders (token, item_id, wishlist_id, product_id, shop_id, product_title, amount, giver_name, giver_phone,

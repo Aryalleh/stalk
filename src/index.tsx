@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { crm } from "./crm/routes";
 import type { Env } from "./env";
 import { SESSION_COOKIE, sessionUser } from "./session";
+import { loadSettings } from "./settings";
 import { account } from "./shop/routes/account";
 import { admin, bot, panel } from "./shop/routes/panel";
 import { store } from "./shop/routes/store";
@@ -16,7 +17,9 @@ app.use(secureHeaders());
 app.use(csrf()); // rejects cross-origin form posts; bot webhooks send JSON and are unaffected
 
 app.use(async (c, next) => {
-  c.set("user", await sessionUser(c.env.DB, getCookie(c, SESSION_COOKIE)));
+  const [user, settings] = await Promise.all([sessionUser(c.env.DB, getCookie(c, SESSION_COOKIE)), loadSettings(c.env.DB)]);
+  c.set("user", user);
+  c.set("settings", settings);
   await next();
 });
 

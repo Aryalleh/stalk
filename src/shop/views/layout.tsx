@@ -1,4 +1,5 @@
 import type { Child } from "hono/jsx";
+import { useSite } from "../../render";
 import { canUseCrm, type User } from "../../session";
 
 const CSS = `
@@ -48,19 +49,20 @@ nav.tabs a.on{background:var(--accent);color:var(--accent-text);border-color:var
 
 export function Layout(props: { title: string; user: User | null; children?: Child; hasShop?: boolean }) {
   const u = props.user;
+  const site = useSite();
   return (
     <html lang="fa" dir="rtl">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{props.title} · کادوچی</title>
+        <title>{props.title} · {site.site_name}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet" />
         <style dangerouslySetInnerHTML={{ __html: CSS }} />
       </head>
       <body>
         <header>
-          <a class="brand" href="/">🎁 کادوچی</a>
+          <a class="brand" href="/">🎁 {site.site_name}</a>
           <a href="/">محصولات</a>
           {u && <a href="/me/wishlists">لیست‌های آرزوی من</a>}
           <span class="sp" />

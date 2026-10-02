@@ -1,6 +1,7 @@
 import { Hono } from "hono";
+import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
-import { deleteSession, hashPassword, safeEqual, verifyPassword } from "../../../lib/auth";
+import { deleteSession, hashPassword, verifyPassword } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { now, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import type { C, Env } from "../../env";
@@ -12,19 +13,19 @@ import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./
 export const account = new Hono<Env>();
 const MOBILE = /^09\d{9}$/;
 
-account.get("/login", (c) => c.html(<LoginPage next={safeNext(c.req.query("next"))} />));
+account.get("/login", (c) => render(c, <LoginPage next={safeNext(c.req.query("next"))} />));
 
 account.post("/login", async (c) => {
   const f = await form(c);
   const phone = normalizePhone(f.phone);
   const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE phone = ?").bind(phone).first<{ id: number; password_hash: string }>();
   if (!user || !(await verifyPassword(f.password ?? "", user.password_hash))) {
-    return c.html(<LoginPage next={safeNext(f.next)} phone={f.phone} error="شماره موبایل یا رمز عبور اشتباه است." />, 401);
+    return render(c, <LoginPage next={safeNext(f.next)} phone={f.phone} error="شماره موبایل یا رمز عبور اشتباه است." />, 401);
   }
   return startSession(c, user.id, f.next);
 });
 
-account.get("/register", (c) => c.html(<RegisterPage next={safeNext(c.req.query("next"))} />));
+account.get("/register", (c) => render(c, <RegisterPage next={safeNext(c.req.query("next"))} />));
 
 account.post("/register", async (c) => {
   const f = await form(c);
@@ -33,7 +34,7 @@ account.post("/register", async (c) => {
   if (!f.name) errors.push("نام لازم است.");
   if (!MOBILE.test(phone)) errors.push("شماره موبایل نامعتبر است.");
   if ((f.password ?? "").length < 8) errors.push("رمز عبور باید حداقل ۸ کاراکتر باشد.");
-  const fail = (errs: string[]) => c.html(<RegisterPage next={safeNext(f.next)} errors={errs} values={f} />, 400);
+  const fail = (errs: string[]) => render(c, <RegisterPage next={safeNext(f.next)} errors={errs} values={f} />, 400);
   if (errors.length) return fail(errors);
   const row = await c.env.DB.prepare("INSERT INTO users (phone, name, password_hash, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
     .bind(phone, f.name, await hashPassword(f.password), now())
@@ -48,30 +49,29 @@ account.post("/logout", async (c) => {
   return c.redirect("/");
 });
 
-// First platform admin, guarded by the SETUP_TOKEN secret; disabled once any admin exists.
+// The first person to complete /setup becomes platform admin; the page closes once an admin exists,
+// so run it right after deploying.
 const hasAdmin = async (c: C) => !!(await c.env.DB.prepare("SELECT 1 FROM users WHERE is_admin = 1 LIMIT 1").first());
 
 account.get("/setup", async (c) => {
   if (await hasAdmin(c)) return c.redirect("/login");
-  return c.html(<SetupPage configured={!!c.env.SETUP_TOKEN} />);
+  return render(c, <SetupPage />);
 });
 
 account.post("/setup", async (c) => {
   if (await hasAdmin(c)) return c.redirect("/login");
   const f = await form(c);
-  const configured = !!c.env.SETUP_TOKEN;
-  if (!configured || !safeEqual(f.token ?? "", c.env.SETUP_TOKEN!)) return c.html(<SetupPage configured={configured} error="SETUP_TOKEN اشتباه است." />, 403);
   const phone = normalizePhone(f.phone);
   if (!f.name || !MOBILE.test(phone) || (f.password ?? "").length < 10) {
-    return c.html(<SetupPage configured error="نام، موبایل معتبر و رمز حداقل ۱۰ کاراکتری لازم است." />, 400);
+    return render(c, <SetupPage error="نام، موبایل معتبر و رمز حداقل ۱۰ کاراکتری لازم است." values={f} />, 400);
   }
   const row = await c.env.DB.prepare(
-    `INSERT INTO users (phone, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, 1, ?)
-     ON CONFLICT (phone) DO UPDATE SET is_admin = 1, password_hash = excluded.password_hash RETURNING id`,
+    "INSERT INTO users (phone, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT (phone) DO NOTHING RETURNING id",
   )
     .bind(phone, f.name, await hashPassword(f.password), now())
     .first<{ id: number }>();
-  return startSession(c, row!.id, "/admin");
+  if (!row) return render(c, <SetupPage error="این شماره قبلاً در سایت حساب دارد؛ شماره دیگری وارد کنید." values={f} />, 400);
+  return startSession(c, row.id, "/admin/settings");
 });
 
 // ---------- my wishlists (login required; enforced in index) ----------
@@ -84,7 +84,7 @@ account.get("/me/wishlists", async (c) => {
   )
     .bind(user.id)
     .all<Wishlist & { items: number }>();
-  return c.html(<MyWishlistsPage user={user} lists={results} siteUrl={siteUrl(c)} />);
+  return render(c, <MyWishlistsPage user={user} lists={results} siteUrl={siteUrl(c)} />);
 });
 
 function cleanWishlist(f: Record<string, string>) {
@@ -128,14 +128,14 @@ account.get("/me/wishlists/new", async (c) => {
   const values: Record<string, string> = last
     ? { recipient_name: last.recipient_name, recipient_phone: last.recipient_phone, address: last.address, postal_code: last.postal_code }
     : { recipient_name: user.name, recipient_phone: user.phone };
-  return c.html(<WishlistFormPage user={user} wishlist={null} values={values} productId={c.req.query("product")} siteUrl={siteUrl(c)} />);
+  return render(c, <WishlistFormPage user={user} wishlist={null} values={values} productId={c.req.query("product")} siteUrl={siteUrl(c)} />);
 });
 
 account.post("/me/wishlists/new", async (c) => {
   const user = currentUser(c);
   const f = await form(c);
   const { values, errors } = cleanWishlist({ ...f, is_open: "1" });
-  if (errors.length) return c.html(<WishlistFormPage user={user} wishlist={null} values={values} errors={errors} productId={f.product} siteUrl={siteUrl(c)} />, 400);
+  if (errors.length) return render(c, <WishlistFormPage user={user} wishlist={null} values={values} errors={errors} productId={f.product} siteUrl={siteUrl(c)} />, 400);
   const row = await c.env.DB.prepare(
     `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -155,7 +155,7 @@ account.get("/me/wishlists/:id{[0-9]+}", async (c) => {
     c.env.DB.prepare("SELECT * FROM orders WHERE wishlist_id = ? AND status IN ('paid', 'shipped', 'delivered') ORDER BY paid_at DESC").bind(w.id).all<Order>(),
   ]);
   const values = Object.fromEntries(Object.entries(w).map(([k, v]) => [k, String(v)]));
-  return c.html(
+  return render(c, 
     <WishlistFormPage user={user} wishlist={w} values={values} items={items} gifts={gifts.results} siteUrl={siteUrl(c)} saved={c.req.query("saved") === "1"} />,
   );
 });
@@ -166,7 +166,7 @@ account.post("/me/wishlists/:id{[0-9]+}", async (c) => {
   if (!w) return c.notFound();
   const { values, errors } = cleanWishlist(await form(c));
   if (errors.length) {
-    return c.html(<WishlistFormPage user={user} wishlist={w} values={values} errors={errors} items={await wishlistItems(c.env.DB, w.id)} siteUrl={siteUrl(c)} />, 400);
+    return render(c, <WishlistFormPage user={user} wishlist={w} values={values} errors={errors} items={await wishlistItems(c.env.DB, w.id)} siteUrl={siteUrl(c)} />, 400);
   }
   await c.env.DB.prepare(
     `UPDATE wishlists SET title = ?, description = ?, occasion_date = ?, recipient_name = ?, recipient_phone = ?,

@@ -1,5 +1,4 @@
-// Shared by the CRM and shop Workers: password hashing and D1-backed sessions.
-// Both apps need a `sessions (token_hash, user_id, expires_at)` table.
+// Password hashing and D1-backed sessions (needs a `sessions (token_hash, user_id, expires_at)` table).
 
 const ITERATIONS = 100_000; // Workers' PBKDF2 maximum
 const SESSION_DAYS = 7;

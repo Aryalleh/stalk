@@ -28,5 +28,5 @@ export async function startSession(c: C, userId: number, next = "/") {
 export const currentUser = (c: C) => c.get("user") as User;
 
 export function siteUrl(c: C) {
-  return (c.env.SITE_URL || new URL(c.req.url).origin).replace(/\/$/, "");
+  return (c.get("settings").site_url || new URL(c.req.url).origin).replace(/\/$/, "");
 }

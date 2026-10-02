@@ -1,7 +1,9 @@
 import { Hono } from "hono";
+import { render } from "../../render";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { getPublicProduct, listProducts, randomSlug, reportTransfer, reserveItem, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
 import type { C, Env } from "../../env";
+import { reservationMinutes } from "../../settings";
 import { notifyShop, shipMessage, transferMessage } from "../notify";
 import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
@@ -12,7 +14,7 @@ store.get("/", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   const page = pageParam(c);
   const products = await listProducts(c.env.DB, { q, limit: PAGE + 1, offset: (page - 1) * PAGE });
-  return c.html(<HomePage user={c.get("user")} q={q} products={products.slice(0, PAGE)} page={page} hasNext={products.length > PAGE} />);
+  return render(c, <HomePage user={c.get("user")} q={q} products={products.slice(0, PAGE)} page={page} hasNext={products.length > PAGE} />);
 });
 
 store.get("/p/:id{[0-9]+}", async (c) => {
@@ -22,14 +24,14 @@ store.get("/p/:id{[0-9]+}", async (c) => {
   const wishlists = user
     ? (await c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all<Wishlist>()).results
     : [];
-  return c.html(<ProductPage user={user} product={product} wishlists={wishlists} added={c.req.query("added")} />);
+  return render(c, <ProductPage user={user} product={product} wishlists={wishlists} added={c.req.query("added")} />);
 });
 
 store.get("/s/:slug", async (c) => {
   const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE slug = ? AND status = 'approved'").bind(c.req.param("slug")).first<Shop>();
   if (!shop) return c.notFound();
   const products = await listProducts(c.env.DB, { shopId: shop.id, limit: 200, offset: 0 });
-  return c.html(<ShopPage user={c.get("user")} shop={shop} products={products} />);
+  return render(c, <ShopPage user={c.get("user")} shop={shop} products={products} />);
 });
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {
@@ -43,7 +45,7 @@ store.get("/w/:slug", async (c) => {
   const w = await wishlistWithOwner(c.env.DB, "w.slug = ?", c.req.param("slug"));
   if (!w) return c.notFound();
   const user = c.get("user");
-  return c.html(
+  return render(c, 
     <WishlistPublicPage
       user={user}
       wishlist={w}
@@ -69,7 +71,7 @@ async function loadItem(c: C) {
 store.get("/gift/:itemId{[0-9]+}", async (c) => {
   const found = await loadItem(c);
   if (!found) return c.notFound();
-  return c.html(<CheckoutPage user={c.get("user")} item={found.item} wishlist={found.w} ownerName={found.w.owner_name} />);
+  return render(c, <CheckoutPage user={c.get("user")} item={found.item} wishlist={found.w} ownerName={found.w.owner_name} />);
 });
 
 store.post("/gift/:itemId{[0-9]+}", async (c) => {
@@ -79,7 +81,7 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
   const f = await form(c);
   const phone = normalizePhone(f.phone ?? "");
   const fail = (errors: string[], status: 400 | 409 = 400) =>
-    c.html(<CheckoutPage user={c.get("user")} item={item} wishlist={w} ownerName={w.owner_name} values={f} errors={errors} />, status);
+    render(c, <CheckoutPage user={c.get("user")} item={item} wishlist={w} ownerName={w.owner_name} values={f} errors={errors} />, status);
 
   const errors: string[] = [];
   if (!f.name) errors.push("نام خود را وارد کنید.");
@@ -91,7 +93,7 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
     phone,
     message: (f.message ?? "").slice(0, 300),
     anonymous: f.anonymous === "1",
-  });
+  }, reservationMinutes(c.get("settings")));
   if (!order) return fail(["متأسفانه این آرزو همین الان توسط شخص دیگری خریده یا رزرو شده، یا دیگر در دسترس نیست."], 409);
   return c.redirect(`/order/${order.token}`);
 });
@@ -113,7 +115,7 @@ async function orderByToken(c: C) {
 store.get("/order/:token", async (c) => {
   const order = await orderByToken(c);
   if (!order) return c.notFound();
-  return c.html(<OrderPage user={c.get("user")} order={order} />);
+  return render(c, <OrderPage user={c.get("user")} order={order} />);
 });
 
 const RECEIPT_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -137,7 +139,7 @@ store.post("/order/:token/transfer", async (c) => {
     else if (file.size > MAX_RECEIPT) errors.push("حجم تصویر رسید حداکثر ۳ مگابایت است.");
     else receiptKey = `r/${order.shop_id}/${randomSlug(24)}.${ext}`;
   }
-  if (errors.length) return c.html(<OrderPage user={c.get("user")} order={order} errors={errors} values={values} />, 400);
+  if (errors.length) return render(c, <OrderPage user={c.get("user")} order={order} errors={errors} values={values} />, 400);
   if (receiptKey) await c.env.IMAGES.put(receiptKey, await (file as File).arrayBuffer(), { httpMetadata: { contentType: (file as File).type } });
 
   if (await reportTransfer(c.env.DB, order.id, { ...values, receiptKey })) {
@@ -152,7 +154,7 @@ export async function sendShopMessage(c: C, orderId: number, kind: "transfer" | 
   const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(o!.shop_id).first<Shop>();
   let error = "";
   try {
-    error = await notifyShop(c.env, shop!, kind === "transfer" ? transferMessage(o!, siteUrl(c)) : shipMessage(o!, siteUrl(c)));
+    error = await notifyShop(c.get("settings"), shop!, kind === "transfer" ? transferMessage(o!, siteUrl(c)) : shipMessage(o!, siteUrl(c)));
   } catch (e) {
     error = String(e);
   }

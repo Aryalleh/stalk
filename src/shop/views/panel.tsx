@@ -1,5 +1,6 @@
 import { formatJalali } from "../../../lib/jalali";
 import { formatCard } from "../../../lib/normalize";
+import { mask, type Settings } from "../../settings";
 import { STATUS_LABEL, toman, type Order, type Product, type Shop } from "../db";
 import type { User } from "../../session";
 import { Errors, Layout, Thumb } from "./layout";
@@ -230,7 +231,9 @@ export function ProductFormPage(props: { user: User; shop: Shop; product: Produc
   );
 }
 
-export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: boolean; telegram: boolean }; error?: string; ok?: string }) {
+type BotInfo = { on: boolean; username: string };
+
+export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: BotInfo; telegram: BotInfo }; error?: string; ok?: string }) {
   const s = props.shop;
   return (
     <Layout title="تنظیمات" user={props.user}>
@@ -241,15 +244,17 @@ export function SettingsPage(props: { user: User; shop: Shop; bots: { bale: bool
       <form method="post" action="/panel/settings" class="card">
         <h2>اطلاع‌رسانی سفارش جدید</h2>
         <p class="muted small" style="margin-top:0">
-          به بات سایت در بله یا تلگرام پیام <code>/start</code> بدهید؛ بات «شناسه چت» شما را جواب می‌دهد. آن را اینجا وارد کنید.
+          به بات سایت پیام <code>/start</code> بدهید؛ بات «شناسه چت» شما را جواب می‌دهد. آن را اینجا وارد کنید.
+          {props.bots.bale.username && <> بات بله: <a class="dt" href={`https://ble.ir/${props.bots.bale.username}`}>@{props.bots.bale.username}</a></>}
+          {props.bots.telegram.username && <> · بات تلگرام: <a class="dt" href={`https://t.me/${props.bots.telegram.username}`}>@{props.bots.telegram.username}</a></>}
         </p>
         <div class="two">
           <div>
-            <label>شناسه چت بله {!props.bots.bale && <span class="tag">بات بله روی سایت فعال نیست</span>}</label>
+            <label>شناسه چت بله {!props.bots.bale.on && <span class="tag">بات بله روی سایت فعال نیست</span>}</label>
             <input name="bale_chat_id" value={s.bale_chat_id} class="ltr" maxlength={40} />
           </div>
           <div>
-            <label>شناسه چت تلگرام {!props.bots.telegram && <span class="tag">بات تلگرام روی سایت فعال نیست</span>}</label>
+            <label>شناسه چت تلگرام {!props.bots.telegram.on && <span class="tag">بات تلگرام روی سایت فعال نیست</span>}</label>
             <input name="telegram_chat_id" value={s.telegram_chat_id} class="ltr" maxlength={40} />
           </div>
         </div>
@@ -289,6 +294,7 @@ export function AdminPage(props: {
   return (
     <Layout title="مدیریت" user={props.user}>
       <h1>مدیریت پلتفرم</h1>
+      <AdminTabs on="/admin" />
       <div class="card wrap">
         <h2>فروشگاه‌ها</h2>
         <table>
@@ -327,28 +333,91 @@ export function AdminPage(props: {
   );
 }
 
-export function SetupPage(props: { configured: boolean; error?: string }) {
+export function SetupPage(props: { error?: string; values?: Record<string, string> }) {
+  const v = props.values ?? {};
   return (
     <Layout title="راه‌اندازی" user={null}>
       <div class="card" style="max-width:420px;margin:40px auto">
         <h1>ساخت مدیر پلتفرم</h1>
-        {!props.configured ? (
-          <p class="errbox">ابتدا secret به نام <code>SETUP_TOKEN</code> را تنظیم کنید.</p>
-        ) : (
-          <form method="post" action="/setup">
-            <Errors errors={[props.error]} />
-            <label>SETUP_TOKEN</label>
-            <input name="token" type="password" class="ltr" required />
-            <label>نام</label>
-            <input name="name" required />
-            <label>شماره موبایل</label>
-            <input name="phone" class="ltr" required />
-            <label>رمز عبور (حداقل ۱۰ کاراکتر)</label>
-            <input name="password" type="password" class="ltr" minlength={10} required />
-            <p><button>ساخت</button></p>
-          </form>
+        <p class="warnbox">اولین کسی که این فرم را پر کند مدیر سایت می‌شود و بعد این صفحه بسته می‌شود؛ بلافاصله بعد از راه‌اندازی پرش کنید.</p>
+        <form method="post" action="/setup">
+          <Errors errors={[props.error]} />
+          <label>نام</label>
+          <input name="name" value={v.name ?? ""} required />
+          <label>شماره موبایل</label>
+          <input name="phone" value={v.phone ?? ""} class="ltr" required />
+          <label>رمز عبور (حداقل ۱۰ کاراکتر)</label>
+          <input name="password" type="password" class="ltr" minlength={10} required />
+          <p><button>ساخت</button></p>
+        </form>
+      </div>
+    </Layout>
+  );
+}
+
+function AdminTabs(props: { on: string }) {
+  const tabs = [["/admin", "فروشگاه‌ها و فروش"], ["/admin/settings", "تنظیمات سایت"], ["/crm", "CRM"]];
+  return (
+    <nav class="tabs">
+      {tabs.map(([href, label]) => <a href={href} class={props.on === href ? "on" : ""}>{label}</a>)}
+    </nav>
+  );
+}
+
+export function AdminSettingsPage(props: {
+  user: User;
+  s: Settings;
+  webhookBase: string;
+  error?: string;
+  ok?: string;
+}) {
+  const s = props.s;
+  const bot = (kind: "bale" | "telegram", title: string, father: string) => {
+    const token = kind === "bale" ? s.bale_bot_token : s.telegram_bot_token;
+    const username = kind === "bale" ? s.bale_bot_username : s.telegram_bot_username;
+    return (
+      <div>
+        <h2 style="margin-top:20px">بات {title}</h2>
+        <p class="muted small" style="margin-top:0">
+          توکن را از {father} بگیرید. بعد از ذخیره، «اتصال» را بزنید تا توکن بررسی و پیام‌های بات به این سایت وصل شود.
+        </p>
+        {token && (
+          <p class="small">
+            توکن فعلی: <span class="dt">{mask(token)}</span>
+            {username ? <> · بات: <b class="dt">@{username}</b> <span class="tag ok">وصل</span></> : <> · <span class="tag">هنوز وصل نشده</span></>}
+          </p>
+        )}
+        <label>{token ? "توکن جدید (برای نگه‌داشتن توکن فعلی خالی بگذارید)" : "توکن"}</label>
+        <input name={`${kind}_bot_token`} class="ltr" autocomplete="off" placeholder="123456:ABC..." />
+        {token && (
+          <label class="row" style="color:var(--text)">
+            <input type="checkbox" name={`${kind}_bot_remove`} value="1" style="width:auto" /> حذف توکن
+          </label>
+        )}
+        {token && (
+          <p><button class="secondary" formaction={`/admin/settings/connect/${kind}`}>اتصال / اتصال دوباره بات {title}</button></p>
         )}
       </div>
+    );
+  };
+  return (
+    <Layout title="تنظیمات سایت" user={props.user}>
+      <h1>تنظیمات سایت</h1>
+      <AdminTabs on="/admin/settings" />
+      <Errors errors={[props.error]} />
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <form method="post" action="/admin/settings" class="card">
+        <h2>عمومی</h2>
+        <label>نام سایت</label>
+        <input name="site_name" value={s.site_name} required maxlength={40} />
+        <label>آدرس سایت (برای لینک‌هایی که در بات فرستاده می‌شود؛ خالی = همان آدرسی که سایت با آن باز شده)</label>
+        <input name="site_url" value={s.site_url} class="ltr" placeholder={props.webhookBase} maxlength={200} />
+        <label>مهلت واریز خریدار (دقیقه) — در این مدت آرزو برای او رزرو است</label>
+        <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
+        {bot("bale", "بله", "@BotFather در بله")}
+        {bot("telegram", "تلگرام", "@BotFather در تلگرام")}
+        <p style="margin-top:20px"><button>ذخیره</button></p>
+      </form>
     </Layout>
   );
 }

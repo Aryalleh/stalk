@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { render } from "../render";
 import { hashPassword } from "../../lib/auth";
 import { normalizePhone } from "../../lib/normalize";
 import type { C as Ctx, Env } from "../env";
@@ -56,7 +57,7 @@ crm.get("/", async (c) => {
   const q = c.req.query("q") ?? "";
   const page = pageParam(c);
   const rows = await searchContacts(c.env.DB, q, page);
-  return c.html(
+  return render(c, 
     <ListPage user={me(c)} q={q} page={page} rows={rows.slice(0, PAGE_SIZE)} hasNext={rows.length > PAGE_SIZE} />,
   );
 });
@@ -78,14 +79,14 @@ async function handleSave(c: C, id: number | null) {
   const contact = id === null ? null : await getContact(c.env.DB, id);
   if (id !== null && !contact) return c.notFound();
   const { data, errors, extras, defs, labels } = await readForm(c);
-  const render = (formErrors: string[], status: 400 | 409) =>
-    c.html(
+  const renderForm = (formErrors: string[], status: 400 | 409) =>
+    render(c, 
       <ContactPage user={user} contact={contact} data={data} extras={extras} defs={defs} errors={errors} formErrors={formErrors}
         logs={[]} />,
       status,
     );
-  if (Object.keys(errors).length) return render(["لطفاً خطاهای فرم را برطرف کنید."], 400);
-  if (CORE_NAMES.every((n) => !data[n]) && extras.size === 0) return render(["حداقل یک فیلد را پر کنید."], 400);
+  if (Object.keys(errors).length) return renderForm(["لطفاً خطاهای فرم را برطرف کنید."], 400);
+  if (CORE_NAMES.every((n) => !data[n]) && extras.size === 0) return renderForm(["حداقل یک فیلد را پر کنید."], 400);
   try {
     const savedId = await saveContact(c.env.DB, id, data, extras, labels, user);
     return c.redirect(`/crm/contacts/${savedId}?saved=1`);
@@ -93,7 +94,7 @@ async function handleSave(c: C, id: number | null) {
     if (e instanceof DuplicateNationalCode) {
       const other = await c.env.DB.prepare("SELECT id FROM contacts WHERE national_code = ?").bind(data.national_code).first<{ id: number }>();
       errors.national_code = `مخاطبی با این کد ملی قبلاً ثبت شده است${other ? ` (#${other.id})` : ""}.`;
-      return render(["کد ملی تکراری است."], 409);
+      return renderForm(["کد ملی تکراری است."], 409);
     }
     throw e;
   }
@@ -101,7 +102,7 @@ async function handleSave(c: C, id: number | null) {
 
 crm.get("/contacts/new", async (c) => {
   const defs = await getFieldDefs(c.env.DB);
-  return c.html(<ContactPage user={me(c)} contact={null} data={{}} extras={new Map()} defs={defs} />);
+  return render(c, <ContactPage user={me(c)} contact={null} data={{}} extras={new Map()} defs={defs} />);
 });
 
 crm.post("/contacts/new", (c) => handleSave(c, null));
@@ -111,7 +112,7 @@ crm.get("/contacts/:id{[0-9]+}", async (c) => {
   const contact = await getContact(c.env.DB, id);
   if (!contact) return c.notFound();
   const [extras, defs, logs] = await Promise.all([getExtras(c.env.DB, id), getFieldDefs(c.env.DB), getLogs(c.env.DB, id)]);
-  return c.html(
+  return render(c, 
     <ContactPage user={me(c)} contact={contact} data={contact} extras={extras} defs={defs} logs={logs} saved={c.req.query("saved") === "1"} />,
   );
 });
@@ -140,7 +141,7 @@ crm.get("/contacts/:id{[0-9]+}/history", async (c) => {
   if (!name) return c.notFound();
   const logs = await getLogs(c.env.DB, id, field || undefined);
   const label = logs[0]?.field_label ?? fieldLabel(field);
-  return c.html(<FieldHistoryPage user={me(c)} contactId={id} name={name} label={label} logs={logs} />);
+  return render(c, <FieldHistoryPage user={me(c)} contactId={id} name={name} label={label} logs={logs} />);
 });
 
 crm.get("/contacts/:id{[0-9]+}/snapshot", async (c) => {
@@ -150,14 +151,14 @@ crm.get("/contacts/:id{[0-9]+}/snapshot", async (c) => {
   const atText = (c.req.query("at") ?? "").trim();
   const at = atText ? parseJalali(atText) : new Date().toISOString();
   const props = { user: me(c), contactId: id, name, atText: atText || formatJalali(at) };
-  if (!at) return c.html(<SnapshotPage {...props} snap={null} error="تاریخ نامعتبر است. نمونه: 1405/07/09 14:30" />, 400);
-  return c.html(<SnapshotPage {...props} snap={buildSnapshot(await getLogs(c.env.DB, id), at)} />);
+  if (!at) return render(c, <SnapshotPage {...props} snap={null} error="تاریخ نامعتبر است. نمونه: 1405/07/09 14:30" />, 400);
+  return render(c, <SnapshotPage {...props} snap={buildSnapshot(await getLogs(c.env.DB, id), at)} />);
 });
 
 crm.get("/history", async (c) => {
   const page = pageParam(c);
   const logs = await recentLogs(c.env.DB, page);
-  return c.html(<HistoryPage user={me(c)} logs={logs.slice(0, PAGE_SIZE)} page={page} hasNext={logs.length > PAGE_SIZE} />);
+  return render(c, <HistoryPage user={me(c)} logs={logs.slice(0, PAGE_SIZE)} page={page} hasNext={logs.length > PAGE_SIZE} />);
 });
 
 const csvCell = (v: unknown) => {
@@ -191,12 +192,12 @@ crm.get("/export.csv", async (c) => {
 
 // ---------- extra field definitions ----------
 
-crm.get("/fields", async (c) => c.html(<FieldsPage user={me(c)} defs={await getFieldDefs(c.env.DB)} />));
+crm.get("/fields", async (c) => render(c, <FieldsPage user={me(c)} defs={await getFieldDefs(c.env.DB)} />));
 
 async function saveFieldName(c: C, id: number | null) {
   const name = String((await c.req.parseBody()).name ?? "").trim();
   const fail = async (error: string) =>
-    c.html(<FieldsPage user={me(c)} defs={await getFieldDefs(c.env.DB)} error={error} />, 400);
+    render(c, <FieldsPage user={me(c)} defs={await getFieldDefs(c.env.DB)} error={error} />, 400);
   if (!name) return fail("عنوان فیلد لازم است.");
   if (CORE_FIELDS.some((f) => f.label === name)) return fail("این فیلد جزو فیلدهای اصلی است.");
   try {
@@ -219,7 +220,7 @@ async function staffPage(c: C, extra: { error?: string; ok?: string } = {}, stat
   const { results } = await c.env.DB.prepare(
     "SELECT id, phone, name, is_admin, is_staff, created_at FROM users WHERE is_staff = 1 OR is_admin = 1 ORDER BY id",
   ).all<User & { created_at: string }>();
-  return c.html(<UsersPage user={me(c)} users={results} {...extra} />, status);
+  return render(c, <UsersPage user={me(c)} users={results} {...extra} />, status);
 }
 
 crm.get("/users", requireAdmin, (c) => staffPage(c));
