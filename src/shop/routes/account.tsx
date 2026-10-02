@@ -84,8 +84,8 @@ function readProfile(f: Record<string, string>) {
   const last = (f.last_name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
   const birth = birthDate(f.birth_year, f.birth_month, f.birth_day);
   const error = !first || !last ? "نام و نام خانوادگی را وارد کنید." : !birth ? "تاریخ تولد را درست انتخاب کنید." : "";
-  const accent = f.accent === "pink" ? "pink" : "blue";
-  const theme = f.theme === "light" ? "light" : "dark";
+  const accent = f.accent === "blue" ? "blue" : "pink";
+  const theme = f.theme === "dark" ? "dark" : "light";
   return { first, last, birth: birth ?? "", accent, theme, error };
 }
 

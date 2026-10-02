@@ -14,7 +14,7 @@ export const DEFAULTS = {
   safir_bot_id: "", // numeric id of the bot Safir sends as
   categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line
   featured_shop_id: "", // the "shop of the week" banner on the home page
-  brand_color: "#3b82f6", // accent color of the whole site (buttons, prices, links)
+  brand_color: "#ff5c93", // default accent (buttons, prices, links) for visitors and people who haven't picked one
   site_description: "", // meta description of the home page (search engines, AI answers, link previews); empty = default text
   // Editable content (/admin/content): FAQ as JSON [[question, answer], ...] ("" = built-in list),
   // the About page title and text ("" = built-in), and the developer credit shown on About.

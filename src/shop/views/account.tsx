@@ -73,8 +73,8 @@ export function ProfileFields(props: { values: Record<string, string>; username?
 
 /** Accent color and dark/light theme picker (values: accent = blue|pink, theme = dark|light). */
 export function LookFields(props: { values: Record<string, string> }) {
-  const accent = props.values.accent === "pink" ? "pink" : "blue";
-  const theme = props.values.theme === "light" ? "light" : "dark";
+  const accent = props.values.accent === "blue" ? "blue" : "pink";
+  const theme = props.values.theme === "dark" ? "dark" : "light";
   const option = (name: string, value: string, checked: boolean, swatch: string, label: string) => (
     <label class="flex-1 !flex items-center gap-2 p-3 rounded-xl cursor-pointer border-2 border-transparent bg-card has-[:checked]:border-brand" style="margin:0">
       <input type="radio" name={name} value={value} checked={checked} class="sr-only" />
@@ -86,13 +86,13 @@ export function LookFields(props: { values: Record<string, string> }) {
     <>
       <label>رنگ دلخواه</label>
       <div class="flex gap-2">
-        {option("accent", "blue", accent === "blue", "background:#3b82f6", "آبی")}
         {option("accent", "pink", accent === "pink", "background:#ff5c93", "صورتی")}
+        {option("accent", "blue", accent === "blue", "background:#3b82f6", "آبی")}
       </div>
       <label>تم</label>
       <div class="flex gap-2">
-        {option("theme", "dark", theme === "dark", "background:#0d1320;border:2px solid #334155", "تیره")}
         {option("theme", "light", theme === "light", "background:#f4f6fa;border:2px solid #cbd5e1", "روشن")}
+        {option("theme", "dark", theme === "dark", "background:#0d1320;border:2px solid #334155", "تیره")}
       </div>
       <p class="small muted" style="margin:4px 0 0">بعداً هم از تنظیمات حساب قابل تغییر است.</p>
     </>

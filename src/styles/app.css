@@ -14,12 +14,12 @@
 @tailwind utilities;
 
 /* ---------- theme ---------- */
-/* Tailwind colors (space-separated RGB so opacity modifiers work). Dark navy with a blue brand;
+/* Tailwind colors (space-separated RGB so opacity modifiers work). Dark navy palette (light one below), pink brand;
    --c-brand is overridden by the brand color chosen in /admin/settings. */
 :root {
-  --c-ink: 13 19 32; --c-card: 23 32 51; --c-plum: 33 44 66; --c-fg: 231 237 247; --c-muted: 148 163 184; --c-brand: 59 130 246;
+  --c-ink: 13 19 32; --c-card: 23 32 51; --c-plum: 33 44 66; --c-fg: 231 237 247; --c-muted: 148 163 184; --c-brand: 255 92 147;
 }
-/* Light theme (chosen per person in their account settings). */
+/* Light theme: the default; people can switch to dark in their account settings. */
 .theme-light {
   --c-ink: 244 246 250; --c-card: 255 255 255; --c-plum: 226 232 240; --c-fg: 15 23 42; --c-muted: 100 116 139;
 }

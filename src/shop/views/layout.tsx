@@ -251,7 +251,7 @@ export function Layout(props: {
   const showNav = nav !== "none" && !props.panel;
   const title = props.fullTitle ? props.title : `${props.title} · ${site.site_name}`;
   // The signed-in person's own look wins over the site's brand color.
-  const light = props.user?.theme === "light" && !props.panel;
+  const light = props.user?.theme !== "dark" && !props.panel; // light unless the person chose dark
   const accent = ACCENTS[props.user?.accent as Accent] ?? brandRgb(site);
   return (
     <html lang="fa" dir="rtl" class={light ? "theme-light" : undefined}>
@@ -270,7 +270,7 @@ export function Layout(props: {
         <meta name="apple-mobile-web-app-title" content={site.site_name} />
         {HEAD_LINKS}
         <link rel="stylesheet" href={CSS_URL} />
-        {accent && accent !== "59 130 246" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${accent}}` }} />}
+        {accent && accent !== "255 92 147" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${accent}}` }} />}
         {!props.panel && <Analytics />}
       </head>
       <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>

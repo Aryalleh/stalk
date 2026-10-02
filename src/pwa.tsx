@@ -44,8 +44,8 @@ pwa.get("/manifest.webmanifest", (c) => {
       scope: "/",
       display: "standalone",
       orientation: "portrait",
-      background_color: "#0d1320",
-      theme_color: "#0d1320",
+      background_color: "#f4f6fa",
+      theme_color: "#ffffff",
       categories: ["shopping", "lifestyle"],
       icons: [
         { src: "/static/icon-192.png", sizes: "192x192", type: "image/png" },
