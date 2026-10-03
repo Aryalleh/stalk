@@ -12,6 +12,8 @@ export const DEFAULTS = {
   bot_webhook_secret: "", // generated automatically
   safir_api_key: "", // Bale Safir (business panel) api-access-key: OTP and paid messages by phone
   safir_bot_id: "", // numeric id of the bot Safir sends as
+  meta_app_secret: "", // Meta app secret: verifies Instagram webhook deliveries (X-Hub-Signature-256)
+  ig_verify_token: "", // shared with Meta when subscribing the webhook; generated automatically
   categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line
   featured_shop_id: "", // the "shop of the week" banner on the home page
   brand_color: "#ff5c93", // default accent (buttons, prices, links) for visitors and people who haven't picked one
@@ -43,7 +45,7 @@ export type SettingKey = keyof typeof DEFAULTS;
 export type Settings = Record<SettingKey, string>;
 
 /** Keys whose values are secret: never rendered back into pages. */
-export const SECRET_KEYS: SettingKey[] = ["bale_bot_token", "telegram_bot_token", "bot_webhook_secret", "safir_api_key"];
+export const SECRET_KEYS: SettingKey[] = ["bale_bot_token", "telegram_bot_token", "bot_webhook_secret", "safir_api_key", "meta_app_secret"];
 
 export async function loadSettings(db: D1Database): Promise<Settings> {
   const { results } = await db.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
@@ -113,4 +115,13 @@ export function socialLinks(s: Settings): { key: (typeof SOCIAL_KEYS)[number]; u
 export function brandRgb(s: Settings) {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s.brand_color.trim());
   return m ? m.slice(1).map((h) => parseInt(h, 16)).join(" ") : "";
+}
+
+/** Verify token for the Instagram webhook subscription; created on first use. */
+export async function igVerifyToken(db: D1Database, s: Settings) {
+  if (s.ig_verify_token) return s.ig_verify_token;
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  await saveSettings(db, { ig_verify_token: token });
+  s.ig_verify_token = token;
+  return token;
 }

@@ -14,7 +14,7 @@ const TOKEN_TTL_MS = 24 * 3600_000;
 
 /** Paths a not-yet-connected user may still use. */
 export const CONNECT_EXEMPT =
-  /^\/(connect|logout|setup|bot\/|img\/|order\/|admin\/settings|app(\/|$)|static\/|sw\.js|manifest\.webmanifest|offline|robots\.txt|sitemap\.xml|llms\.txt|favicon\.ico|apple-touch-icon\.png)/;
+  /^\/(connect|logout|setup|bot\/|ig\/|img\/|order\/|admin\/settings|app(\/|$)|static\/|sw\.js|manifest\.webmanifest|offline|robots\.txt|sitemap\.xml|llms\.txt|favicon\.ico|apple-touch-icon\.png)/;
 
 export async function connectToken(db: D1Database, userId: number) {
   const row = await db

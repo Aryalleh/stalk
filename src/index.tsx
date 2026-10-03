@@ -16,6 +16,7 @@ import { admin, panel } from "./shop/routes/panel";
 import { bot } from "./bale/bot";
 import { store } from "./shop/routes/store";
 import { miniapp } from "./bale/miniapp";
+import { igWebhook } from "./shop/crm/webhook";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { seo } from "./seo";
@@ -60,7 +61,7 @@ app.use(async (c, next) => {
 // one set as "site address" in /admin/settings — other hosts get a permanent redirect to the same
 // path there. Bot webhooks, sign-in and the settings page stay reachable on every host, so a wrong
 // address can always be fixed (sign in on workers.dev, open /admin/settings).
-const ANY_HOST = /^\/(bot\/|login|logout|setup|admin\/settings|connect|me\/complete|static\/|webfonts\/)/;
+const ANY_HOST = /^\/(bot\/|ig\/|login|logout|setup|admin\/settings|connect|me\/complete|static\/|webfonts\/)/;
 app.use(async (c, next) => {
   const canonical = c.get("settings").site_url;
   if (canonical && !ANY_HOST.test(c.req.path)) {
@@ -114,6 +115,7 @@ app.use(async (c, next) => {
 app.route("/", pwa);
 app.route("/", seo);
 app.route("/", miniapp);
+app.route("/", igWebhook);
 app.route("/", connect);
 app.route("/crm", crm);
 app.route("/", store);

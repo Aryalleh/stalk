@@ -38,3 +38,14 @@ export function usernameError(u: string) {
 }
 
 export const fullName = (first: string, last: string) => `${first.trim()} ${last.trim()}`.trim();
+
+/** "MM-DD" (Jalali) for today and the next `days` days, Tehran time — to match birthdays. */
+export function upcomingMonthDays(days: number, now = new Date()) {
+  const out: string[] = [];
+  for (let i = 0; i <= days; i++) {
+    const t = new Date(now.getTime() + 3.5 * 3600_000 + i * 86400_000);
+    const j = toJalali(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+    out.push(`${String(j.jm).padStart(2, "0")}-${String(j.jd).padStart(2, "0")}`);
+  }
+  return out;
+}

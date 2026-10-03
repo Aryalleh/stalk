@@ -1,5 +1,6 @@
 import { formatJalali } from "../../../lib/jalali";
 import { formatCard } from "../../../lib/normalize";
+import { birthdayLabel } from "../../../lib/people";
 import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
@@ -48,28 +49,53 @@ export function ShopRegisterPage(props: { user: User; values?: Record<string, st
   );
 }
 
-export type PanelTab = "dashboard" | "products" | "orders" | "settings";
+export type PanelTab =
+  | "dashboard" | "inbox" | "customers" | "leads" | "tasks" | "orders" | "sales" | "products" | "automation" | "team" | "settings" | "more";
 
-/** Shop panel shell from html/shoppanel.html: light theme, shop header and a bottom tab bar. */
-function PanelShell(props: { title: string; user: User; shop: Shop; on: PanelTab; children?: Child }) {
+/** Shop admin (the owner) vs agent: agents don't manage settings, team or automation. */
+export const isShopAdmin = (u: User, shop: Shop) => u.shop_role === "admin" || shop.owner_id === u.id;
+
+/** Every section of the shop panel: [tab, href, icon, label, admin only]. */
+export const PANEL_SECTIONS: [PanelTab, string, string, string, boolean][] = [
+  ["dashboard", "/panel", "fa-chart-pie", "داشبورد", false],
+  ["inbox", "/panel/inbox", "fa-comments", "گفتگوها", false],
+  ["customers", "/panel/customers", "fa-users", "مشتریان", false],
+  ["leads", "/panel/leads", "fa-filter", "سرنخ‌ها", false],
+  ["tasks", "/panel/tasks", "fa-list-check", "وظایف", false],
+  ["orders", "/panel/orders", "fa-receipt", "سفارش‌های سایت", false],
+  ["sales", "/panel/sales", "fa-cash-register", "فروش دایرکت", false],
+  ["products", "/panel/products", "fa-box-open", "محصولات", false],
+  ["automation", "/panel/automation", "fa-robot", "اتوماسیون", true],
+  ["team", "/panel/team", "fa-user-group", "تیم", true],
+  ["settings", "/panel/settings", "fa-gear", "تنظیمات", true],
+];
+
+/** Shop panel shell: light theme, shop header with section tabs (desktop) and a bottom bar (phones). */
+export function PanelShell(props: { title: string; user: User; shop: Shop; on: PanelTab; children?: Child; wide?: boolean; unread?: number }) {
   const s = props.shop;
-  const tab = (key: PanelTab, href: string, icon: string, label: string) => (
-    <a href={href} class={`flex flex-col items-center gap-1 ${props.on === key ? "text-blue-600" : "text-slate-400"}`}>
+  const admin = isShopAdmin(props.user, s);
+  const sections = PANEL_SECTIONS.filter(([, , , , onlyAdmin]) => admin || !onlyAdmin);
+  const tab = (key: PanelTab, href: string, icon: string, label: string, badge = 0) => (
+    <a href={href} class={`relative flex flex-col items-center gap-1 ${props.on === key ? "text-blue-600" : "text-slate-400"}`}>
       <i class={`fa-solid ${icon} text-lg`}></i>
+      {badge > 0 && <span class="absolute -top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center">{badge > 99 ? "99+" : badge.toLocaleString("fa-IR")}</span>}
       <span class="text-[10px] font-bold">{label}</span>
     </a>
   );
+  const moreOn = !["dashboard", "inbox", "customers", "orders"].includes(props.on);
   const header = (
     <>
       <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <div class={`${props.wide ? "max-w-5xl" : "max-w-5xl"} mx-auto px-4 py-3 flex items-center justify-between gap-3`}>
           <a href="/panel" class="flex items-center gap-3 min-w-0">
             <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20 overflow-hidden shrink-0">
               {s.logo_key ? <img src={`/img/${s.logo_key}`} alt="" class="w-full h-full object-cover" /> : <i class="fa-solid fa-store text-lg"></i>}
             </div>
             <div class="min-w-0">
               <h1 class="text-sm font-bold text-slate-900 truncate">{s.name}</h1>
-              <p class="text-[10px] text-slate-500">پنل فروشگاه · <span class={s.status === "approved" ? "text-emerald-600" : "text-amber-600"}>{SHOP_STATUS[s.status]}</span></p>
+              <p class="text-[10px] text-slate-500">
+                {admin ? "مدیر فروشگاه" : "پشتیبان"} · <span class={s.status === "approved" ? "text-emerald-600" : "text-amber-600"}>{SHOP_STATUS[s.status]}</span>
+              </p>
             </div>
           </a>
           <div class="flex gap-2">
@@ -77,19 +103,28 @@ function PanelShell(props: { title: string; user: User; shop: Shop; on: PanelTab
             <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-house"></i></a>
           </div>
         </div>
+        <nav class={`hidden md:flex ${props.wide ? "max-w-5xl" : "max-w-5xl"} mx-auto px-4 gap-1 overflow-x-auto no-scrollbar`} aria-label="بخش‌های پنل">
+          {sections.map(([key, href, icon, label]) => (
+            <a href={href} class={`whitespace-nowrap px-3 py-2.5 text-xs font-bold border-b-2 ${props.on === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-900"}`}>
+              <i class={`fa-solid ${icon} ml-1`}></i>{label}
+              {key === "inbox" && (props.unread ?? 0) > 0 && <span class="mr-1 px-1.5 rounded-full bg-red-500 text-white text-[9px]">{(props.unread ?? 0).toLocaleString("fa-IR")}</span>}
+            </a>
+          ))}
+        </nav>
       </header>
-      <nav class="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 safe-bottom">
-        <div class="max-w-md mx-auto px-8 pt-3 flex items-center justify-between">
+      <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 safe-bottom">
+        <div class="max-w-md mx-auto px-6 pt-3 flex items-center justify-between">
           {tab("dashboard", "/panel", "fa-chart-pie", "داشبورد")}
-          {tab("products", "/panel/products", "fa-box-open", "محصولات")}
+          {tab("inbox", "/panel/inbox", "fa-comments", "گفتگوها", props.unread ?? 0)}
+          {tab("customers", "/panel/customers", "fa-users", "مشتریان")}
           {tab("orders", "/panel/orders", "fa-receipt", "سفارش‌ها")}
-          {tab("settings", "/panel/settings", "fa-gear", "تنظیمات")}
+          {tab(moreOn ? props.on : "more", "/panel/more", "fa-bars", "منو")}
         </div>
       </nav>
     </>
   );
   return (
-    <Layout title={props.title} user={props.user} panel header={header}>
+    <Layout title={props.title} user={props.user} panel header={header} wide>
       <div class="pb-20">
         {s.status === "pending" && <div class="warnbox">فروشگاه در انتظار تأیید است. می‌توانید محصولات را اضافه کنید؛ بعد از تأیید نمایش داده می‌شوند.</div>}
         {s.status === "suspended" && <div class="errbox">فروشگاه معلق است و محصولاتش نمایش داده نمی‌شود.</div>}
@@ -175,10 +210,23 @@ export function DashboardPage(props: {
   user: User;
   shop: Shop;
   stats: { today: number; awaiting: number; toShip: number; sales: number; products: number };
+  crm: { newLeads: number; openConversations: number; unread: number; tasksDue: number; directRevenue: number; customers: number };
+  lowStock: { id: number; title: string; size: string; color: string; quantity: number; min_stock: number }[];
+  birthdays: { id: number; name: string; username: string; birthday: string }[];
+  tasks: { id: number; title: string; due_at: string | null; customer_id: number | null; customer_name: string | null }[];
   orders: PanelOrder[];
   onlyAwaiting: boolean;
 }) {
   const st = props.stats;
+  const crm = props.crm;
+  const fa = (n: number) => n.toLocaleString("fa-IR");
+  const nowIso = new Date().toISOString();
+  const kpi = (href: string, icon: string, label: string, value: string, alert = false) => (
+    <a href={href} class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3 !text-slate-900">
+      <span class={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${alert ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}><i class={`fa-solid ${icon}`}></i></span>
+      <span class="min-w-0"><span class="text-[11px] text-slate-500 block">{label}</span><b class="text-base">{value}</b></span>
+    </a>
+  );
   const stat = (label: string, value: string, note?: Child) => (
     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
       <span class="text-[11px] text-slate-500 block mb-1">{label}</span>
@@ -187,7 +235,53 @@ export function DashboardPage(props: {
     </div>
   );
   return (
-    <PanelShell title="پنل فروشگاه" user={props.user} shop={props.shop} on="dashboard">
+    <PanelShell title="پنل فروشگاه" user={props.user} shop={props.shop} on="dashboard" unread={crm.unread}>
+      <section class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        {kpi("/panel/inbox", "fa-comments", "پیام‌های خوانده‌نشده", fa(crm.unread), crm.unread > 0)}
+        {kpi("/panel/leads", "fa-user-plus", "سرنخ تازه (۳۰ روز)", fa(crm.newLeads))}
+        {kpi("/panel/tasks", "fa-list-check", "وظایف سررسید", fa(crm.tasksDue), crm.tasksDue > 0)}
+        {kpi("/panel/inbox?status=open", "fa-inbox", "گفتگوی باز", fa(crm.openConversations))}
+        {kpi("/panel/sales", "fa-cash-register", "فروش دایرکت (۳۰ روز)", toman(crm.directRevenue))}
+        {kpi("/panel/customers", "fa-users", "مشتریان", fa(crm.customers))}
+      </section>
+      {(props.tasks.length > 0 || props.lowStock.length > 0 || props.birthdays.length > 0) && (
+        <section class="grid md:grid-cols-3 gap-3 mb-6">
+          {props.tasks.length > 0 && (
+            <div class="card !mb-0">
+              <h2><i class="fa-solid fa-list-check ml-1 text-blue-600"></i> وظایف من</h2>
+              {props.tasks.map((t) => (
+                <a href={t.customer_id ? `/panel/customers/${t.customer_id}` : "/panel/tasks"} class="flex justify-between gap-2 py-1 text-sm !text-slate-900">
+                  <span class="truncate">{t.title}{t.customer_name ? ` · ${t.customer_name}` : ""}</span>
+                  {t.due_at && <span class={`text-[10px] shrink-0 dt ${t.due_at < nowIso ? "text-red-600 font-bold" : "text-slate-500"}`}>{formatJalali(t.due_at)}</span>}
+                </a>
+              ))}
+            </div>
+          )}
+          {props.lowStock.length > 0 && (
+            <div class="card !mb-0">
+              <h2><i class="fa-solid fa-triangle-exclamation ml-1 text-amber-500"></i> موجودی کم</h2>
+              {props.lowStock.map((r) => (
+                <a href={`/panel/products/${r.id}#stock`} class="flex justify-between gap-2 py-1 text-sm !text-slate-900">
+                  <span class="truncate">{r.title}{variantLabel(r.size, r.color) ? ` (${variantLabel(r.size, r.color)})` : ""}</span>
+                  <b class={r.quantity === 0 ? "text-red-600" : "text-amber-600"}>{fa(r.quantity)}</b>
+                </a>
+              ))}
+            </div>
+          )}
+          {props.birthdays.length > 0 && (
+            <div class="card !mb-0">
+              <h2>🎂 تولدهای پیش رو</h2>
+              {props.birthdays.map((b) => (
+                <a href={`/panel/customers/${b.id}`} class="flex justify-between gap-2 py-1 text-sm !text-slate-900">
+                  <span class="truncate">{b.name || `@${b.username}`}</span>
+                  <span class="text-[11px] text-slate-500">{birthdayLabel(b.birthday)}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+      <h2>فروش سایت</h2>
       <section class="grid grid-cols-2 gap-4 mb-8">
         {stat("فروش امروز", toman(st.today))}
         {stat("فیش‌های جدید", st.awaiting.toLocaleString("fa-IR"), st.awaiting ? <span class="text-[10px] text-amber-600 mr-1 font-bold">منتظر تأیید</span> : null)}
@@ -222,6 +316,7 @@ export function OrdersPage(props: { user: User; shop: Shop; orders: PanelOrder[]
             {l}{props.counts[f] ? ` (${props.counts[f].toLocaleString("fa-IR")})` : ""}
           </Chip>
         ))}
+        <Chip href="/panel/sales" on={false}><i class="fa-solid fa-cash-register ml-1"></i>فروش دایرکت</Chip>
       </div>
       <OrderList orders={props.orders} empty="سفارشی نیست." />
     </PanelShell>
@@ -424,29 +519,46 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
   );
 }
 
-/** Stock per variant (size × color), or one number. New sizes/colors get their stock after saving. */
-function StockEditor(props: { variants: Variant[]; stock: Record<string, number>; track: boolean }) {
-  const single = props.variants.length === 1 && !props.variants[0].label;
+/** Per-variant details beyond the quantity (product_variants in the CRM model). */
+export interface VariantInfo {
+  sku: string;
+  price: number | null;
+  sale_price: number | null;
+  min_stock: number;
+}
+
+/** Stock, SKU, price and sale price per variant (size × color). New sizes/colors appear after saving. */
+function StockEditor(props: { variants: Variant[]; stock: Record<string, number>; info: Record<string, VariantInfo>; track: boolean }) {
+  const num = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
   return (
     <div class="card" id="stock">
-      <h2>📦 موجودی انبار</h2>
+      <h2>📦 تنوع‌ها و موجودی انبار</h2>
       <label class="row" style="color:var(--fg);margin-top:0">
         <input type="checkbox" name="track_stock" value="1" checked={props.track} /> مدیریت موجودی (بیشتر از موجودی فروخته نمی‌شود)
       </label>
       <p class="muted small" style="margin:4px 0 8px">
         خاموش = نامحدود. موجودی برای هر ترکیب سایز و رنگ جداست. با هر تأیید واریز یکی کم می‌شود؛ تا وقتی فیش‌ها منتظر تأیید هستند، همان
-        تعداد رزرو می‌ماند. در صفحه سفارش هم می‌توانید به‌علت ناموجودی لغو کنید یا سایز/رنگ دیگری پیشنهاد دهید.
+        تعداد رزرو می‌ماند. قیمت خالی = قیمت اصلی محصول؛ قیمت حراج در فروش دایرکت استفاده می‌شود. وقتی موجودی به «حداقل» برسد در داشبورد هشدار می‌گیرید.
       </p>
-      <div class={single ? "" : "grid grid-cols-2 md:grid-cols-4 gap-2"} style={single ? "max-width:160px" : ""}>
-        {props.variants.map((v, n) => (
-          <div>
-            <label style="margin-top:0">{v.label || "تعداد موجود"}</label>
-            <input type="hidden" name={`stock_key_${n}`} value={v.key} />
-            <input name={`stock_${n}`} value={String(props.stock[v.key] ?? 0)} class="ltr" inputmode="numeric" />
-          </div>
-        ))}
+      <div class="space-y-3">
+        {props.variants.map((v, n) => {
+          const i = props.info[v.key];
+          return (
+            <div class="border border-slate-100 rounded-xl p-2">
+              <input type="hidden" name={`stock_key_${n}`} value={v.key} />
+              <b class="text-xs">{v.label || "محصول"}</b>
+              <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div><label class="!mt-1">موجودی</label><input name={`stock_${n}`} value={String(props.stock[v.key] ?? 0)} class="ltr" inputmode="numeric" /></div>
+                <div><label class="!mt-1">حداقل</label><input name={`min_${n}`} value={String(i?.min_stock ?? 0)} class="ltr" inputmode="numeric" /></div>
+                <div><label class="!mt-1">SKU</label><input name={`sku_${n}`} value={i?.sku ?? ""} class="ltr" maxlength={40} /></div>
+                <div><label class="!mt-1">قیمت</label><input name={`vprice_${n}`} value={num(i?.price)} class="ltr" inputmode="numeric" placeholder="اصلی" /></div>
+                <div><label class="!mt-1">قیمت حراج</label><input name={`sale_${n}`} value={num(i?.sale_price)} class="ltr" inputmode="numeric" placeholder="—" /></div>
+              </div>
+            </div>
+          );
+        })}
       </div>
-      <p class="muted small" style="margin-bottom:0">اگر سایز یا رنگ تازه‌ای اضافه کردید، بعد از ذخیره موجودی آن را اینجا وارد کنید.</p>
+      <p class="muted small" style="margin-bottom:0">اگر سایز یا رنگ تازه‌ای اضافه کردید، بعد از ذخیره مشخصات آن را اینجا وارد کنید.</p>
     </div>
   );
 }
@@ -459,6 +571,7 @@ export function ProductFormPage(props: {
   images?: ProductImage[];
   packages?: ProductPackage[];
   stock?: Record<string, number>;
+  variantInfo?: Record<string, VariantInfo>;
   categories: string[];
   errors?: string[];
 }) {
@@ -512,7 +625,7 @@ export function ProductFormPage(props: {
             <div class="row" id="img-preview" style="margin-top:8px"></div>
           </div>
         </div>
-        <StockEditor variants={variants({ size_guide: v.size_guide ?? "", colors: v.colors ?? "" })} stock={props.stock ?? {}} track={v.track_stock === "1"} />
+        <StockEditor variants={variants({ size_guide: v.size_guide ?? "", colors: v.colors ?? "" })} stock={props.stock ?? {}} info={props.variantInfo ?? {}} track={v.track_stock === "1"} />
         <div class="card">
           <h2>📏 راهنمای سایز (برای لباس و هر محصول سایزدار)</h2>
           <p class="muted small" style="margin-top:0">
@@ -625,7 +738,7 @@ function productFormScript(existingImages: number) {
 const PREVIEW_SCRIPT = `document.querySelectorAll('input[data-preview]').forEach(function(i){i.addEventListener('change',function(){
   var img=document.getElementById(i.getAttribute('data-preview'));if(i.files[0]){img.src=URL.createObjectURL(i.files[0]);img.classList.remove('hidden');}});});`;
 
-export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok?: string }) {
+export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok?: string; children?: Child }) {
   const s = props.shop;
   const u = props.user;
   return (
@@ -710,6 +823,7 @@ export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok
           <button class="secondary" formaction="/panel/settings/test">ارسال پیام آزمایشی به بات</button>
         </p>
       </form>
+      {props.children}
     </PanelShell>
   );
 }
@@ -718,11 +832,30 @@ export function AdminPage(props: {
   user: User;
   shops: (Shop & { owner_name: string; owner_phone: string; products: number })[];
   stats: { shop_id: number; name: string; orders: number; total: number; unsent: number }[];
+  kpi: { shops: number; pendingShops: number; users: number; customers: number; openConversations: number; instagramShops: number; giftGmv: number; directGmv: number };
   featuredId: number;
 }) {
+  const k = props.kpi;
+  const fa = (n: number) => n.toLocaleString("fa-IR");
+  const box = (label: string, value: string, note?: string) => (
+    <div class="card !mb-0">
+      <span class="small muted block">{label}</span>
+      <b class="text-lg">{value}</b>
+      {note && <span class="small muted block">{note}</span>}
+    </div>
+  );
   return (
     <AdminShell title="مدیریت" user={props.user} on="/admin">
-      <h1>فروشگاه‌ها و فروش</h1>
+      <h1>داشبورد پلتفرم</h1>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        {box("فروشگاه‌ها", fa(k.shops), k.pendingShops ? `${fa(k.pendingShops)} منتظر تأیید` : undefined)}
+        {box("کاربران", fa(k.users))}
+        {box("مشتریان CRM", fa(k.customers), `${fa(k.instagramShops)} فروشگاه وصل به اینستاگرام`)}
+        {box("گفتگوی باز", fa(k.openConversations))}
+        {box("فروش کل (GMV)", toman(k.giftGmv + k.directGmv))}
+        {box("فروش کادو در سایت", toman(k.giftGmv))}
+        {box("فروش دایرکت فروشگاه‌ها", toman(k.directGmv))}
+      </div>
       <div class="card wrap">
         <h2>فروشگاه‌ها</h2>
         <table>
@@ -854,6 +987,7 @@ export function AdminSettingsPage(props: {
   s: Settings;
   webhookBase: string;
   linkedCount: number;
+  igVerifyToken: string;
   error?: string;
   ok?: string;
 }) {
@@ -952,6 +1086,16 @@ export function AdminSettingsPage(props: {
         {s.safir_api_key && s.safir_bot_id && (
           <p><button class="secondary" formaction="/admin/settings/test-safir">ارسال پیام آزمایشی سفیر به شماره من</button></p>
         )}
+
+        <h2 style="margin-top:20px" id="instagram">اینستاگرام دایرکت (CRM فروشگاه‌ها)</h2>
+        <p class="muted small" style="margin-top:0">
+          یک اپ متا با محصول «Instagram API with Instagram Login» بسازید، در بخش Webhooks آدرس و توکن زیر را وارد و فیلد messages را فعال کنید. هر فروشگاه در
+          تنظیمات پنل خودش شناسه حساب و توکن دسترسی را وارد می‌کند و دایرکت‌هایش در صندوق گفتگو می‌آیند.
+        </p>
+        <p class="small">آدرس Callback: <b class="dt ltr">{`${props.webhookBase}/ig/webhook`}</b><br />Verify token: <b class="dt ltr">{props.igVerifyToken}</b></p>
+        {s.meta_app_secret && <p class="small">کلید فعلی: <span class="dt">{mask(s.meta_app_secret)}</span></p>}
+        <label>{s.meta_app_secret ? "App secret جدید (خالی = بدون تغییر)" : "App secret اپ متا (برای بررسی امضای وب‌هوک)"}</label>
+        <input name="meta_app_secret" class="ltr" autocomplete="off" />
 
         <p style="margin-top:20px"><button>ذخیره</button></p>
       </form>

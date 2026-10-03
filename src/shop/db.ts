@@ -45,6 +45,8 @@ export interface Shop {
   website: string;
   logo_key: string;
   cover_key: string;
+  ig_account_id: string;
+  ig_access_token: string;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;

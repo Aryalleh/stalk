@@ -3,6 +3,7 @@ import { sendPhotoToChats, sendToChats, type Chats } from "../bale/botapi";
 import type { Settings } from "../settings";
 import { adjustStock, cancelOutOfStock, confirmPayment, rejectPayment, toman, type Order } from "./db";
 import { variantLabel } from "./variants";
+import { syncGiftBuyer } from "./crm/db";
 import { receiptButtons, receiptCaption, shipMessage } from "./notify";
 
 export interface Deps {
@@ -46,6 +47,7 @@ export async function sendReceiptToShop(d: Deps, orderId: number) {
 export async function confirmOrder(d: Deps, orderId: number, shopId: number) {
   if (!(await confirmPayment(d.db, orderId, shopId))) return false;
   const o = await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
+  if (o) await syncGiftBuyer(d.db, o).catch((e) => console.error("crm sync", e));
   const chats = await shopOwnerChats(d.db, shopId);
   if (o && chats) await recordNotify(d.db, o.id, await sendToChats(d.settings, chats, shipMessage(o, d.siteUrl)).catch((e) => String(e)));
   return true;
@@ -76,6 +78,7 @@ const say = (d: Deps, to: Chats | null, text: string) => (to ? sendToChats(d.set
 export async function cancelForStock(d: Deps, orderId: number, shopId: number, reason: string, refundNote: string) {
   if (!(await cancelOutOfStock(d.db, orderId, shopId, reason, refundNote))) return false;
   const o = (await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>())!;
+  if (o.paid_at) await syncGiftBuyer(d.db, o).catch((e) => console.error("crm sync", e));
   const people = await orderPeople(d.db, o);
   const refund = o.paid_at ? `\nمبلغ ${toman(o.amount)} به خریدار برگردانده می‌شود${refundNote ? ` (${refundNote})` : ""}.` : "";
   await say(d, people.giver, `⚠️ سفارش «${o.product_title}» به‌علت ناموجود شدن کالا لغو شد.${reason ? `\n${reason}` : ""}${refund}\n${d.siteUrl}/order/${o.token}`);

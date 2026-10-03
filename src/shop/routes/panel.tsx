@@ -6,18 +6,27 @@ import { sizeNames } from "../sizes";
 import { developerHref, faqs } from "../../content";
 import { colorList, pickVariant, variantKey, variants, type Variant } from "../variants";
 import type { C, Env } from "../../env";
-import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, type Settings } from "../../settings";
+import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, igVerifyToken, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
 import { sendSafirText } from "../../bale/safir";
 import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage } from "../views/panel";
+import { AdminContentPage, AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
+import { InstagramSettings } from "../crm/views";
+import { upcomingMonthDays } from "../../../lib/people";
+import { crmPanel } from "../crm/routes";
 
 export const panel = new Hono<Env>();
 
-const myShop = (c: C) => c.env.DB.prepare("SELECT * FROM shops WHERE owner_id = ?").bind(currentUser(c).id).first<Shop>();
+/** The shop this person works in: as its owner (admin) or as an agent added by the owner. */
+const myShop = (c: C) => {
+  const u = currentUser(c);
+  return u.shop_id
+    ? c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(u.shop_id).first<Shop>()
+    : c.env.DB.prepare("SELECT * FROM shops WHERE owner_id = ?").bind(u.id).first<Shop>();
+};
 
 panel.get("/panel/register", async (c) => {
   if (await myShop(c)) return c.redirect("/panel");
@@ -38,9 +47,10 @@ panel.post("/panel/register", async (c) => {
   if (errors.length) return render(c, <ShopRegisterPage user={currentUser(c)} values={f} errors={errors} />, 400);
   const user = currentUser(c);
   try {
-    await c.env.DB.prepare("INSERT INTO shops (owner_id, name, slug, description, phone, city, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    const shop = await c.env.DB.prepare("INSERT INTO shops (owner_id, name, slug, description, phone, city, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id")
       .bind(user.id, f.name, slug, f.description ?? "", phone, city, now())
-      .run();
+      .first<{ id: number }>();
+    await c.env.DB.prepare("UPDATE users SET shop_id = ?, shop_role = 'admin' WHERE id = ?").bind(shop!.id, user.id).run();
   } catch {
     return render(c, <ShopRegisterPage user={user} values={f} errors={["این آدرس صفحه قبلاً گرفته شده است."]} />, 400);
   }
@@ -72,6 +82,9 @@ const requireShop = async (c: C, next: () => Promise<void>) => {
 };
 panel.use("/panel", requireShop);
 panel.use("/panel/*", requireShop);
+// The CRM screens (inbox, customers, tasks, direct sales, automation, team); its admin-only guards
+// must run before the settings routes below.
+panel.route("/", crmPanel);
 const shopOf = (c: C) => c.get("shop");
 
 const FILTER_STATUSES: Record<string, string> = {
@@ -107,9 +120,45 @@ panel.get("/panel", async (c) => {
     ).bind(shop.id, startOfTodayIran()),
     db.prepare(`${PANEL_ORDER} WHERE o.shop_id = ? AND o.status ${onlyAwaiting ? "= 'awaiting'" : "<> 'pending'"} ORDER BY o.reported_at DESC LIMIT 10`).bind(shop.id),
   ]);
+  const user = currentUser(c);
+  const days = upcomingMonthDays(14);
+  const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const [crm, lowStock, birthdays, tasks] = await db.batch([
+    db.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM customers WHERE shop_id = ?1 AND stage = 'lead' AND created_at >= ?2) AS newLeads,
+         (SELECT COUNT(*) FROM conversations WHERE shop_id = ?1 AND status = 'open') AS openConversations,
+         (SELECT COALESCE(SUM(unread), 0) FROM conversations WHERE shop_id = ?1 AND status <> 'closed') AS unread,
+         (SELECT COUNT(*) FROM tasks WHERE shop_id = ?1 AND done_at IS NULL AND due_at IS NOT NULL AND due_at <= ?3) AS tasksDue,
+         (SELECT COALESCE(SUM(total), 0) FROM crm_orders WHERE shop_id = ?1 AND status <> 'canceled' AND created_at >= ?2) AS directRevenue,
+         (SELECT COUNT(*) FROM customers WHERE shop_id = ?1) AS customers`,
+    ).bind(shop.id, monthAgo, new Date(Date.now() + 86400_000).toISOString()),
+    db.prepare(
+      `SELECT p.id, p.title, s.size, s.color, s.quantity, s.min_stock FROM product_stock s JOIN products p ON p.id = s.product_id
+       WHERE p.shop_id = ? AND p.track_stock = 1 AND s.quantity <= s.min_stock ORDER BY s.quantity, p.title LIMIT 8`,
+    ).bind(shop.id),
+    db.prepare(
+      `SELECT id, name, username, birthday FROM customers WHERE shop_id = ? AND birthday <> '' AND substr(birthday, 6) IN (${days.map(() => "?").join(",")})
+       ORDER BY substr(birthday, 6) LIMIT 8`,
+    ).bind(shop.id, ...days),
+    db.prepare(
+      `SELECT t.*, cu.name AS customer_name FROM tasks t LEFT JOIN customers cu ON cu.id = t.customer_id
+       WHERE t.shop_id = ? AND t.done_at IS NULL AND (t.assigned_to = ? OR t.assigned_to IS NULL) ORDER BY t.due_at IS NULL, t.due_at LIMIT 5`,
+    ).bind(shop.id, user.id),
+  ]);
   return render(
     c,
-    <DashboardPage user={currentUser(c)} shop={shop} stats={stats.results[0] as never} orders={orders.results as PanelOrder[]} onlyAwaiting={onlyAwaiting} />,
+    <DashboardPage
+      user={user}
+      shop={shop}
+      stats={stats.results[0] as never}
+      crm={crm.results[0] as never}
+      lowStock={lowStock.results as never}
+      birthdays={birthdays.results as never}
+      tasks={tasks.results as never}
+      orders={orders.results as PanelOrder[]}
+      onlyAwaiting={onlyAwaiting}
+    />,
   );
 });
 
@@ -260,11 +309,19 @@ const MAX_IMAGES = 8;
 const MAX_PACKAGES = 10;
 const VIDEO_URL = /^https:\/\/(www\.)?(instagram\.com|t\.me|telegram\.me|ble\.ir)\/\S+$/i;
 
+async function variantInfo(db: D1Database, productId: number) {
+  const { results } = await db
+    .prepare("SELECT size, color, sku, price, sale_price, min_stock FROM product_stock WHERE product_id = ?")
+    .bind(productId)
+    .all<VariantInfo & { size: string; color: string }>();
+  return Object.fromEntries(results.map((r) => [variantKey(r.size, r.color), r])) as Record<string, VariantInfo>;
+}
+
 async function productFormPage(c: C, product: Product | null, values: Record<string, string>, errors?: string[], status: 200 | 400 = 200) {
-  const [images, packages, stock] = product
-    ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id), productStock(c.env.DB, product.id)])
-    : [[], [], {}];
-  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} stock={stock} categories={categoryList(c.get("settings"))} errors={errors} />, status);
+  const [images, packages, stock, info] = product
+    ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id), productStock(c.env.DB, product.id), variantInfo(c.env.DB, product.id)])
+    : [[], [], {}, {}];
+  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} stock={stock} variantInfo={info} categories={categoryList(c.get("settings"))} errors={errors} />, status);
 }
 
 async function saveProduct(c: C, product: Product | null) {
@@ -301,16 +358,36 @@ async function saveProduct(c: C, product: Product | null) {
   const sizeGuide = "guide" in parsedGuide && parsedGuide.guide ? JSON.stringify(parsedGuide.guide) : "";
   // Stock: one number per variant (stock_key_N = "size|color", stock_N = quantity). Variants added
   // since the form was drawn (new sizes or colors) start at 0 and are listed again after saving.
-  const stockRows: { size: string; color: string; quantity: number }[] = [];
+  const stockRows: ({ size: string; color: string; quantity: number } & VariantInfo)[] = [];
   const stockValue = (raw: string, label: string) => {
     const n = Number(normalizeDigits(raw).replace(/[,٬]/g, "") || "0");
     if (!Number.isInteger(n) || n < 0 || n > 1_000_000) errors.push(`موجودی ${label || "محصول"} باید عدد صحیح و مثبت باشد.`);
     return Math.max(0, Math.trunc(n) || 0);
   };
-  const typed: Record<string, string> = {};
-  for (let n = 0; n < 400; n++) if (body[`stock_key_${n}`] !== undefined) typed[str(`stock_key_${n}`)] = str(`stock_${n}`);
+  const optPrice = (raw: string, label: string) => {
+    const t = normalizeDigits(raw).replace(/[,٬]/g, "").trim();
+    if (!t) return null;
+    const n = Number(t);
+    if (!Number.isInteger(n) || n < 1000 || n > 1_000_000_000) {
+      errors.push(`قیمت ${label || "محصول"} باید عدد صحیح (تومان) باشد.`);
+      return null;
+    }
+    return n;
+  };
+  const typed: Record<string, number> = {};
+  for (let n = 0; n < 400; n++) if (body[`stock_key_${n}`] !== undefined) typed[str(`stock_key_${n}`)] = n;
   for (const v of variants({ size_guide: sizeGuide, colors: values.colors })) {
-    stockRows.push({ size: v.size, color: v.color, quantity: stockValue(typed[v.key] ?? "0", v.label) });
+    const n = typed[v.key];
+    const field = (k: string) => (n === undefined ? "" : str(`${k}_${n}`));
+    stockRows.push({
+      size: v.size,
+      color: v.color,
+      quantity: stockValue(field("stock") || "0", v.label),
+      min_stock: stockValue(field("min") || "0", v.label),
+      sku: field("sku").slice(0, 40),
+      price: optPrice(field("vprice"), v.label),
+      sale_price: optPrice(field("sale"), v.label),
+    });
   }
   const chartFile = body.size_guide_image instanceof File && body.size_guide_image.size > 0 ? body.size_guide_image : null;
   if (chartFile && !IMAGE_TYPES[chartFile.type]) errors.push("عکس راهنمای سایز باید JPG، PNG یا WebP باشد.");
@@ -371,12 +448,15 @@ async function saveProduct(c: C, product: Product | null) {
   const stmts: D1PreparedStatement[] = [];
   for (const img of existing.filter((i) => removeIds.has(i.id))) stmts.push(db.prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?").bind(img.id, productId));
   newKeys.forEach((key, n) => stmts.push(db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, ?)").bind(productId, key, kept.length + n)));
-  if (values.track_stock === "1") {
-    // Replace the stock table with the sizes the product has now.
-    stmts.push(db.prepare("DELETE FROM product_stock WHERE product_id = ?").bind(productId));
-    for (const r of stockRows) {
-      stmts.push(db.prepare("INSERT INTO product_stock (product_id, size, color, quantity) VALUES (?, ?, ?, ?)").bind(productId, r.size, r.color, r.quantity));
-    }
+  // Replace the variant rows with the sizes × colors the product has now (quantity matters only
+  // while stock is tracked; SKU and prices always do).
+  stmts.push(db.prepare("DELETE FROM product_stock WHERE product_id = ?").bind(productId));
+  for (const r of stockRows) {
+    stmts.push(
+      db
+        .prepare("INSERT INTO product_stock (product_id, size, color, quantity, sku, price, sale_price, min_stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(productId, r.size, r.color, r.quantity, r.sku, r.price, r.sale_price, r.min_stock),
+    );
   }
   const keepPkgIds = packages.map((p) => p.id).filter(Boolean);
   stmts.push(
@@ -466,8 +546,16 @@ async function saveSettings(c: C) {
   return { error: "" };
 }
 
-const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) =>
-  render(c, <SettingsPage user={currentUser(c)} shop={(await myShop(c))!} {...extra} />, status);
+const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) => {
+  const shop = (await myShop(c))!;
+  return render(
+    c,
+    <SettingsPage user={currentUser(c)} shop={shop} {...extra}>
+      <InstagramSettings shop={shop} webhookUrl={`${siteUrl(c)}/ig/webhook`} platformReady={!!c.get("settings").meta_app_secret} />
+    </SettingsPage>,
+    status,
+  );
+};
 
 panel.get("/panel/settings", (c) => settingsView(c));
 
@@ -493,7 +581,7 @@ admin.use("/admin/*", async (c, next) => (currentUser(c).is_admin ? next() : c.t
 admin.use("/admin", async (c, next) => (currentUser(c).is_admin ? next() : c.text("دسترسی ندارید", 403)));
 
 admin.get("/admin", async (c) => {
-  const [shops, stats] = await c.env.DB.batch([
+  const [shops, stats, kpi] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT s.*, u.name AS owner_name, u.phone AS owner_phone, (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id) AS products
        FROM shops s JOIN users u ON u.id = s.owner_id ORDER BY (s.status = 'pending') DESC, s.created_at DESC`,
@@ -504,8 +592,28 @@ admin.get("/admin", async (c) => {
        FROM shops s JOIN orders o ON o.shop_id = s.id AND o.status IN ('paid', 'shipped', 'delivered')
        GROUP BY s.id ORDER BY total DESC`,
     ),
+    c.env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM shops) AS shops,
+         (SELECT COUNT(*) FROM shops WHERE status = 'pending') AS pendingShops,
+         (SELECT COUNT(*) FROM users) AS users,
+         (SELECT COUNT(*) FROM customers) AS customers,
+         (SELECT COUNT(*) FROM conversations WHERE status = 'open') AS openConversations,
+         (SELECT COUNT(*) FROM shops WHERE ig_access_token <> '') AS instagramShops,
+         (SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status IN ('paid', 'shipped', 'delivered')) AS giftGmv,
+         (SELECT COALESCE(SUM(total), 0) FROM crm_orders WHERE status <> 'canceled') AS directGmv`,
+    ),
   ]);
-  return render(c, <AdminPage user={currentUser(c)} shops={shops.results as never} stats={stats.results as never} featuredId={Number(c.get("settings").featured_shop_id) || 0} />);
+  return render(
+    c,
+    <AdminPage
+      user={currentUser(c)}
+      shops={shops.results as never}
+      stats={stats.results as never}
+      kpi={kpi.results[0] as never}
+      featuredId={Number(c.get("settings").featured_shop_id) || 0}
+    />,
+  );
 });
 
 admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
@@ -588,7 +696,7 @@ async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, s
   const s = await loadSettings(c.env.DB);
   c.set("settings", s); // reflect just-saved values (e.g. site name) in the layout
   const linked = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM bale_links").first<{ n: number }>();
-  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} {...extra} />, status);
+  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} igVerifyToken={await igVerifyToken(c.env.DB, s)} {...extra} />, status);
 }
 
 admin.get("/admin/settings", (c) => settingsPage(c));
@@ -635,6 +743,10 @@ async function saveAdminSettings(c: C): Promise<string> {
     }
   }
   // Safir is the only way to log in, so it can be changed but never cleared.
+  if (f.meta_app_secret) {
+    if (!/^[0-9a-f]{16,64}$/i.test(f.meta_app_secret)) return "App secret متا نامعتبر به نظر می‌رسد.";
+    values.meta_app_secret = f.meta_app_secret;
+  }
   if (f.safir_api_key) {
     if (!/^[\w.:-]{10,300}$/.test(f.safir_api_key)) return "کلید سفیر نامعتبر به نظر می‌رسد.";
     values.safir_api_key = f.safir_api_key;
