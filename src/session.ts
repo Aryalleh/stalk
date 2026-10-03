@@ -38,9 +38,26 @@ export const canUseCrm = (u: User | null) => !!u && (u.is_admin === 1 || u.is_st
 
 export const isConnected = (u: User) => !!(u.bale_chat_id || u.telegram_chat_id);
 
-/** Signed up before names, birth date and username were required: must complete the profile. */
-export const needsProfile = (u: User) => !u.first_name || !u.last_name || !u.birth_date || !u.username;
+/** Signed up before names and birth date were required: must complete the profile. */
+export const needsProfile = (u: User) => !u.first_name || !u.last_name || !u.birth_date;
 
-/** New accounts get "user<id>" as their username until they choose one. */
-export const assignUsername = (db: D1Database, id: number) =>
-  db.prepare("UPDATE users SET username = 'user' || id WHERE id = ? AND username IS NULL").bind(id).run();
+/** A random public handle (10 lowercase letters/digits) for the profile link /u/<handle>. */
+export function randomHandle() {
+  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+  return Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => alphabet[b % alphabet.length]).join("");
+}
+
+/**
+ * Give an account its permanent, random public handle (once; it never changes afterwards).
+ * Retries on the unlikely collision with an existing handle.
+ */
+export async function assignUsername(db: D1Database, id: number) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await db.prepare("UPDATE users SET username = ? WHERE id = ? AND username IS NULL").bind(randomHandle(), id).run();
+      return;
+    } catch (e) {
+      if (!/UNIQUE/i.test(String(e))) throw e;
+    }
+  }
+}

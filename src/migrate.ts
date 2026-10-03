@@ -12,6 +12,7 @@ import m0008 from "../migrations/0008_stock.sql";
 import m0009 from "../migrations/0009_profiles_colors.sql";
 import m0010 from "../migrations/0010_user_theme.sql";
 import m0011 from "../migrations/0011_default_pink_light.sql";
+import m0012 from "../migrations/0012_random_handles.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -27,6 +28,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0009_profiles_colors.sql", m0009],
   ["0010_user_theme.sql", m0010],
   ["0011_default_pink_light.sql", m0011],
+  ["0012_random_handles.sql", m0012],
 ];
 
 let done: Promise<void> | null = null;

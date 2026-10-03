@@ -8,7 +8,7 @@ import { CLOTHING_TEMPLATE } from "../sizes";
 import { variantKey, variantLabel, variants, type Variant } from "../variants";
 import type { User } from "../../session";
 import type { Child } from "hono/jsx";
-import { Errors, Layout, Thumb } from "./layout";
+import { Errors, FilePicker, Layout, Thumb } from "./layout";
 
 const SHOP_STATUS: Record<Shop["status"], string> = { pending: "در انتظار تأیید", approved: "فعال", suspended: "معلق" };
 
@@ -507,7 +507,7 @@ export function ProductFormPage(props: {
                 ))}
               </div>
             )}
-            <input type="file" id="images" name="images" accept="image/jpeg,image/png,image/webp" multiple />
+            <FilePicker name="images" id="images" multiple label="افزودن عکس" icon="fa-images" />
             <div class="small muted" id="img-count"></div>
             <div class="row" id="img-preview" style="margin-top:8px"></div>
           </div>
@@ -529,7 +529,7 @@ export function ProductFormPage(props: {
               <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_size_guide_image" value="1" style="width:auto" /> حذف عکس</label>
             </div>
           )}
-          <input type="file" name="size_guide_image" accept="image/jpeg,image/png,image/webp" />
+          <FilePicker name="size_guide_image" label="انتخاب عکس جدول" icon="fa-table" />
         </div>
 
         <div class="card">
@@ -576,6 +576,7 @@ function productFormScript(existingImages: number) {
     var total = kept() + dt.files.length;
     count.textContent = dt.files.length ? (dt.files.length + ' عکس جدید انتخاب شد — مجموع ' + total + ' از ' + MAX) : '';
     count.style.color = total > MAX ? 'var(--danger)' : '';
+    if (window.updateFilePick) window.updateFilePick(input);
   }
   input.addEventListener('change', function () {
     Array.prototype.forEach.call(input.files, function (f) { if (kept() + dt.files.length < MAX) dt.items.add(f); });
@@ -639,13 +640,13 @@ export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok
           <div>
             <label style="margin-top:0">لوگو (مربعی)</label>
             <img id="logo-preview" src={s.logo_key ? `/img/${s.logo_key}` : ""} alt="" class={`w-20 h-20 rounded-2xl object-cover border border-slate-200 mb-2 ${s.logo_key ? "" : "hidden"}`} />
-            <input type="file" name="logo" accept="image/jpeg,image/png,image/webp" data-preview="logo-preview" />
+            <FilePicker name="logo" label="انتخاب لوگو" attrs={{ "data-preview": "logo-preview" }} />
             {s.logo_key && <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_logo" value="1" /> حذف لوگو</label>}
           </div>
           <div class="flex-1 min-w-[220px]">
             <label style="margin-top:0">عکس کاور (افقی)</label>
             <img id="cover-preview" src={s.cover_key ? `/img/${s.cover_key}` : ""} alt="" class={`w-full max-w-sm h-24 rounded-2xl object-cover border border-slate-200 mb-2 ${s.cover_key ? "" : "hidden"}`} />
-            <input type="file" name="cover" accept="image/jpeg,image/png,image/webp" data-preview="cover-preview" />
+            <FilePicker name="cover" label="انتخاب کاور" attrs={{ "data-preview": "cover-preview" }} />
             {s.cover_key && <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_cover" value="1" /> حذف کاور</label>}
           </div>
         </div>

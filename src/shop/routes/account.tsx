@@ -8,7 +8,7 @@ import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant } from "../variants";
 import type { C, Env } from "../../env";
 import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile } from "../../session";
-import { birthDate, fullName, usernameError } from "../../../lib/people";
+import { birthDate, fullName } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
@@ -114,7 +114,7 @@ account.post("/login/verify", async (c) => {
   return startSession(c, id, next);
 });
 
-// ---------- completing the profile (accounts from before names/birth date/username were required) ----------
+// ---------- completing the profile (accounts from before names and birth date were required) ----------
 
 account.get("/me/complete", async (c) => {
   const user = currentUser(c);
@@ -132,21 +132,15 @@ account.post("/me/complete", async (c) => {
   return c.redirect(next);
 });
 
-/** Validate and store names, birth date and username. Returns an error message or "". */
+/** Validate and store names, birth date and look (the public handle is fixed). Returns an error message or "". */
 async function saveProfile(c: C, userId: number, f: Record<string, string>, extra: Record<string, number | string> = {}) {
   const p = readProfile(f);
   if (p.error) return p.error;
-  const username = (f.username ?? "").trim().toLowerCase();
-  const uErr = usernameError(username);
-  const current = await c.env.DB.prepare("SELECT username FROM users WHERE id = ?").bind(userId).first<{ username: string | null }>();
-  if (uErr && username !== current?.username) return uErr; // keeping the generated user<id> is fine
-  const taken = await c.env.DB.prepare("SELECT 1 FROM users WHERE username = ? AND id <> ?").bind(username, userId).first();
-  if (taken) return "این نام کاربری قبلاً گرفته شده است.";
   const cols = Object.keys(extra);
   await c.env.DB.prepare(
-    `UPDATE users SET first_name = ?, last_name = ?, name = ?, birth_date = ?, username = ?, accent = ?, theme = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
+    `UPDATE users SET first_name = ?, last_name = ?, name = ?, birth_date = ?, accent = ?, theme = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
   )
-    .bind(p.first, p.last, fullName(p.first, p.last), p.birth, username, p.accent, p.theme, ...Object.values(extra), userId)
+    .bind(p.first, p.last, fullName(p.first, p.last), p.birth, p.accent, p.theme, ...Object.values(extra), userId)
     .run();
   return "";
 }

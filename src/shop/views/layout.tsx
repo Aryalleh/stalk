@@ -17,6 +17,14 @@ const HEAD_LINKS = <link rel="preload" href="/static/fonts/vazirmatn.woff2" as="
 /** Small client helpers used by several pages: copy-to-clipboard, native share, back, PWA install. */
 const HELPERS = `
 if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+// File pickers: show the chosen file name (or how many) next to the button.
+window.updateFilePick = function (input) {
+  var box = input.closest('.file-pick'); if (!box) return;
+  var label = box.querySelector('.file-pick-name'), n = input.files ? input.files.length : 0;
+  label.textContent = n === 0 ? label.getAttribute('data-empty') : n === 1 ? input.files[0].name : n.toLocaleString('fa-IR') + ' عکس انتخاب شد';
+  box.classList.toggle('has-file', n > 0);
+};
+document.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('.file-pick input[type=file]')) window.updateFilePick(e.target); });
 var installPrompt = null;
 window.addEventListener('beforeinstallprompt', function (e) {
   e.preventDefault(); installPrompt = e;
@@ -291,6 +299,40 @@ export function Layout(props: {
         <script dangerouslySetInnerHTML={{ __html: HELPERS }} />
       </body>
     </html>
+  );
+}
+
+/**
+ * File chooser in the site's style (replaces the browser's "Choose file / No file chosen" box):
+ * a button plus the chosen file name(s). The real input stays in the form, visually hidden.
+ */
+export function FilePicker(props: {
+  name: string;
+  label?: string;
+  icon?: string;
+  accept?: string;
+  multiple?: boolean;
+  id?: string;
+  required?: boolean;
+  attrs?: Record<string, string>;
+}) {
+  return (
+    <label class="file-pick">
+      <input
+        type="file"
+        name={props.name}
+        id={props.id}
+        accept={props.accept ?? "image/jpeg,image/png,image/webp"}
+        multiple={props.multiple}
+        required={props.required}
+        class="sr-only"
+        {...(props.attrs ?? {})}
+      />
+      <span class="file-pick-btn"><i class={`fa-solid ${props.icon ?? "fa-image"}`}></i> {props.label ?? "انتخاب عکس"}</span>
+      <span class="file-pick-name" data-empty={props.multiple ? "هنوز عکسی انتخاب نشده" : "فایلی انتخاب نشده"}>
+        {props.multiple ? "هنوز عکسی انتخاب نشده" : "فایلی انتخاب نشده"}
+      </span>
+    </label>
   );
 }
 

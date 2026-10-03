@@ -2,7 +2,7 @@ import { formatJalali } from "../../../lib/jalali";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
-import { Avatar, Errors, Layout, Thumb, TitleBar } from "./layout";
+import { Avatar, Errors, FilePicker, Layout, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
@@ -24,8 +24,8 @@ function AuthShell(props: { title: string; icon: string; subtitle: string; child
   );
 }
 
-/** First name, last name and Jalali birth date (and optionally the username) — form values by field name. */
-export function ProfileFields(props: { values: Record<string, string>; username?: boolean; origin?: string }) {
+/** First name, last name and Jalali birth date — form values by field name. */
+export function ProfileFields(props: { values: Record<string, string> }) {
   const v = props.values;
   const thisYear = currentJalaliYear();
   const years = Array.from({ length: 96 }, (_, i) => thisYear - 5 - i);
@@ -57,16 +57,6 @@ export function ProfileFields(props: { values: Record<string, string>; username?
           {years.map((y) => <option value={String(y)} selected={v.birth_year === String(y)}>{fa(y)}</option>)}
         </select>
       </div>
-      {props.username && (
-        <>
-          <label>نام کاربری (آدرس پروفایل عمومی شما)</label>
-          <div class="flex items-center gap-2 ltr">
-            <span class="text-xs muted whitespace-nowrap">{(props.origin ?? "").replace(/^https?:\/\//, "")}/u/</span>
-            <input name="username" value={v.username ?? ""} required maxlength={30} class="ltr" pattern="[a-z0-9][a-z0-9_.\-]{2,29}" autocapitalize="none" />
-          </div>
-          <p class="small muted" style="margin:4px 0 0">حروف انگلیسی کوچک، عدد، نقطه، - و _ (۳ تا ۳۰ حرف).</p>
-        </>
-      )}
     </>
   );
 }
@@ -114,14 +104,14 @@ export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_
   };
 }
 
-/** Accounts made before names / birth date / username were required finish their profile here. */
+/** Accounts made before names and birth date were required finish their profile here. */
 export function CompleteProfilePage(props: { user: User; next: string; values: Record<string, string>; origin: string; error?: string }) {
   return (
-    <AuthShell title="تکمیل پروفایل" icon="fa-user-pen" subtitle="برای ادامه، نام، نام خانوادگی و تاریخ تولدتان را وارد کنید و نام کاربری پروفایل عمومی‌تان را انتخاب کنید.">
+    <AuthShell title="تکمیل پروفایل" icon="fa-user-pen" subtitle="برای ادامه، نام، نام خانوادگی و تاریخ تولدتان را وارد کنید.">
       <Errors errors={[props.error]} />
       <form method="post" action="/me/complete" class="space-y-2">
         <input type="hidden" name="next" value={props.next} />
-        <ProfileFields values={props.values} username origin={props.origin} />
+        <ProfileFields values={props.values} />
         <LookFields values={props.values} />
         <button class="w-full py-4 mt-4 rounded-2xl text-base font-bold shadow-lg shadow-brand/20">ذخیره و ادامه</button>
       </form>
@@ -421,25 +411,30 @@ export function ProfileSettingsPage(props: {
       <Errors errors={[props.error]} />
       <form method="post" action="/me/settings" enctype="multipart/form-data" class="card">
         <div class="flex items-center gap-4">
-          <Avatar user={u} size="w-20 h-20" ring />
+          <div id="avatar-preview"><Avatar user={u} size="w-20 h-20" ring /></div>
           <div class="flex-1">
             <label style="margin-top:0">عکس پروفایل (JPG، PNG یا WebP، حداکثر ۲ مگابایت)</label>
-            <input type="file" name="avatar" accept="image/jpeg,image/png,image/webp" id="avatar-input" />
+            <FilePicker name="avatar" id="avatar-input" label="انتخاب عکس پروفایل" icon="fa-camera" />
             {u.avatar_key && (
               <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_avatar" value="1" /> حذف عکس</label>
             )}
           </div>
         </div>
-        <ProfileFields values={props.values ?? profileValues(u)} username origin={props.origin} />
+        <ProfileFields values={props.values ?? profileValues(u)} />
         <h2 style="margin-top:20px">ظاهر سایت برای شما</h2>
         <LookFields values={props.values ?? profileValues(u)} />
         <label>شماره موبایل (ورود با کد بله)</label>
         <input value={u.phone} class="ltr" disabled />
         <h2 style="margin-top:20px">پروفایل عمومی</h2>
         {u.username && (
-          <p class="small" style="margin-top:0">
-            آدرس: <a href={`/u/${u.username}`} class="dt">{`${props.origin.replace(/^https?:\/\//, "")}/u/${u.username}`}</a> — همه لیست‌های آرزوی باز شما اینجا دیده می‌شوند.
-          </p>
+          <>
+            <p class="small muted" style="margin-top:0">لینک ثابت و اختصاصی شما (قابل تغییر نیست) — همه لیست‌های آرزوی باز شما اینجا دیده می‌شوند:</p>
+            <div class="flex items-center gap-2">
+              <input readonly value={`${props.origin}/u/${u.username}`} class="ltr flex-1 min-w-0" onclick="this.select()" aria-label="لینک پروفایل عمومی" />
+              <button type="button" class="small secondary" data-copy={`${props.origin}/u/${u.username}`} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی</button>
+              <a class="btn small secondary" href={`/u/${u.username}`}><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+            </div>
+          </>
         )}
         {check("show_received", u.show_received, "کادوهایی که گرفته‌ام در پروفایلم نمایش داده شود")}
         {check("show_givers", u.show_givers, "نام کادودهنده‌ها زیر کادو نمایش داده شود (فقط کسانی که خودشان اجازه داده‌اند)")}
@@ -463,7 +458,9 @@ export function ProfileSettingsPage(props: {
       </form>
       <script
         dangerouslySetInnerHTML={{
-          __html: `document.getElementById('avatar-input').addEventListener('change',function(){var f=this.files[0];if(!f)return;var img=document.querySelector('form img')||document.createElement('img');img.src=URL.createObjectURL(f);});`,
+          __html: `document.getElementById('avatar-input').addEventListener('change',function(){var f=this.files[0];if(!f)return;
+            var box=document.querySelector('#avatar-preview > div');box.innerHTML='';var img=document.createElement('img');
+            img.className='w-full h-full rounded-full object-cover';img.alt='';img.src=URL.createObjectURL(f);box.appendChild(img);});`,
         }}
       />
     </Layout>

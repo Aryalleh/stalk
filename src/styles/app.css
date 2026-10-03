@@ -63,6 +63,21 @@
   @media (min-width: 1100px) { .masonry { column-count: 4; } }
   .masonry > * { break-inside: avoid; margin-bottom: 12px; }
 
+  /* ---- file chooser (FilePicker): dashed box with a brand button and the chosen file name ---- */
+  .file-pick {
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; margin: 0.25rem 0 0; cursor: pointer;
+    border: 1.5px dashed var(--line); border-radius: 1rem; background: var(--field); transition: border-color .15s;
+  }
+  .file-pick:hover, .file-pick:focus-within { border-color: var(--accent); }
+  .file-pick.has-file { border-style: solid; border-color: var(--accent); }
+  .file-pick-btn {
+    display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0; padding: 0.55rem 0.9rem; border-radius: 0.75rem;
+    font-size: 0.75rem; font-weight: 700; background: var(--accent); color: var(--accent-fg);
+  }
+  .file-pick-name { min-width: 0; font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-pick.has-file .file-pick-name { color: var(--fg); }
+  .ui .file-pick { display: flex; margin-top: 0.25rem; }
+
   /* ---- .ui: shared styles for screens without a dedicated design (forms, admin, lists) ---- */
   .ui h1 { @apply text-xl font-bold mb-4; }
   .ui h2 { @apply text-sm font-bold mb-3; }
