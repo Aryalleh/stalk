@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت سفارشات | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans h-screen w-full overflow-hidden flex selection:bg-sky-100 selection:text-primary">
+
+    <!-- Sidebar -->
+    <aside class="w-[280px] bg-white border-l border-sky-100 flex-col hidden md:flex z-20 shadow-sm relative">
+        <div class="h-[80px] flex items-center px-8 border-b border-sky-100">
+            <div class="flex items-center gap-3 text-2xl font-black text-primary tracking-tight">
+                <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-storefront text-xl"></i></div>
+                پنل فروشگاه
+            </div>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <a href="Kadouchi CRM - Shop Dashboard__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-squares-four text-xl"></i> پیشخوان
+            </a>
+            <a href="Kadouchi CRM - Products__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-package text-xl"></i> محصولات
+            </a>
+            <a href="Kadouchi CRM - Orders__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-black bg-primary text-white rounded-2xl shadow-lg shadow-sky-500/20 transition-all">
+                <i class="ph ph-shopping-bag text-xl"></i> سفارشات
+                <span class="mr-auto text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">۱۲</span>
+            </a>
+            <a href="Kadouchi CRM - Inbox__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-chat-circle-dots text-xl"></i> صندوق پیام‌ها
+            </a>
+            <a href="Kadouchi CRM - Leads__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-funnel text-xl"></i> سرنخ‌های فروش
+            </a>
+            <a href="Kadouchi CRM - Customers__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-users text-xl"></i> مشتریان
+            </a>
+            <div class="pt-6 mt-6 border-t border-sky-50">
+                <a href="#" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                    <i class="ph ph-gear text-xl"></i> تنظیمات فروشگاه
+                </a>
+            </div>
+        </nav>
+        <div class="p-4 border-t border-sky-100">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-sky-50 cursor-pointer border border-sky-100">
+                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-4.jpg" alt="Shop Owner" class="w-10 h-10 rounded-xl object-cover">
+                <div class="flex-1 min-w-0 text-right">
+                    <p class="text-xs font-black text-dark truncate">بوتیک الگانس</p>
+                    <p class="text-[10px] text-dark/50 truncate">پلان حرفه‌ای</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col min-w-0 bg-secondary overflow-hidden">
+        <header class="h-[80px] bg-white border-b border-sky-100 flex items-center justify-between px-8 shrink-0 z-10">
+            <div>
+                <h1 class="text-xl font-black text-dark leading-tight">مدیریت سفارشات</h1>
+                <p class="text-[11px] text-dark/50 font-bold">رهگیری، تایید و ارسال سفارشات ثبت شده از DM و وب‌سایت</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 bg-secondary p-1 rounded-xl border border-sky-100">
+                    <button class="px-4 py-1.5 bg-white text-primary text-[10px] font-black rounded-lg shadow-sm">همه</button>
+                    <button class="px-4 py-1.5 text-dark/40 hover:text-primary text-[10px] font-black rounded-lg transition-all">تراکنش‌های موفق</button>
+                </div>
+                <button class="flex items-center gap-2 px-6 py-2.5 text-sm font-black text-white bg-primary hover:bg-dark rounded-xl transition-all shadow-lg shadow-sky-500/20">
+                    <i class="ph ph-plus text-lg"></i> ثبت سفارش دستی
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-[1400px] mx-auto space-y-8">
+                
+                <!-- Order Status Tabs -->
+                <div class="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2">
+                    <button class="px-6 py-3 bg-white border-2 border-primary text-primary rounded-2xl flex items-center gap-3 shadow-sm transition-all whitespace-nowrap">
+                        <span class="text-sm font-black">همه سفارشات</span>
+                        <span class="px-2 py-0.5 bg-primary/10 text-[10px] font-black rounded-lg">۱۴۸</span>
+                    </button>
+                    <button class="px-6 py-3 bg-white border border-sky-100 text-dark/60 rounded-2xl flex items-center gap-3 hover:border-primary/30 transition-all whitespace-nowrap">
+                        <span class="text-sm font-black">در انتظار تایید</span>
+                        <span class="px-2 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-black rounded-lg">۱۲</span>
+                    </button>
+                    <button class="px-6 py-3 bg-white border border-sky-100 text-dark/60 rounded-2xl flex items-center gap-3 hover:border-primary/30 transition-all whitespace-nowrap">
+                        <span class="text-sm font-black">در حال آماده‌سازی</span>
+                        <span class="px-2 py-0.5 bg-sky-100 text-primary text-[10px] font-black rounded-lg">۸</span>
+                    </button>
+                    <button class="px-6 py-3 bg-white border border-sky-100 text-dark/60 rounded-2xl flex items-center gap-3 hover:border-primary/30 transition-all whitespace-nowrap">
+                        <span class="text-sm font-black">ارسال شده</span>
+                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-600 text-[10px] font-black rounded-lg">۱۲۴</span>
+                    </button>
+                    <button class="px-6 py-3 bg-white border border-sky-100 text-dark/60 rounded-2xl flex items-center gap-3 hover:border-primary/30 transition-all whitespace-nowrap">
+                        <span class="text-sm font-black">مرجوعی</span>
+                        <span class="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-black rounded-lg">۴</span>
+                    </button>
+                </div>
+
+                <!-- Filters Bar -->
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center gap-4 w-full md:w-auto">
+                        <div class="relative flex-1 md:w-80">
+                            <i class="ph ph-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-dark/30"></i>
+                            <input type="text" placeholder="شماره سفارش یا نام مشتری..." class="w-full bg-white border border-sky-100 rounded-2xl pr-12 pl-4 py-3 text-xs font-bold text-dark focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm">
+                        </div>
+                        <button class="flex items-center gap-2 px-6 py-3 bg-white border border-sky-100 rounded-2xl text-xs font-black text-dark/60 hover:text-primary transition-all shadow-sm">
+                            <i class="ph ph-calendar text-xl"></i> انتخاب بازه زمانی
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button class="p-3 bg-white border border-sky-100 rounded-2xl text-dark/40 hover:text-primary transition-all shadow-sm"><i class="ph ph-file-pdf text-xl"></i></button>
+                        <button class="p-3 bg-white border border-sky-100 rounded-2xl text-dark/40 hover:text-primary transition-all shadow-sm"><i class="ph ph-printer text-xl"></i></button>
+                    </div>
+                </div>
+
+                <!-- Orders Table -->
+                <div class="bg-white border border-sky-100 rounded-[32px] shadow-sm overflow-hidden">
+                    <table class="w-full text-right border-collapse">
+                        <thead class="bg-sky-50/50 text-[10px] font-black text-dark/40 uppercase">
+                            <tr>
+                                <th class="px-8 py-5 border-b border-sky-50">شماره سفارش</th>
+                                <th class="px-8 py-5 border-b border-sky-50">مشتری</th>
+                                <th class="px-8 py-5 border-b border-sky-50">تاریخ ثبت</th>
+                                <th class="px-8 py-5 border-b border-sky-50">مبلغ نهایی (تومان)</th>
+                                <th class="px-8 py-5 border-b border-sky-50">وضعیت پرداخت</th>
+                                <th class="px-8 py-5 border-b border-sky-50">وضعیت سفارش</th>
+                                <th class="px-8 py-5 border-b border-sky-50 text-center">عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm font-bold divide-y divide-sky-50">
+                            <tr class="hover:bg-sky-50/30 transition-all group">
+                                <td class="px-8 py-5"><span class="text-xs font-black text-primary">#KAD-4521</span></td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-3">
+                                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" class="w-8 h-8 rounded-lg object-cover" alt="User">
+                                        <div>
+                                            <p class="text-xs font-black text-dark">سارا احمدی</p>
+                                            <p class="text-[9px] text-dark/40 font-bold">@sara_ahmadi</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5 text-dark/60 font-medium">۲۵ اردیبهشت ۱۴۰۳</td>
+                                <td class="px-8 py-5 font-black text-dark">۳,۴۵۰,۰۰۰</td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-emerald-500">
+                                        <i class="ph-fill ph-check-circle"></i>
+                                        <span class="text-[10px] font-black">پرداخت موفق</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5"><span class="px-3 py-1 bg-sky-100 text-primary rounded-full text-[10px] font-black">در حال آماده‌سازی</span></td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button class="w-8 h-8 rounded-lg bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                        <button class="w-8 h-8 rounded-lg bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-dots-three"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-sky-50/30 transition-all group">
+                                <td class="px-8 py-5"><span class="text-xs font-black text-primary">#KAD-4520</span></td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-3">
+                                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg" class="w-8 h-8 rounded-lg object-cover" alt="User">
+                                        <div>
+                                            <p class="text-xs font-black text-dark">علی رضایی</p>
+                                            <p class="text-[9px] text-dark/40 font-bold">@ali_rez_77</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5 text-dark/60 font-medium">۲۵ اردیبهشت ۱۴۰۳</td>
+                                <td class="px-8 py-5 font-black text-dark">۱,۸۰۰,۰۰۰</td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-amber-500">
+                                        <i class="ph-bold ph-clock"></i>
+                                        <span class="text-[10px] font-black">در انتظار پرداخت</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5"><span class="px-3 py-1 bg-amber-100 text-amber-600 rounded-full text-[10px] font-black">تایید نشده</span></td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button class="w-8 h-8 rounded-lg bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                        <button class="w-8 h-8 rounded-lg bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-dots-three"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-sky-50/30 transition-all group">
+                                <td class="px-8 py-5"><span class="text-xs font-black text-primary">#KAD-4519</span></td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-3">
+                                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-6.jpg" class="w-8 h-8 rounded-lg object-cover" alt="User">
+                                        <div>
+                                            <p class="text-xs font-black text-dark">مونا شجاعی</p>
+                                            <p class="text-[9px] text-dark/40 font-bold">@mona_sh</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5 text-dark/60 font-medium">۲۴ اردیبهشت ۱۴۰۳</td>
+                                <td class="px-8 py-5 font-black text-dark">۸۹۰,۰۰۰</td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-emerald-500">
+                                        <i class="ph-fill ph-check-circle"></i>
+                                        <span class="text-[10px] font-black">پرداخت موفق</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5"><span class="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full text-[10px] font-black">ارسال شده</span></td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button class="w-8 h-8 rounded-lg bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                        <button class="w-8 h-8 rounded-lg bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-dots-three"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="px-8 py-6 border-t border-sky-50 flex items-center justify-between">
+                        <p class="text-xs font-bold text-dark/40">نمایش ۳ از ۱۴۸ سفارش</p>
+                        <div class="flex items-center gap-2">
+                            <button class="w-10 h-10 rounded-xl border border-sky-100 flex items-center justify-center text-dark/30 hover:border-primary hover:text-primary transition-all"><i class="ph-bold ph-caret-right"></i></button>
+                            <button class="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center text-xs font-black shadow-lg shadow-sky-500/20">۱</button>
+                            <button class="w-10 h-10 rounded-xl border border-sky-100 flex items-center justify-center text-xs font-black text-dark/40 hover:border-primary hover:text-primary transition-all">۲</button>
+                            <button class="w-10 h-10 rounded-xl border border-sky-100 flex items-center justify-center text-dark/30 hover:border-primary hover:text-primary transition-all"><i class="ph-bold ph-caret-left"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export / Integration Section -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white border border-sky-100 rounded-[32px] p-8 shadow-sm flex items-center gap-6">
+                        <div class="w-16 h-16 bg-sky-50 text-primary rounded-3xl flex items-center justify-center border border-sky-100 shadow-sm"><i class="ph ph-truck text-3xl"></i></div>
+                        <div class="flex-1">
+                            <h3 class="text-lg font-black text-dark mb-1">یکپارچه‌سازی با پست و تیپاکس</h3>
+                            <p class="text-xs font-bold text-dark/40">دریافت خودکار کد رهگیری و ارسال پیامک به مشتری در لحظه تغییر وضعیت سفارش.</p>
+                        </div>
+                        <button class="p-4 bg-sky-50 text-primary rounded-2xl hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-link text-xl"></i></button>
+                    </div>
+                    <div class="bg-white border border-sky-100 rounded-[32px] p-8 shadow-sm flex items-center gap-6">
+                        <div class="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-100 shadow-sm"><i class="ph ph-chart-line-up text-3xl"></i></div>
+                        <div class="flex-1">
+                            <h3 class="text-lg font-black text-dark mb-1">گزارش تحلیلی فروش</h3>
+                            <p class="text-xs font-bold text-dark/40">مشاهده آمار دقیق فروش ماهانه و پرفروش‌ترین محصولات ویترین شما.</p>
+                        </div>
+                        <button class="p-4 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all"><i class="ph-bold ph-arrow-up-right text-xl"></i></button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

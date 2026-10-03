@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت سرنخ‌ها | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans h-screen w-full overflow-hidden flex selection:bg-sky-100 selection:text-primary">
+
+    <!-- Sidebar -->
+    <aside class="w-[280px] bg-white border-l border-sky-100 flex-col hidden md:flex z-20 shadow-sm relative">
+        <div class="h-[80px] flex items-center px-8 border-b border-sky-100">
+            <div class="flex items-center gap-3 text-2xl font-black text-primary tracking-tight">
+                <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-storefront text-xl"></i></div>
+                پنل فروشگاه
+            </div>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <a href="Kadouchi CRM - Shop Dashboard__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-squares-four text-xl"></i> پیشخوان
+            </a>
+            <a href="Kadouchi CRM - Products__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-package text-xl"></i> محصولات
+            </a>
+            <a href="Kadouchi CRM - Orders__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-shopping-bag text-xl"></i> سفارشات
+            </a>
+            <a href="Kadouchi CRM - Inbox__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-chat-circle-dots text-xl"></i> صندوق پیام‌ها
+            </a>
+            <a href="Kadouchi CRM - Leads__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-black bg-primary text-white rounded-2xl shadow-lg shadow-sky-500/20 transition-all">
+                <i class="ph ph-funnel text-xl"></i> سرنخ‌های فروش
+            </a>
+            <a href="Kadouchi CRM - Customers__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-users text-xl"></i> مشتریان
+            </a>
+            <div class="pt-6 mt-6 border-t border-sky-50">
+                <a href="#" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                    <i class="ph ph-gear text-xl"></i> تنظیمات فروشگاه
+                </a>
+            </div>
+        </nav>
+        <div class="p-4 border-t border-sky-100">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-sky-50 cursor-pointer border border-sky-100">
+                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-4.jpg" alt="Shop Owner" class="w-10 h-10 rounded-xl object-cover">
+                <div class="flex-1 min-w-0 text-right">
+                    <p class="text-xs font-black text-dark truncate">بوتیک الگانس</p>
+                    <p class="text-[10px] text-dark/50 truncate">پلان حرفه‌ای</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col min-w-0 bg-secondary overflow-hidden">
+        <header class="h-[80px] bg-white border-b border-sky-100 flex items-center justify-between px-8 shrink-0 z-10">
+            <div>
+                <h1 class="text-xl font-black text-dark leading-tight">قیف فروش (Leads)</h1>
+                <p class="text-[11px] text-dark/50 font-bold">مدیریت مشتریان بالقوه و پیگیری‌های هوشمند کادوچی</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="hidden md:flex items-center bg-secondary rounded-xl px-4 py-2 border border-sky-100">
+                    <i class="ph ph-magnifying-glass text-dark/30 ml-2"></i>
+                    <input type="text" placeholder="جستجو در سرنخ‌ها..." class="bg-transparent border-none outline-none text-xs font-bold text-dark w-48">
+                </div>
+                <button class="flex items-center gap-2 px-6 py-2.5 text-sm font-black text-white bg-primary hover:bg-dark rounded-xl transition-all shadow-lg shadow-sky-500/20">
+                    <i class="ph ph-plus text-lg"></i> سرنخ جدید
+                </button>
+            </div>
+        </header>
+
+        <!-- Kanban Board Container -->
+        <div class="flex-1 overflow-x-auto p-8 bg-secondary">
+            <div class="flex h-full gap-6 min-w-max">
+                
+                <!-- Column 1: New Inquiry -->
+                <div class="w-[320px] flex flex-col">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-sky-400"></span>
+                            <h2 class="text-sm font-black text-dark">پرسش اولیه</h2>
+                            <span class="text-[10px] bg-sky-100 text-primary px-2 py-0.5 rounded-full font-black">۴</span>
+                        </div>
+                        <button class="text-dark/20 hover:text-primary transition-all"><i class="ph-bold ph-dots-three-outline text-lg"></i></button>
+                    </div>
+                    <div class="flex-1 space-y-4 overflow-y-auto pr-1">
+                        <!-- Lead Card -->
+                        <div class="bg-white p-5 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-grab active:cursor-grabbing group">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" class="w-8 h-8 rounded-xl object-cover" alt="User">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-black text-dark truncate">سارا احمدی</p>
+                                        <p class="text-[9px] text-dark/40 font-bold">@sara_ahmadi</p>
+                                    </div>
+                                </div>
+                                <div class="w-6 h-6 rounded-lg bg-pink-50 text-pink-500 flex items-center justify-center border border-pink-100">
+                                    <i class="ph-fill ph-instagram-logo text-[10px]"></i>
+                                </div>
+                            </div>
+                            <p class="text-[11px] font-bold text-dark/70 leading-relaxed mb-4">پرسیده: "قیمت ساعت رزگلد الیت چنده؟"</p>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center -space-x-1 space-x-reverse">
+                                    <span class="px-2 py-0.5 bg-sky-50 text-primary text-[9px] font-black rounded-md border border-sky-100">ساعت</span>
+                                </div>
+                                <span class="text-[9px] text-dark/30 font-bold">۲ ساعت پیش</span>
+                            </div>
+                        </div>
+                        <!-- Lead Card -->
+                        <div class="bg-white p-5 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all cursor-grab">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-7.jpg" class="w-8 h-8 rounded-xl object-cover" alt="User">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-black text-dark truncate">مریم زارعی</p>
+                                        <p class="text-[9px] text-dark/40 font-bold">@mary_z</p>
+                                    </div>
+                                </div>
+                                <div class="w-6 h-6 rounded-lg bg-pink-50 text-pink-500 flex items-center justify-center border border-pink-100">
+                                    <i class="ph-fill ph-instagram-logo text-[10px]"></i>
+                                </div>
+                            </div>
+                            <p class="text-[11px] font-bold text-dark/70 leading-relaxed mb-4">در مورد موجودی رنگ قرمز کتانی سوال کرده.</p>
+                            <div class="flex items-center justify-between">
+                                <span class="px-2 py-0.5 bg-amber-50 text-amber-600 text-[9px] font-black rounded-md border border-amber-100">فوری</span>
+                                <span class="text-[9px] text-dark/30 font-bold">۵ ساعت پیش</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 2: In Conversation -->
+                <div class="w-[320px] flex flex-col">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+                            <h2 class="text-sm font-black text-dark">در حال مذاکره</h2>
+                            <span class="text-[10px] bg-sky-100 text-primary px-2 py-0.5 rounded-full font-black">۸</span>
+                        </div>
+                        <button class="text-dark/20 hover:text-primary transition-all"><i class="ph-bold ph-dots-three-outline text-lg"></i></button>
+                    </div>
+                    <div class="flex-1 space-y-4 overflow-y-auto pr-1">
+                        <!-- Lead Card -->
+                        <div class="bg-white p-5 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all cursor-grab relative overflow-hidden">
+                            <div class="absolute top-0 left-0 right-0 h-1 bg-primary/20">
+                                <div class="h-full bg-primary" style="width: 60%"></div>
+                            </div>
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg" class="w-8 h-8 rounded-xl object-cover" alt="User">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-black text-dark truncate">علی رضایی</p>
+                                        <p class="text-[9px] text-dark/40 font-bold">@ali_rez</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <div class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center border border-emerald-100">
+                                        <i class="ph-fill ph-chat-teardrop-dots text-[10px]"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-[11px] font-bold text-dark/70 leading-relaxed mb-4">در حال بررسی هزینه‌های ارسال و تخفیف ویژه.</p>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <i class="ph ph-paper-plane-tilt text-[10px] text-primary"></i>
+                                    <span class="text-[9px] font-black text-primary">پاسخ داده شده</span>
+                                </div>
+                                <span class="text-[9px] text-dark/30 font-bold">۱۰ دقیقه پیش</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 3: Pending Payment -->
+                <div class="w-[320px] flex flex-col">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+                            <h2 class="text-sm font-black text-dark">در انتظار پرداخت</h2>
+                            <span class="text-[10px] bg-sky-100 text-primary px-2 py-0.5 rounded-full font-black">۳</span>
+                        </div>
+                        <button class="text-dark/20 hover:text-primary transition-all"><i class="ph-bold ph-dots-three-outline text-lg"></i></button>
+                    </div>
+                    <div class="flex-1 space-y-4 overflow-y-auto pr-1">
+                        <!-- Lead Card -->
+                        <div class="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100 shadow-sm hover:shadow-md transition-all cursor-grab">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-6.jpg" class="w-8 h-8 rounded-xl object-cover" alt="User">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-black text-dark truncate">نیلوفر پاکزاد</p>
+                                        <p class="text-[9px] text-dark/40 font-bold">@nilo_pk</p>
+                                    </div>
+                                </div>
+                                <div class="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                    <i class="ph-bold ph-credit-card text-[10px]"></i>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded-xl border border-emerald-100 mb-4">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-[10px] font-black text-dark">مبلغ فاکتور:</p>
+                                    <p class="text-[11px] font-black text-emerald-600">۸۹۰,۰۰۰ تومان</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                                    <span class="text-[9px] font-black text-emerald-600">لینک ارسال شد</span>
+                                </div>
+                                <span class="text-[9px] text-dark/30 font-bold">۱ ساعت پیش</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 4: Converted -->
+                <div class="w-[320px] flex flex-col">
+                    <div class="flex items-center justify-between mb-4 px-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-primary"></span>
+                            <h2 class="text-sm font-black text-dark">تبدیل شده (مشتری)</h2>
+                            <span class="text-[10px] bg-sky-100 text-primary px-2 py-0.5 rounded-full font-black">۱۴۲</span>
+                        </div>
+                        <button class="text-dark/20 hover:text-primary transition-all"><i class="ph-bold ph-dots-three-outline text-lg"></i></button>
+                    </div>
+                    <div class="flex-1 bg-sky-50/30 rounded-[40px] border-2 border-dashed border-sky-100 flex flex-col items-center justify-center text-center p-8">
+                        <div class="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-primary shadow-sm mb-4 border border-sky-50">
+                            <i class="ph-bold ph-check-circle text-3xl"></i>
+                        </div>
+                        <p class="text-xs font-black text-dark mb-1">تبریک!</p>
+                        <p class="text-[10px] font-bold text-dark/40 leading-relaxed">سرنخ‌های موفق به لیست مشتریان منتقل می‌شوند.</p>
+                        <button class="mt-4 text-[10px] font-black text-primary hover:underline">مشاهده تاریخچه تبدیل</button>
+                    </div>
+                </div>
+
+                <!-- Add New Column -->
+                <div class="w-[320px] flex flex-col">
+                    <button class="h-12 border-2 border-dashed border-sky-200 rounded-2xl flex items-center justify-center gap-2 text-dark/30 hover:border-primary hover:text-primary transition-all">
+                        <i class="ph ph-plus-circle text-xl"></i>
+                        <span class="text-xs font-black">افزودن مرحله جدید</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Automation Bar (Floating) -->
+        <div class="p-4 bg-white border-t border-sky-100 flex items-center justify-between">
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><i class="ph-fill ph-sparkle"></i></div>
+                    <p class="text-[10px] font-black text-dark">وضعیت هوش مصنوعی کادوچی:</p>
+                    <span class="px-2 py-0.5 bg-emerald-100 text-emerald-600 text-[9px] font-black rounded-lg">فعال و در حال رصد</span>
+                </div>
+                <div class="h-4 w-px bg-sky-100"></div>
+                <div class="flex items-center gap-3">
+                    <p class="text-[10px] font-bold text-dark/40">آخرین اقدام:</p>
+                    <p class="text-[10px] font-black text-dark">تشخیص نیت خرید برای ۳ کاربر جدید</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button class="px-4 py-2 bg-sky-50 text-primary text-[10px] font-black rounded-xl border border-sky-100 hover:bg-sky-100 transition-all">تنظیمات اتوماسیون</button>
+                <button class="w-10 h-10 bg-dark text-white rounded-xl flex items-center justify-center hover:bg-black transition-all shadow-lg shadow-sky-900/10"><i class="ph-bold ph-gear"></i></button>
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

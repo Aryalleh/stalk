@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>پیشخوان فروشگاه | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans flex flex-col h-screen overflow-hidden selection:bg-sky-100 selection:text-primary">
+
+    <!-- Header -->
+    <header class="h-[70px] bg-white border-b border-sky-100 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-storefront text-lg"></i></div>
+            <h1 class="text-lg font-black text-dark leading-tight">بوتیک الگانس</h1>
+        </div>
+        <button class="w-11 h-11 flex items-center justify-center text-dark/60 bg-sky-50 border border-sky-100 rounded-xl relative">
+            <i class="ph ph-plus text-xl"></i>
+        </button>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto pb-24">
+        <div class="p-6 space-y-6">
+            
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 gap-4">
+                <div class="bg-white border border-sky-100 rounded-[32px] p-6 shadow-sm overflow-hidden relative">
+                    <div class="absolute -top-4 -right-4 w-24 h-24 bg-sky-50 rounded-full opacity-50"></div>
+                    <p class="text-[10px] font-black text-dark/30 uppercase mb-1 relative z-10">فروش امروز</p>
+                    <p class="text-3xl font-black text-dark relative z-10">۱۸,۵۰۰,۰۰۰ <span class="text-xs">تومان</span></p>
+                    <div class="mt-4 h-1.5 w-full bg-sky-50 rounded-full overflow-hidden relative z-10">
+                        <div class="h-full bg-primary" style="width: 75%"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white border border-sky-100 rounded-[28px] p-5 shadow-sm">
+                        <p class="text-[10px] font-black text-dark/30 uppercase mb-1">سفارش جدید</p>
+                        <p class="text-2xl font-black text-dark">۱۲</p>
+                    </div>
+                    <div class="bg-white border border-sky-100 rounded-[28px] p-5 shadow-sm">
+                        <p class="text-[10px] font-black text-dark/30 uppercase mb-1">تعامل هوشمند</p>
+                        <p class="text-2xl font-black text-dark">۱۴۸</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Orders Preview -->
+            <div class="bg-white border border-sky-100 rounded-[32px] shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-sky-50 flex items-center justify-between bg-sky-50/20">
+                    <h2 class="text-sm font-black text-dark">آخرین سفارشات</h2>
+                    <i class="ph ph-caret-left text-dark/30"></i>
+                </div>
+                <div class="divide-y divide-sky-50">
+                    <div class="p-5 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" class="w-10 h-10 rounded-xl object-cover" alt="User">
+                            <div>
+                                <p class="text-xs font-black text-dark">سارا احمدی</p>
+                                <p class="text-[9px] text-dark/40 font-bold">ساعت رزگلد الیت</p>
+                            </div>
+                        </div>
+                        <div class="text-left">
+                            <p class="text-xs font-black text-dark">۳,۴۵۰,۰۰۰</p>
+                            <span class="text-[8px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-black">ارسال شده</span>
+                        </div>
+                    </div>
+                    <div class="p-5 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg" class="w-10 h-10 rounded-xl object-cover" alt="User">
+                            <div>
+                                <p class="text-xs font-black text-dark">علی رضایی</p>
+                                <p class="text-[9px] text-dark/40 font-bold">کتانی مینیمال</p>
+                            </div>
+                        </div>
+                        <div class="text-left">
+                            <p class="text-xs font-black text-dark">۲,۸۰۰,۰۰۰</p>
+                            <span class="text-[8px] px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full font-black">در انتظار</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Log -->
+            <div class="bg-white border border-sky-100 rounded-[32px] shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-sky-50 flex items-center justify-between bg-sky-50/20">
+                    <h2 class="text-sm font-black text-dark">اتوماسیون DM</h2>
+                    <i class="ph ph-instagram-logo text-xl text-primary"></i>
+                </div>
+                <div class="divide-y divide-sky-50">
+                    <div class="p-5 flex gap-3">
+                        <div class="w-10 h-10 bg-sky-50 text-primary rounded-xl flex items-center justify-center shrink-0 border border-sky-100 shadow-sm"><i class="ph ph-chat-teardrop text-lg"></i></div>
+                        <div>
+                            <p class="text-xs font-bold text-dark leading-snug">ارسال خودکار لینک پرداخت به @sara</p>
+                            <p class="text-[9px] text-dark/40 font-bold mt-1">۵ دقیقه پیش · کلمه "قیمت"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="h-[75px] bg-white border-t border-sky-100 fixed bottom-0 left-0 right-0 flex items-center justify-around px-6 z-20 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+        <a href="#" class="flex flex-col items-center gap-1 text-primary">
+            <i class="ph-fill ph-squares-four text-2xl"></i>
+            <span class="text-[10px] font-black">پیشخوان</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-package text-2xl"></i>
+            <span class="text-[10px] font-bold">محصولات</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-shopping-bag text-2xl"></i>
+            <span class="text-[10px] font-bold">سفارشات</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-chat-circle-dots text-2xl"></i>
+            <span class="text-[10px] font-bold">پیام‌ها</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-gear text-2xl"></i>
+            <span class="text-[10px] font-bold">تنظیمات</span>
+        </a>
+    </nav>
+</body>
+</html>

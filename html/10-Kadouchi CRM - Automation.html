@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تنظیمات هوشمند | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #0ea5e9; }
+        .toggle-checkbox:checked + .toggle-label:after { left: calc(100% - 2px); transform: translateX(-100%); }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans h-screen w-full overflow-hidden flex selection:bg-sky-100 selection:text-primary">
+
+    <!-- Sidebar -->
+    <aside class="w-[280px] bg-white border-l border-sky-100 flex-col hidden md:flex z-20 shadow-sm relative">
+        <div class="h-[80px] flex items-center px-8 border-b border-sky-100">
+            <div class="flex items-center gap-3 text-2xl font-black text-primary tracking-tight">
+                <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-storefront text-xl"></i></div>
+                پنل فروشگاه
+            </div>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <a href="Kadouchi CRM - Shop Dashboard__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-squares-four text-xl"></i> پیشخوان
+            </a>
+            <a href="Kadouchi CRM - Products__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-package text-xl"></i> محصولات
+            </a>
+            <a href="Kadouchi CRM - Orders__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-shopping-bag text-xl"></i> سفارشات
+            </a>
+            <a href="Kadouchi CRM - Inbox__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-chat-circle-dots text-xl"></i> صندوق پیام‌ها
+            </a>
+            <a href="Kadouchi CRM - Leads__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-funnel text-xl"></i> سرنخ‌های فروش
+            </a>
+            <a href="Kadouchi CRM - Customers__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-users text-xl"></i> مشتریان
+            </a>
+            <div class="pt-6 mt-6 border-t border-sky-50">
+                <a href="#" class="flex items-center gap-4 px-4 py-3 text-sm font-black bg-primary text-white rounded-2xl shadow-lg shadow-sky-500/20 transition-all">
+                    <i class="ph ph-gear text-xl"></i> تنظیمات هوشمند
+                </a>
+            </div>
+        </nav>
+        <div class="p-4 border-t border-sky-100">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-sky-50 cursor-pointer border border-sky-100">
+                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-4.jpg" alt="Shop Owner" class="w-10 h-10 rounded-xl object-cover">
+                <div class="flex-1 min-w-0 text-right">
+                    <p class="text-xs font-black text-dark truncate">بوتیک الگانس</p>
+                    <p class="text-[10px] text-dark/50 truncate">پلان حرفه‌ای</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col min-w-0 bg-secondary overflow-hidden">
+        <header class="h-[80px] bg-white border-b border-sky-100 flex items-center justify-between px-8 shrink-0 z-10">
+            <div>
+                <h1 class="text-xl font-black text-dark leading-tight">اتوماسیون و تنظیمات هوش مصنوعی</h1>
+                <p class="text-[11px] text-dark/50 font-bold">پیکربندی پاسخ‌های خودکار، تحلیل نیت و ابزارهای بازاریابی کادوچی</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <button class="flex items-center gap-2 px-6 py-2.5 text-sm font-black text-white bg-dark hover:bg-black rounded-xl transition-all">
+                    ذخیره تغییرات
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-[1000px] mx-auto space-y-8">
+                
+                <!-- AI Engine Switch -->
+                <div class="bg-primary text-white p-8 rounded-[32px] shadow-2xl shadow-sky-500/20 flex items-center justify-between overflow-hidden relative group">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-white/20 transition-all"></div>
+                    <div class="relative z-10 flex items-center gap-6">
+                        <div class="w-16 h-16 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/20 shadow-inner"><i class="ph-fill ph-sparkle text-3xl"></i></div>
+                        <div>
+                            <h3 class="text-xl font-black mb-1">موتور هوش مصنوعی کادوچی</h3>
+                            <p class="text-xs font-bold text-white/70">فعال‌سازی تحلیل نیت خرید و پیشنهاد پاسخ‌های هوشمند در DM اینستاگرام.</p>
+                        </div>
+                    </div>
+                    <div class="relative z-10">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only toggle-checkbox" checked>
+                            <div class="w-14 h-8 bg-white/20 rounded-full border-2 border-white/30 toggle-label transition-all relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-6 after:w-6 after:transition-all"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Settings Sections -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    
+                    <!-- Keyword Triggers -->
+                    <div class="bg-white p-8 rounded-[32px] border border-sky-100 shadow-sm space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-black text-dark">کلمات کلیدی و محرک‌ها</h3>
+                            <button class="text-primary hover:bg-sky-50 p-2 rounded-xl transition-all"><i class="ph-bold ph-plus-circle text-xl"></i></button>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="p-4 bg-secondary rounded-2xl border border-sky-50 flex items-center justify-between group">
+                                <div>
+                                    <p class="text-xs font-black text-dark">کلمه: "قیمت"</p>
+                                    <p class="text-[10px] text-dark/40 font-bold mt-1">اقدام: ارسال لینک محصول + قیمت انبار</p>
+                                </div>
+                                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button class="p-2 text-dark/30 hover:text-primary transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                    <button class="p-2 text-dark/30 hover:text-rose-500 transition-all"><i class="ph-bold ph-trash"></i></button>
+                                </div>
+                            </div>
+                            <div class="p-4 bg-secondary rounded-2xl border border-sky-50 flex items-center justify-between group">
+                                <div>
+                                    <p class="text-xs font-black text-dark">کلمه: "موجوده؟"</p>
+                                    <p class="text-[10px] text-dark/40 font-bold mt-1">اقدام: بررسی موجودی انبار و پاسخ متنی</p>
+                                </div>
+                                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button class="p-2 text-dark/30 hover:text-primary transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                    <button class="p-2 text-dark/30 hover:text-rose-500 transition-all"><i class="ph-bold ph-trash"></i></button>
+                                </div>
+                            </div>
+                            <div class="p-4 bg-secondary rounded-2xl border border-sky-50 flex items-center justify-between group">
+                                <div>
+                                    <p class="text-xs font-black text-dark">کلمه: "کد پیگیری"</p>
+                                    <p class="text-[10px] text-dark/40 font-bold mt-1">اقدام: ارسال شماره مرسوله از سفارشات</p>
+                                </div>
+                                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button class="p-2 text-dark/30 hover:text-primary transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                    <button class="p-2 text-dark/30 hover:text-rose-500 transition-all"><i class="ph-bold ph-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Reply Rules -->
+                    <div class="bg-white p-8 rounded-[32px] border border-sky-100 shadow-sm space-y-6">
+                        <h3 class="text-lg font-black text-dark">قوانین پاسخ‌دهی خودکار</h3>
+                        <div class="space-y-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-black text-dark">پاسخ به کامنت‌ها</p>
+                                    <p class="text-[10px] text-dark/40 font-bold">لایک و پاسخ خودکار به کامنت‌های مثبت پست‌ها.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" class="sr-only toggle-checkbox" checked>
+                                    <div class="w-10 h-6 bg-sky-100 rounded-full border border-sky-200 toggle-label transition-all relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-black text-dark">پیام خوش‌آمدگویی (DM)</p>
+                                    <p class="text-[10px] text-dark/40 font-bold">ارسال پیام خودکار به کاربرانی که برای اولین بار پیام می‌دهند.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" class="sr-only toggle-checkbox">
+                                    <div class="w-10 h-6 bg-sky-100 rounded-full border border-sky-200 toggle-label transition-all relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-black text-dark">یادآوری سبد خرید رها شده</p>
+                                    <p class="text-[10px] text-dark/40 font-bold">ارسال پیام پیگیری در DM بعد از ۲۴ ساعت عدم تکمیل سفارش.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" class="sr-only toggle-checkbox" checked>
+                                    <div class="w-10 h-6 bg-sky-100 rounded-full border border-sky-200 toggle-label transition-all relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- AI Persona Settings -->
+                <div class="bg-white p-8 rounded-[32px] border border-sky-100 shadow-sm space-y-8">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-sky-50 text-primary rounded-2xl flex items-center justify-center border border-sky-100 shadow-sm"><i class="ph-bold ph-user-focus text-2xl"></i></div>
+                        <div>
+                            <h3 class="text-lg font-black text-dark">لحن و شخصیت هوش مصنوعی</h3>
+                            <p class="text-[10px] text-dark/40 font-bold">تعیین کنید کادوچی با چه لحنی به مشتریان شما پاسخ دهد.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <label class="cursor-pointer group">
+                            <input type="radio" name="persona" class="hidden peer" checked>
+                            <div class="p-6 bg-secondary border-2 border-transparent peer-checked:border-primary peer-checked:bg-sky-50 rounded-3xl transition-all text-center">
+                                <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm group-hover:scale-110 transition-all"><i class="ph-fill ph-hand-waving text-primary text-xl"></i></div>
+                                <p class="text-xs font-black text-dark mb-1">صمیمی و دوستانه</p>
+                                <p class="text-[10px] text-dark/40 font-bold">مناسب برای برندهای لایف‌استایل</p>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer group">
+                            <input type="radio" name="persona" class="hidden peer">
+                            <div class="p-6 bg-secondary border-2 border-transparent peer-checked:border-primary peer-checked:bg-sky-50 rounded-3xl transition-all text-center">
+                                <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm group-hover:scale-110 transition-all"><i class="ph-fill ph-briefcase text-dark/40 group-peer-checked:text-primary text-xl"></i></div>
+                                <p class="text-xs font-black text-dark mb-1">رسمی و حرفه‌ای</p>
+                                <p class="text-[10px] text-dark/40 font-bold">مناسب برای بیزنس‌های رسمی</p>
+                            </div>
+                        </label>
+                        <label class="cursor-pointer group">
+                            <input type="radio" name="persona" class="hidden peer">
+                            <div class="p-6 bg-secondary border-2 border-transparent peer-checked:border-primary peer-checked:bg-sky-50 rounded-3xl transition-all text-center">
+                                <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm group-hover:scale-110 transition-all"><i class="ph-fill ph-lightning text-dark/40 group-peer-checked:text-primary text-xl"></i></div>
+                                <p class="text-xs font-black text-dark mb-1">مینیمال و سریع</p>
+                                <p class="text-[10px] text-dark/40 font-bold">پاسخ‌های کوتاه و مستقیم به سوالات</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Instagram Integration Status (Bottom) -->
+                <div class="bg-white border border-sky-100 rounded-[32px] p-8 flex items-center justify-between shadow-sm">
+                    <div class="flex items-center gap-6">
+                        <div class="w-16 h-16 bg-pink-50 text-pink-500 rounded-3xl flex items-center justify-center border border-pink-100 shadow-sm"><i class="ph-fill ph-instagram-logo text-3xl"></i></div>
+                        <div>
+                            <h3 class="text-lg font-black text-dark mb-1">وضعیت اتصال اینستاگرام</h3>
+                            <p class="text-xs font-bold text-dark/40">اکانت @boutique_elegance متصل است. آخرین همگام‌سازی: ۵ دقیقه پیش</p>
+                        </div>
+                    </div>
+                    <button class="px-8 py-4 bg-sky-50 text-primary font-black rounded-2xl border border-sky-100 hover:bg-sky-100 transition-all">بروزرسانی اتصال</button>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

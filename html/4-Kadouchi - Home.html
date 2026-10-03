@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>کادوچی | خانه</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+        .masonry-grid { column-count: 4; column-gap: 1.5rem; }
+        .break-inside-avoid { break-inside: avoid; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans flex flex-col min-h-screen selection:bg-sky-100 selection:text-primary">
+
+    <!-- Desktop Header -->
+    <header class="h-[80px] bg-white border-b border-sky-100 flex items-center justify-between px-10 sticky top-0 z-50 shadow-sm">
+        <div class="flex items-center gap-12">
+            <a href="Kadouchi - Home__desktop.html" class="text-3xl font-black text-primary tracking-tight">کادو<span class="text-dark">چی</span></a>
+            <nav class="hidden lg:flex items-center gap-8 text-sm font-bold text-dark/70">
+                <a href="#" class="text-primary">خانه</a>
+                <a href="#" class="hover:text-primary transition-colors">آرزوها</a>
+                <a href="#" class="hover:text-primary transition-colors">فروشگاه‌ها</a>
+                <a href="#" class="hover:text-primary transition-colors">مجله کادوچی</a>
+            </nav>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="flex-1 max-w-xl relative mx-10">
+            <input type="text" placeholder="جستجو در بین هزاران محصول خاص..." class="w-full bg-secondary border border-sky-100 rounded-2xl py-3 px-6 pr-12 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none transition-all">
+            <i class="ph ph-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-dark/30 text-xl"></i>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <button class="p-3 text-dark/60 hover:text-primary relative">
+                <i class="ph ph-heart text-2xl"></i>
+                <span class="absolute top-2 right-2 bg-primary text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">۳</span>
+            </button>
+            <button class="p-3 text-dark/60 hover:text-primary relative">
+                <i class="ph ph-shopping-bag text-2xl"></i>
+                <span class="absolute top-2 right-2 bg-primary text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full">۲</span>
+            </button>
+            <div class="h-8 w-px bg-sky-100 mx-2"></div>
+            <a href="#" class="flex items-center gap-3 hover:opacity-80 transition-all">
+                <div class="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center text-dark/40 border border-sky-100"><i class="ph ph-user text-xl"></i></div>
+                <span class="text-sm font-black text-dark hidden xl:block">ورود | ثبت‌نام</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-10 py-10">
+        
+        <!-- Hero Section -->
+        <section class="mb-12">
+            <div class="relative h-[450px] rounded-[48px] overflow-hidden shadow-2xl shadow-sky-500/10">
+                <img class="w-full h-full object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_8f2951d6eb_a50d3c3df2c90f0c.png" alt="luxury minimalist fashion boutique interior, soft blue and warm lighting, professional photography" />
+                <div class="absolute inset-0 bg-gradient-to-t from-dark/90 via-dark/20 to-transparent flex flex-col justify-end p-16">
+                    <h2 class="text-white text-5xl font-black mb-6 leading-tight">هدیه‌ای که در ذهن <br>ماندگار می‌شود</h2>
+                    <p class="text-white/70 text-lg font-bold max-w-xl mb-8">بهترین بوتیک‌های اینستاگرامی را در یک پلتفرم کشف کنید و با اطمینان خاطر خرید کنید.</p>
+                    <div class="flex gap-4">
+                        <button class="px-10 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-sky-500/20 hover:bg-white hover:text-primary transition-all">شروع جستجو</button>
+                        <button class="px-10 py-4 bg-white/10 backdrop-blur-md text-white font-black rounded-2xl border border-white/20 hover:bg-white/20 transition-all">لیست آرزوها</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Categories -->
+        <section class="mb-16">
+            <div class="flex items-center justify-between mb-8">
+                <h3 class="text-2xl font-black text-dark">دسته‌بندی‌های برتر</h3>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                <a href="#" class="bg-white p-6 rounded-[32px] border border-sky-100 text-center hover:border-primary hover:shadow-xl transition-all group">
+                    <div class="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all text-primary"><i class="ph-fill ph-shirt-folded text-3xl"></i></div>
+                    <p class="text-sm font-black text-dark">پوشاک</p>
+                </a>
+                <a href="#" class="bg-white p-6 rounded-[32px] border border-sky-100 text-center hover:border-primary hover:shadow-xl transition-all group">
+                    <div class="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all text-primary"><i class="ph-fill ph-watch text-3xl"></i></div>
+                    <p class="text-sm font-black text-dark">اکسسوری</p>
+                </a>
+                <a href="#" class="bg-white p-6 rounded-[32px] border border-sky-100 text-center hover:border-primary hover:shadow-xl transition-all group">
+                    <div class="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all text-primary"><i class="ph-fill ph-house-line text-3xl"></i></div>
+                    <p class="text-sm font-black text-dark">دکوراسیون</p>
+                </a>
+                <a href="#" class="bg-white p-6 rounded-[32px] border border-sky-100 text-center hover:border-primary hover:shadow-xl transition-all group">
+                    <div class="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all text-primary"><i class="ph-fill ph-sneaker text-3xl"></i></div>
+                    <p class="text-sm font-black text-dark">کفش</p>
+                </a>
+                <a href="#" class="bg-white p-6 rounded-[32px] border border-sky-100 text-center hover:border-primary hover:shadow-xl transition-all group">
+                    <div class="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all text-primary"><i class="ph-fill ph-device-mobile text-3xl"></i></div>
+                    <p class="text-sm font-black text-dark">دیجیتال</p>
+                </a>
+                <a href="#" class="bg-white p-6 rounded-[32px] border border-sky-100 text-center hover:border-primary hover:shadow-xl transition-all group">
+                    <div class="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all text-primary"><i class="ph-fill ph-dots-three-circle text-3xl"></i></div>
+                    <p class="text-sm font-black text-dark">سایر</p>
+                </a>
+            </div>
+        </section>
+
+        <!-- Product Grid -->
+        <section>
+            <div class="flex items-center justify-between mb-10">
+                <h3 class="text-2xl font-black text-dark">جدیدترین محصولات</h3>
+                <div class="flex items-center gap-2">
+                    <button class="px-6 py-2.5 bg-primary text-white text-xs font-black rounded-xl">همه</button>
+                    <button class="px-6 py-2.5 bg-white text-dark/40 text-xs font-bold rounded-xl border border-sky-100 hover:border-primary hover:text-primary transition-all">پرفروش‌ترین‌ها</button>
+                </div>
+            </div>
+            <div class="masonry-grid">
+                <!-- Product Card -->
+                <div class="break-inside-avoid">
+                    <a href="Kadouchi - ProductDetails__desktop.html" class="block bg-white rounded-[32px] overflow-hidden border border-sky-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all group relative">
+                        <div class="aspect-[3/4] relative overflow-hidden">
+                            <img class="w-full h-full object-cover group-hover:scale-110 transition-all duration-700" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_9082e7e803_262dfe09d59a92b4.png" alt="luxury rose gold watch on a aesthetic minimal background" />
+                            <div class="absolute inset-0 bg-gradient-to-t from-dark/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
+                            <button class="absolute top-6 left-6 w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white border border-white/20 hover:bg-white hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"><i class="ph ph-heart text-2xl"></i></button>
+                            <div class="absolute bottom-0 inset-x-0 p-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 opacity-0 group-hover:opacity-100">
+                                <p class="text-white/60 text-xs font-bold mb-1">بوتیک الگانس</p>
+                                <h4 class="text-white text-xl font-black">ساعت رزگلد الیت</h4>
+                            </div>
+                        </div>
+                        <div class="p-8 flex items-center justify-between">
+                            <span class="text-lg font-black text-dark">۳,۴۵۰,۰۰۰ <span class="text-xs">تومان</span></span>
+                            <span class="w-10 h-10 bg-sky-50 text-primary rounded-xl flex items-center justify-center border border-sky-100 group-hover:bg-primary group-hover:text-white transition-all"><i class="ph-bold ph-shopping-cart text-xl"></i></span>
+                        </div>
+                    </a>
+                </div>
+                <!-- More Product Cards (Replicated for grid feel) -->
+                <div class="break-inside-avoid">
+                    <a href="Kadouchi - ProductDetails__desktop.html" class="block bg-white rounded-[32px] overflow-hidden border border-sky-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all group relative">
+                        <div class="aspect-square relative overflow-hidden">
+                            <img class="w-full h-full object-cover group-hover:scale-110 transition-all duration-700" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_54019399a4_4904a27deee9b4bc.png" alt="modern minimalist sneakers in a bright studio" />
+                            <div class="absolute inset-0 bg-gradient-to-t from-dark/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
+                            <div class="absolute bottom-0 inset-x-0 p-8 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 opacity-0 group-hover:opacity-100">
+                                <h4 class="text-white text-xl font-black">کتانی مینیمال</h4>
+                            </div>
+                        </div>
+                        <div class="p-8 flex items-center justify-between">
+                            <span class="text-lg font-black text-dark">۲,۸۰۰,۰۰۰ <span class="text-xs">تومان</span></span>
+                            <span class="w-10 h-10 bg-sky-50 text-primary rounded-xl flex items-center justify-center border border-sky-100 group-hover:bg-primary group-hover:text-white transition-all"><i class="ph-bold ph-shopping-cart text-xl"></i></span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-sky-100 py-20 mt-20">
+        <div class="container mx-auto px-10 grid grid-cols-1 md:grid-cols-4 gap-16">
+            <div class="col-span-1 md:col-span-1">
+                <a href="#" class="text-3xl font-black text-primary mb-6 block">کادوچی</a>
+                <p class="text-sm text-dark/40 font-bold leading-relaxed">بزرگترین پلتفرم تخصصی خرید از بوتیک‌های اینستاگرامی و مدیریت هوشمند فروش در ایران.</p>
+            </div>
+            <div>
+                <h5 class="text-sm font-black text-dark mb-6">دسترسی سریع</h5>
+                <ul class="space-y-4 text-xs font-bold text-dark/60">
+                    <li><a href="#" class="hover:text-primary transition-all">محصولات جدید</a></li>
+                    <li><a href="#" class="hover:text-primary transition-all">بوتیک‌های برتر</a></li>
+                    <li><a href="#" class="hover:text-primary transition-all">لیست آرزوها</a></li>
+                </ul>
+            </div>
+            <div>
+                <h5 class="text-sm font-black text-dark mb-6">راهنما</h5>
+                <ul class="space-y-4 text-xs font-bold text-dark/60">
+                    <li><a href="#" class="hover:text-primary transition-all">قوانین کادوچی</a></li>
+                    <li><a href="#" class="hover:text-primary transition-all">نحوه ثبت سفارش</a></li>
+                    <li><a href="#" class="hover:text-primary transition-all">تماس با ما</a></li>
+                </ul>
+            </div>
+            <div>
+                <h5 class="text-sm font-black text-dark mb-6">شبکه‌های اجتماعی</h5>
+                <div class="flex gap-4">
+                    <a href="#" class="w-12 h-12 bg-secondary rounded-2xl flex items-center justify-center text-primary border border-sky-100 hover:bg-primary hover:text-white transition-all"><i class="ph-fill ph-instagram-logo text-2xl"></i></a>
+                    <a href="#" class="w-12 h-12 bg-secondary rounded-2xl flex items-center justify-center text-primary border border-sky-100 hover:bg-primary hover:text-white transition-all"><i class="ph-fill ph-telegram-logo text-2xl"></i></a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

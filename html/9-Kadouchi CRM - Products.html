@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت محصولات | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans h-screen w-full overflow-hidden flex selection:bg-sky-100 selection:text-primary">
+
+    <!-- Sidebar -->
+    <aside class="w-[280px] bg-white border-l border-sky-100 flex-col hidden md:flex z-20 shadow-sm relative">
+        <div class="h-[80px] flex items-center px-8 border-b border-sky-100">
+            <div class="flex items-center gap-3 text-2xl font-black text-primary tracking-tight">
+                <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-storefront text-xl"></i></div>
+                پنل فروشگاه
+            </div>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <a href="Kadouchi CRM - Shop Dashboard__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-squares-four text-xl"></i> پیشخوان
+            </a>
+            <a href="Kadouchi CRM - Products__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-black bg-primary text-white rounded-2xl shadow-lg shadow-sky-500/20 transition-all">
+                <i class="ph ph-package text-xl"></i> محصولات
+            </a>
+            <a href="Kadouchi CRM - Orders__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-shopping-bag text-xl"></i> سفارشات
+            </a>
+            <a href="Kadouchi CRM - Inbox__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-chat-circle-dots text-xl"></i> صندوق پیام‌ها
+            </a>
+            <a href="Kadouchi CRM - Leads__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-funnel text-xl"></i> سرنخ‌های فروش
+            </a>
+            <a href="Kadouchi CRM - Customers__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-users text-xl"></i> مشتریان
+            </a>
+            <div class="pt-6 mt-6 border-t border-sky-50">
+                <a href="#" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                    <i class="ph ph-gear text-xl"></i> تنظیمات فروشگاه
+                </a>
+            </div>
+        </nav>
+        <div class="p-4 border-t border-sky-100">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-sky-50 cursor-pointer border border-sky-100">
+                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-4.jpg" alt="Shop Owner" class="w-10 h-10 rounded-xl object-cover">
+                <div class="flex-1 min-w-0 text-right">
+                    <p class="text-xs font-black text-dark truncate">بوتیک الگانس</p>
+                    <p class="text-[10px] text-dark/50 truncate">پلان حرفه‌ای</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col min-w-0 bg-secondary overflow-hidden">
+        <header class="h-[80px] bg-white border-b border-sky-100 flex items-center justify-between px-8 shrink-0 z-10">
+            <div class="flex items-center gap-6">
+                <div>
+                    <h1 class="text-xl font-black text-dark leading-tight">انبار و محصولات</h1>
+                    <p class="text-[11px] text-dark/50 font-bold">مدیریت موجودی و یکپارچه‌سازی با ویترین اینستاگرام</p>
+                </div>
+                <div class="h-8 w-px bg-sky-100 hidden lg:block"></div>
+                <div class="hidden lg:flex items-center gap-3">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] font-black text-dark/30 uppercase">ارزش کل انبار</span>
+                        <span class="text-sm font-black text-primary">۴۸۵,۰۰۰,۰۰۰ تومان</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button class="flex items-center gap-2 px-6 py-2.5 text-sm font-black text-white bg-primary hover:bg-dark rounded-xl transition-all shadow-lg shadow-sky-500/20">
+                    <i class="ph ph-plus text-lg"></i> افزودن محصول جدید
+                </button>
+            </div>
+        </header>
+
+        <!-- Product Grid & Management -->
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-[1400px] mx-auto space-y-8">
+                
+                <!-- Search and Categories -->
+                <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div class="flex items-center gap-4 w-full md:w-auto">
+                        <div class="relative flex-1 md:w-80">
+                            <i class="ph ph-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-dark/30"></i>
+                            <input type="text" placeholder="نام محصول یا کد کالا..." class="w-full bg-white border border-sky-100 rounded-2xl pr-12 pl-4 py-3 text-xs font-bold text-dark focus:ring-2 focus:ring-primary/20 outline-none transition-all shadow-sm">
+                        </div>
+                        <button class="p-3 bg-white border border-sky-100 rounded-2xl text-dark/40 hover:text-primary transition-all shadow-sm">
+                            <i class="ph ph-sliders-horizontal text-xl"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-sky-100 shadow-sm overflow-x-auto no-scrollbar w-full md:w-auto">
+                        <button class="px-6 py-2 bg-primary text-white text-xs font-black rounded-xl whitespace-nowrap">همه</button>
+                        <button class="px-6 py-2 text-dark/40 hover:bg-sky-50 text-xs font-black rounded-xl transition-all whitespace-nowrap">ساعت</button>
+                        <button class="px-6 py-2 text-dark/40 hover:bg-sky-50 text-xs font-black rounded-xl transition-all whitespace-nowrap">کتانی</button>
+                        <button class="px-6 py-2 text-dark/40 hover:bg-sky-50 text-xs font-black rounded-xl transition-all whitespace-nowrap">اکسسوری</button>
+                        <button class="px-6 py-2 text-dark/40 hover:bg-sky-50 text-xs font-black rounded-xl transition-all whitespace-nowrap">پک مراقبتی</button>
+                    </div>
+                </div>
+
+                <!-- Product Table -->
+                <div class="bg-white border border-sky-100 rounded-[32px] shadow-sm overflow-hidden">
+                    <table class="w-full text-right border-collapse">
+                        <thead class="bg-sky-50/50 text-[10px] font-black text-dark/40 uppercase">
+                            <tr>
+                                <th class="px-8 py-5 border-b border-sky-50">نام و تصویر محصول</th>
+                                <th class="px-8 py-5 border-b border-sky-50">دسته‌بندی</th>
+                                <th class="px-8 py-5 border-b border-sky-50">قیمت (تومان)</th>
+                                <th class="px-8 py-5 border-b border-sky-50">موجودی انبار</th>
+                                <th class="px-8 py-5 border-b border-sky-50">وضعیت اینستاگرام</th>
+                                <th class="px-8 py-5 border-b border-sky-50 text-center">عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm font-bold divide-y divide-sky-50">
+                            <tr class="hover:bg-sky-50/30 transition-all group">
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-4">
+                                        <img class="w-14 h-14 rounded-2xl object-cover ring-2 ring-sky-50" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_9082e7e803_02390eac9415d144.png" alt="luxury rose gold watch on a aesthetic minimal background" />
+                                        <div>
+                                            <p class="text-sm font-black text-dark group-hover:text-primary transition-all">ساعت رزگلد الیت</p>
+                                            <span class="text-[10px] text-dark/40">کد: WATCH-001</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5"><span class="px-3 py-1 bg-sky-50 text-primary rounded-full text-[10px] font-black">ساعت</span></td>
+                                <td class="px-8 py-5 font-black">۳,۴۵۰,۰۰۰</td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-1.5 bg-sky-50 rounded-full overflow-hidden">
+                                            <div class="h-full bg-emerald-500" style="width: 85%"></div>
+                                        </div>
+                                        <span class="text-xs">۴۲ عدد</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-emerald-500">
+                                        <i class="ph-fill ph-check-circle"></i>
+                                        <span class="text-[10px] font-black">متصل و فعال</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button class="w-9 h-9 rounded-xl bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                        <button class="w-9 h-9 rounded-xl bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-copy"></i></button>
+                                        <button class="w-9 h-9 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all"><i class="ph-bold ph-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-sky-50/30 transition-all group">
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-4">
+                                        <img class="w-14 h-14 rounded-2xl object-cover ring-2 ring-sky-50" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_ce629dc4b9_14b0ee6ca6efa8af.png" alt="modern white minimalist sneakers in a bright studio" />
+                                        <div>
+                                            <p class="text-sm font-black text-dark group-hover:text-primary transition-all">کتانی مینیمال</p>
+                                            <span class="text-[10px] text-dark/40">کد: SHOE-042</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5"><span class="px-3 py-1 bg-sky-50 text-primary rounded-full text-[10px] font-black">کتانی</span></td>
+                                <td class="px-8 py-5 font-black">۲,۸۰۰,۰۰۰</td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-1.5 bg-sky-50 rounded-full overflow-hidden">
+                                            <div class="h-full bg-amber-500" style="width: 15%"></div>
+                                        </div>
+                                        <span class="text-xs text-amber-600">۸ عدد</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-emerald-500">
+                                        <i class="ph-fill ph-check-circle"></i>
+                                        <span class="text-[10px] font-black">متصل و فعال</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button class="w-9 h-9 rounded-xl bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                        <button class="w-9 h-9 rounded-xl bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-copy"></i></button>
+                                        <button class="w-9 h-9 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all"><i class="ph-bold ph-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-sky-50/30 transition-all group">
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-4">
+                                        <img class="w-14 h-14 rounded-2xl object-cover ring-2 ring-sky-50" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_54895c7382_7756927eaced94c4.png" alt="premium skincare kit packaging in a soft light" />
+                                        <div>
+                                            <p class="text-sm font-black text-dark group-hover:text-primary transition-all">پک مراقبت پوست</p>
+                                            <span class="text-[10px] text-dark/40">کد: SKIN-882</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5"><span class="px-3 py-1 bg-sky-50 text-primary rounded-full text-[10px] font-black">بهداشتی</span></td>
+                                <td class="px-8 py-5 font-black">۸۹۰,۰۰۰</td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-1.5 bg-sky-50 rounded-full overflow-hidden">
+                                            <div class="h-full bg-rose-500" style="width: 2%"></div>
+                                        </div>
+                                        <span class="text-xs text-rose-500">اتمام موجودی</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-dark/30">
+                                        <i class="ph-bold ph-warning-circle"></i>
+                                        <span class="text-[10px] font-black">عدم نمایش خودکار</span>
+                                    </div>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button class="w-9 h-9 rounded-xl bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-pencil-simple"></i></button>
+                                        <button class="w-9 h-9 rounded-xl bg-sky-50 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all"><i class="ph-bold ph-copy"></i></button>
+                                        <button class="w-9 h-9 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all"><i class="ph-bold ph-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="px-8 py-6 border-t border-sky-50 flex items-center justify-between">
+                        <p class="text-xs font-bold text-dark/40">نمایش ۳ از ۱۸۵ محصول</p>
+                        <div class="flex items-center gap-2">
+                            <button class="w-10 h-10 rounded-xl border border-sky-100 flex items-center justify-center text-dark/30 hover:border-primary hover:text-primary transition-all"><i class="ph-bold ph-caret-right"></i></button>
+                            <button class="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center text-xs font-black shadow-lg shadow-sky-500/20">۱</button>
+                            <button class="w-10 h-10 rounded-xl border border-sky-100 flex items-center justify-center text-xs font-black text-dark/40">۲</button>
+                            <button class="w-10 h-10 rounded-xl border border-sky-100 flex items-center justify-center text-dark/30 hover:border-primary hover:text-primary transition-all"><i class="ph-bold ph-caret-left"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Low Stock Alert -->
+                <div class="bg-amber-50 border border-amber-200 rounded-[32px] p-8 flex items-center justify-between">
+                    <div class="flex items-center gap-6">
+                        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center border border-amber-200 shadow-sm"><i class="ph-fill ph-warning text-3xl"></i></div>
+                        <div>
+                            <h3 class="text-lg font-black text-amber-900 mb-1">هشدار کاهش موجودی</h3>
+                            <p class="text-xs font-bold text-amber-700/70">۱۲ محصول در آستانه اتمام موجودی هستند. پیشنهاد می‌شود برای جلوگیری از توقف فروش، انبار را شارژ کنید.</p>
+                        </div>
+                    </div>
+                    <button class="px-8 py-4 bg-amber-600 text-white font-black rounded-2xl shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition-all">لیست محصولات کم‌موجود</button>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

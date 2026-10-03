@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صندوق پیام‌ها | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans flex flex-col h-screen overflow-hidden selection:bg-sky-100 selection:text-primary">
+
+    <!-- Header -->
+    <header class="h-[70px] bg-white border-b border-sky-100 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
+        <div class="flex items-center gap-3">
+            <button class="md:hidden text-dark/60"><i class="ph ph-list text-2xl"></i></button>
+            <h1 class="text-lg font-black text-dark">پیام‌های اینستاگرام</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <button class="w-10 h-10 flex items-center justify-center text-dark/40 hover:text-primary transition-all"><i class="ph ph-magnifying-glass text-xl"></i></button>
+            <button class="w-10 h-10 flex items-center justify-center text-dark/40 hover:text-primary transition-all"><i class="ph ph-funnel text-xl"></i></button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Conversations List (Always visible or toggleable on mobile) -->
+        <section id="chat-list" class="flex-1 md:w-[320px] md:flex-none bg-white border-l border-sky-100 flex flex-col overflow-hidden">
+            <div class="flex gap-2 p-4 bg-sky-50/30">
+                <button class="flex-1 py-2 text-[10px] font-black bg-white text-primary border border-sky-100 rounded-xl shadow-sm">همه</button>
+                <button class="flex-1 py-2 text-[10px] font-bold text-dark/40 hover:bg-white transition-all rounded-xl border border-transparent">خوانده نشده</button>
+            </div>
+            <div class="flex-1 overflow-y-auto divide-y divide-sky-50">
+                <!-- Chat Item -->
+                <div class="p-4 bg-sky-50/50 border-r-4 border-primary flex items-center gap-3 cursor-pointer">
+                    <div class="relative">
+                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" class="w-12 h-12 rounded-2xl object-cover ring-2 ring-white" alt="Sara">
+                        <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-pink-500 rounded-lg flex items-center justify-center text-white border-2 border-white shadow-sm">
+                            <i class="ph-fill ph-instagram-logo text-[10px]"></i>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-sm font-black text-dark truncate">سارا احمدی</p>
+                            <span class="text-[9px] text-primary font-bold">همین حالا</span>
+                        </div>
+                        <p class="text-[11px] text-primary font-bold truncate">بله موجود هست، بفرستم خدمتتون؟</p>
+                    </div>
+                </div>
+                <!-- Chat Item -->
+                <div class="p-4 hover:bg-sky-50/30 transition-all flex items-center gap-3 cursor-pointer group">
+                    <div class="relative">
+                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg" class="w-12 h-12 rounded-2xl object-cover" alt="User">
+                        <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-pink-500 rounded-lg flex items-center justify-center text-white border-2 border-white">
+                            <i class="ph-fill ph-instagram-logo text-[10px]"></i>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-sm font-black text-dark group-hover:text-primary transition-all truncate">علی رضایی</p>
+                            <span class="text-[9px] text-dark/30 font-bold">۱۰ دقیقه پیش</span>
+                        </div>
+                        <p class="text-[11px] text-dark/50 font-medium truncate">ممنون از راهنمایی‌تون، فردا واریز می‌کنم.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chat Area (Hidden on mobile if list is visible) -->
+        <section id="chat-window" class="hidden md:flex flex-[2] flex-col bg-white overflow-hidden border-l border-sky-100">
+             <!-- Placeholder for mobile/tablet behavior - normally this would be a separate screen or SPA route -->
+             <div class="flex flex-col h-full items-center justify-center text-center p-8 bg-sky-50/20">
+                 <div class="w-20 h-20 bg-white rounded-[32px] flex items-center justify-center text-primary shadow-sm mb-4 border border-sky-100"><i class="ph-fill ph-chat-circle-dots text-4xl"></i></div>
+                 <p class="text-sm font-black text-dark">یک گفتگو را انتخاب کنید</p>
+                 <p class="text-xs text-dark/40 font-bold mt-1">برای شروع مدیریت مشتری و هوش مصنوعی روی گفتگو کلیک کنید.</p>
+             </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="h-[75px] bg-white border-t border-sky-100 fixed bottom-0 left-0 right-0 flex items-center justify-around px-6 z-20 pb-safe shadow-sm">
+        <a href="Kadouchi CRM - Shop Dashboard__mobile.html" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-squares-four text-2xl"></i>
+            <span class="text-[10px] font-bold">پیشخوان</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-package text-2xl"></i>
+            <span class="text-[10px] font-bold">محصولات</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-primary">
+            <i class="ph-fill ph-chat-circle-dots text-2xl"></i>
+            <span class="text-[10px] font-black">پیام‌ها</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-gear text-2xl"></i>
+            <span class="text-[10px] font-bold">تنظیمات</span>
+        </a>
+    </nav>
+</body>
+</html>

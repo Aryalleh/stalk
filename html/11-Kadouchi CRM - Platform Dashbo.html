@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آمار پلتفرم | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans flex flex-col h-screen overflow-hidden selection:bg-sky-100 selection:text-primary">
+
+    <!-- Header -->
+    <header class="h-[70px] bg-white border-b border-sky-100 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-sparkle text-lg"></i></div>
+            <h1 class="text-lg font-black text-dark leading-tight">پلتفرم کادوچی</h1>
+        </div>
+        <button class="w-10 h-10 flex items-center justify-center text-dark/60 bg-sky-50 border border-sky-100 rounded-xl relative">
+            <i class="ph ph-bell text-xl"></i>
+            <span class="absolute top-2.5 left-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+        </button>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto pb-24">
+        <div class="p-6 space-y-6">
+            <!-- Summary Stats (Slider for Mobile) -->
+            <div class="flex gap-4 overflow-x-auto no-scrollbar pb-2 -mx-6 px-6">
+                <div class="min-w-[200px] bg-white border border-sky-100 rounded-[24px] p-5 shadow-sm shrink-0">
+                    <p class="text-[10px] font-black text-dark/30 uppercase mb-1">فروش کل</p>
+                    <p class="text-xl font-black text-dark">۱.۲ میلیارد</p>
+                    <p class="text-[9px] font-bold text-emerald-500 mt-2 flex items-center gap-1"><i class="ph-bold ph-arrow-up-right"></i> ۱۲٪ رشد</p>
+                </div>
+                <div class="min-w-[200px] bg-white border border-sky-100 rounded-[24px] p-5 shadow-sm shrink-0">
+                    <p class="text-[10px] font-black text-dark/30 uppercase mb-1">اتوماسیون</p>
+                    <p class="text-xl font-black text-dark">۸۵۴ مورد</p>
+                    <p class="text-[9px] font-bold text-emerald-500 mt-2">+۳۸ فروشگاه</p>
+                </div>
+                <div class="min-w-[200px] bg-white border border-sky-100 rounded-[24px] p-5 shadow-sm shrink-0">
+                    <p class="text-[10px] font-black text-dark/30 uppercase mb-1">پاسخ هوشمند</p>
+                    <p class="text-xl font-black text-dark">۴۲.۹ هزار</p>
+                    <p class="text-[9px] text-dark/40 mt-2 font-bold">سرعت عالی</p>
+                </div>
+            </div>
+
+            <!-- Main Chart Area -->
+            <div class="bg-white border border-sky-100 rounded-[28px] p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-sm font-black text-dark">تعامل شبکه</h2>
+                    <select class="bg-sky-50 border-none text-[10px] font-black text-primary px-3 py-1.5 rounded-lg outline-none">
+                        <option>۳۰ روز اخیر</option>
+                        <option>۷ روز اخیر</option>
+                    </select>
+                </div>
+                <div id="mobile-chart" class="h-[200px] w-full"></div>
+            </div>
+
+            <!-- Live Feed -->
+            <div class="bg-white border border-sky-100 rounded-[28px] shadow-sm flex flex-col overflow-hidden">
+                <div class="px-6 py-5 border-b border-sky-50 flex items-center justify-between bg-sky-50/30">
+                    <h2 class="text-sm font-black text-dark">فعالیت‌های زنده</h2>
+                    <span class="text-[9px] font-black text-emerald-500 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> زنده</span>
+                </div>
+                <div class="divide-y divide-sky-50">
+                    <div class="p-5 flex gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-sky-50 text-primary flex items-center justify-center shrink-0 border border-sky-100"><i class="ph-fill ph-comment text-lg"></i></div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-dark leading-snug">پاسخ هوشمند ارسال شد</p>
+                            <p class="text-[9px] text-dark/40 mt-1 font-bold">۲ دقیقه پیش · بوتیک الگانس</p>
+                        </div>
+                    </div>
+                    <div class="p-5 flex gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0 border border-emerald-100"><i class="ph-fill ph-shopping-cart text-lg"></i></div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-dark leading-snug">ثبت سفارش ۴.۲ م ت</p>
+                            <p class="text-[9px] text-dark/40 mt-1 font-bold">۹ دقیقه پیش · گالری آریا</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="h-[75px] bg-white border-t border-sky-100 fixed bottom-0 left-0 right-0 flex items-center justify-around px-6 z-20 pb-safe">
+        <a href="#" class="flex flex-col items-center gap-1 text-primary">
+            <i class="ph-fill ph-chart-line-up text-2xl"></i>
+            <span class="text-[10px] font-black">آمار</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-storefront text-2xl"></i>
+            <span class="text-[10px] font-bold">فروشگاه‌ها</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-chat-teardrop-dots text-2xl"></i>
+            <span class="text-[10px] font-bold">پیام‌ها</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-gear text-2xl"></i>
+            <span class="text-[10px] font-bold">تنظیمات</span>
+        </a>
+    </nav>
+
+    <script src="https://cdn.plot.ly/plotly-3.1.1.min.js"></script>
+    <script>
+        window.addEventListener('load', function() {
+            try {
+                const labels = Array.from({length: 15}, (_, i) => `${i + 15}`);
+                const data = Array.from({length: 15}, () => Math.floor(Math.random() * 100) + 50);
+
+                const trace = {
+                    x: labels,
+                    y: data,
+                    type: 'scatter',
+                    mode: 'lines',
+                    fill: 'tozeroy',
+                    line: { color: '#0ea5e9', width: 3, shape: 'spline' },
+                    fillcolor: 'rgba(14, 165, 233, 0.1)'
+                };
+
+                const layout = {
+                    font: { family: 'Vazirmatn', size: 10 },
+                    margin: { t: 5, r: 5, b: 20, l: 20 },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    showlegend: false,
+                    xaxis: { showgrid: false, zeroline: false },
+                    yaxis: { showgrid: true, gridcolor: '#f0f9ff', zeroline: false }
+                };
+
+                Plotly.newPlot('mobile-chart', [trace], layout, {responsive: true, displayModeBar: false});
+            } catch(e) { console.error(e); }
+        });
+    </script>
+</body>
+</html>

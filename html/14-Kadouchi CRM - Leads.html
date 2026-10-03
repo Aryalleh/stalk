@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت سرنخ‌ها | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans flex flex-col h-screen overflow-hidden selection:bg-sky-100 selection:text-primary">
+
+    <!-- Header -->
+    <header class="h-[70px] bg-white border-b border-sky-100 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
+        <h1 class="text-lg font-black text-dark">قیف فروش (Leads)</h1>
+        <button class="w-10 h-10 flex items-center justify-center text-white bg-primary rounded-xl shadow-lg shadow-sky-500/20">
+            <i class="ph ph-plus text-xl"></i>
+        </button>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+        
+        <!-- Stage Tabs -->
+        <div class="flex gap-2 p-4 bg-white border-b border-sky-100 overflow-x-auto no-scrollbar shrink-0">
+            <button class="px-5 py-2 bg-primary text-white text-[10px] font-black rounded-xl shadow-md whitespace-nowrap">پرسش اولیه (۴)</button>
+            <button class="px-5 py-2 bg-sky-50 text-dark/40 text-[10px] font-bold rounded-xl whitespace-nowrap">مذاکره (۸)</button>
+            <button class="px-5 py-2 bg-sky-50 text-dark/40 text-[10px] font-bold rounded-xl whitespace-nowrap">در انتظار پرداخت (۳)</button>
+        </div>
+
+        <!-- Leads List for Active Stage -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+            <!-- Lead Card -->
+            <div class="bg-white p-5 rounded-[28px] border border-sky-100 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" class="w-10 h-10 rounded-xl object-cover" alt="User">
+                        <div>
+                            <p class="text-xs font-black text-dark">سارا احمدی</p>
+                            <p class="text-[9px] text-dark/40 font-bold">@sara_ahmadi</p>
+                        </div>
+                    </div>
+                    <div class="w-8 h-8 rounded-lg bg-pink-50 text-pink-500 flex items-center justify-center border border-pink-100">
+                        <i class="ph-fill ph-instagram-logo text-sm"></i>
+                    </div>
+                </div>
+                <p class="text-[11px] font-bold text-dark/70 leading-relaxed mb-4">پرسیده: "قیمت ساعت رزگلد الیت چنده؟"</p>
+                <div class="flex items-center justify-between pt-3 border-t border-sky-50">
+                    <span class="px-3 py-1 bg-sky-50 text-primary text-[9px] font-black rounded-lg">ساعت</span>
+                    <span class="text-[9px] text-dark/30 font-bold">۲ ساعت پیش</span>
+                </div>
+            </div>
+
+            <!-- Lead Card -->
+            <div class="bg-white p-5 rounded-[28px] border border-sky-100 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-7.jpg" class="w-10 h-10 rounded-xl object-cover" alt="User">
+                        <div>
+                            <p class="text-xs font-black text-dark">مریم زارعی</p>
+                            <p class="text-[9px] text-dark/40 font-bold">@mary_z</p>
+                        </div>
+                    </div>
+                    <div class="w-8 h-8 rounded-lg bg-pink-50 text-pink-500 flex items-center justify-center border border-pink-100">
+                        <i class="ph-fill ph-instagram-logo text-sm"></i>
+                    </div>
+                </div>
+                <p class="text-[11px] font-bold text-dark/70 leading-relaxed mb-4">در مورد موجودی کتانی سوال کرده.</p>
+                <div class="flex items-center justify-between pt-3 border-t border-sky-50">
+                    <span class="px-3 py-1 bg-amber-50 text-amber-600 text-[9px] font-black rounded-lg">فوری</span>
+                    <span class="text-[9px] text-dark/30 font-bold">۵ ساعت پیش</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="h-[75px] bg-white border-t border-sky-100 fixed bottom-0 left-0 right-0 flex items-center justify-around px-6 z-20 pb-safe shadow-sm">
+        <a href="Kadouchi CRM - Shop Dashboard__mobile.html" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-squares-four text-2xl"></i>
+            <span class="text-[10px] font-bold">پیشخوان</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-primary">
+            <i class="ph-fill ph-funnel text-2xl"></i>
+            <span class="text-[10px] font-black">سرنخ‌ها</span>
+        </a>
+        <a href="Kadouchi CRM - Inbox__mobile.html" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-chat-circle-dots text-2xl"></i>
+            <span class="text-[10px] font-bold">پیام‌ها</span>
+        </a>
+        <a href="#" class="flex flex-col items-center gap-1 text-dark/30">
+            <i class="ph ph-gear text-2xl"></i>
+            <span class="text-[10px] font-bold">تنظیمات</span>
+        </a>
+    </nav>
+</body>
+</html>

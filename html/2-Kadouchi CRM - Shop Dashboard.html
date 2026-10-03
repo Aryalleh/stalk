@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت فروشگاه | کادوچی</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Vazirmatn', 'sans-serif'] },
+                    colors: {
+                        primary: '#0ea5e9',
+                        secondary: '#f0f9ff',
+                        accent: '#38bdf8',
+                        dark: '#0c4a6e',
+                        light: '#ffffff',
+                        graytext: '#64748b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e0f2fe; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-secondary text-dark font-sans h-screen w-full overflow-hidden flex selection:bg-sky-100 selection:text-primary">
+
+    <!-- Sidebar (Desktop) -->
+    <aside class="w-[280px] bg-white border-l border-sky-100 flex-col hidden md:flex z-20 shadow-sm relative shrink-0">
+        <div class="h-[80px] flex items-center px-8 border-b border-sky-100">
+            <div class="flex items-center gap-3 text-2xl font-black text-primary tracking-tight">
+                <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="ph-fill ph-storefront text-xl"></i></div>
+                پنل فروشگاه
+            </div>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <a href="Kadouchi CRM - Shop Dashboard__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-black bg-primary text-white rounded-2xl shadow-lg shadow-sky-500/20 transition-all">
+                <i class="ph ph-squares-four text-xl"></i> پیشخوان
+            </a>
+            <a href="Kadouchi CRM - Products__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-package text-xl"></i> محصولات
+            </a>
+            <a href="Kadouchi CRM - Orders__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-shopping-bag text-xl"></i> سفارشات
+            </a>
+            <a href="Kadouchi CRM - Inbox__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                <i class="ph ph-chat-circle-dots text-xl"></i> صندوق پیام‌ها
+            </a>
+            <div class="pt-6 mt-6 border-t border-sky-50">
+                <a href="Kadouchi CRM - Automation__desktop.html" class="flex items-center gap-4 px-4 py-3 text-sm font-bold text-dark/60 rounded-2xl hover:bg-secondary hover:text-primary transition-all group">
+                    <i class="ph ph-gear text-xl"></i> تنظیمات هوشمند
+                </a>
+            </div>
+        </nav>
+        <div class="p-4 border-t border-sky-100">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-sky-50 cursor-pointer border border-sky-100">
+                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-4.jpg" alt="Shop Owner" class="w-10 h-10 rounded-xl object-cover">
+                <div class="flex-1 min-w-0 text-right">
+                    <p class="text-xs font-black text-dark truncate">بوتیک الگانس</p>
+                    <p class="text-[10px] text-dark/50 truncate">پلان حرفه‌ای</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col min-w-0 bg-secondary overflow-hidden">
+        <header class="h-[80px] bg-white border-b border-sky-100 flex items-center justify-between px-8 shrink-0 z-10">
+            <div>
+                <h1 class="text-xl font-black text-dark leading-tight">مدیریت بوتیک الگانس</h1>
+                <p class="text-[11px] text-dark/50 font-bold">وضعیت لحظه‌ای فروشگاه اینستاگرامی شما</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <button class="flex items-center gap-2 px-6 py-2.5 text-sm font-black text-white bg-primary hover:bg-dark rounded-xl transition-all shadow-lg shadow-sky-500/20">
+                    <i class="ph ph-plus text-lg"></i> محصول جدید
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 md:p-8">
+            <div class="max-w-[1400px] mx-auto space-y-8">
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white border border-sky-100 rounded-[32px] p-8 shadow-sm group hover:border-primary/30 transition-all">
+                        <p class="text-xs font-black text-dark/40 uppercase mb-2">فروش امروز</p>
+                        <p class="text-4xl font-black text-dark group-hover:text-primary transition-colors">۱۸,۵۰۰,۰۰۰ <span class="text-sm">تومان</span></p>
+                        <div class="mt-4 h-1.5 w-full bg-sky-50 rounded-full overflow-hidden">
+                            <div class="h-full bg-primary" style="width: 75%"></div>
+                        </div>
+                    </div>
+                    <div class="bg-white border border-sky-100 rounded-[32px] p-8 shadow-sm">
+                        <p class="text-xs font-black text-dark/40 uppercase mb-2">سفارشات جدید</p>
+                        <p class="text-4xl font-black text-dark">۱۲ <span class="text-sm">عدد</span></p>
+                        <p class="text-[10px] font-bold text-emerald-500 mt-2 flex items-center gap-1"><i class="ph-bold ph-arrow-up-right"></i> ۴ مورد جدید از DM هوشمند</p>
+                    </div>
+                    <div class="bg-white border border-sky-100 rounded-[32px] p-8 shadow-sm">
+                        <p class="text-xs font-black text-dark/40 uppercase mb-2">تعامل هوشمند</p>
+                        <p class="text-4xl font-black text-dark">۱۴۸ <span class="text-sm">پاسخ</span></p>
+                        <p class="text-[10px] text-dark/40 mt-2 font-bold">۹۵٪ دقت تشخیص پلتفرم</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Orders Table -->
+                    <div class="bg-white border border-sky-100 rounded-[32px] shadow-sm overflow-hidden flex flex-col">
+                        <div class="px-8 py-6 border-b border-sky-50 flex items-center justify-between bg-sky-50/20">
+                            <h2 class="text-lg font-black text-dark">آخرین سفارشات</h2>
+                            <a href="Kadouchi CRM - Orders__desktop.html" class="text-xs font-black text-primary hover:underline">مشاهده همه</a>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-right border-collapse">
+                                <thead class="bg-sky-50/50 text-[10px] font-black text-dark/40 uppercase">
+                                    <tr>
+                                        <th class="px-8 py-4">مشتری</th>
+                                        <th class="px-8 py-4">محصول</th>
+                                        <th class="px-8 py-4">مبلغ</th>
+                                        <th class="px-8 py-4">وضعیت</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sm font-bold divide-y divide-sky-50">
+                                    <tr class="hover:bg-sky-50/30 transition-all cursor-pointer">
+                                        <td class="px-8 py-5">سارا احمدی</td>
+                                        <td class="px-8 py-5 text-dark/60">ساعت رزگلد الیت</td>
+                                        <td class="px-8 py-5">۳,۴۵۰,۰۰۰</td>
+                                        <td class="px-8 py-5"><span class="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full text-[10px] font-black">ارسال شده</span></td>
+                                    </tr>
+                                    <tr class="hover:bg-sky-50/30 transition-all cursor-pointer">
+                                        <td class="px-8 py-5">محمد رضایی</td>
+                                        <td class="px-8 py-5 text-dark/60">کتانی مینیمال</td>
+                                        <td class="px-8 py-5">۲,۸۰۰,۰۰۰</td>
+                                        <td class="px-8 py-5"><span class="px-3 py-1 bg-amber-100 text-amber-600 rounded-full text-[10px] font-black">در انتظار</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Automation Log -->
+                    <div class="bg-white border border-sky-100 rounded-[32px] shadow-sm flex flex-col">
+                        <div class="px-8 py-6 border-b border-sky-50 flex items-center justify-between bg-sky-50/20">
+                            <h2 class="text-lg font-black text-dark">گزارش هوشمند اینستاگرام</h2>
+                            <i class="ph ph-instagram-logo text-2xl text-primary"></i>
+                        </div>
+                        <div class="flex-1 overflow-y-auto divide-y divide-sky-50">
+                            <div class="px-8 py-5 flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-sky-50 text-primary flex items-center justify-center border border-sky-100 shadow-sm"><i class="ph ph-chat-teardrop text-xl"></i></div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-bold text-dark">ارسال خودکار لینک پرداخت</p>
+                                    <p class="text-[10px] text-dark/40 font-bold mt-1">کلمه کلیدی: "قیمت" به @sara</p>
+                                </div>
+                                <span class="text-[10px] font-bold text-dark/30 whitespace-nowrap">۵ دقیقه پیش</span>
+                            </div>
+                            <div class="px-8 py-5 flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-sky-50 text-primary flex items-center justify-center border border-sky-100 shadow-sm"><i class="ph ph-heart text-xl"></i></div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-bold text-dark">لایک خودکار کامنت</p>
+                                    <p class="text-[10px] text-dark/40 font-bold mt-1">تشخیص احساس: مثبت</p>
+                                </div>
+                                <span class="text-[10px] font-bold text-dark/30 whitespace-nowrap">۱۲ دقیقه پیش</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Growth Insight Card -->
+                <div class="bg-dark text-white rounded-[32px] p-8 flex items-center justify-between shadow-2xl shadow-sky-900/20 overflow-hidden relative group">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-primary/30 transition-all"></div>
+                    <div class="relative z-10 flex items-center gap-8">
+                        <div class="w-16 h-16 bg-white/10 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/20"><i class="ph-fill ph-rocket-launch text-3xl text-primary"></i></div>
+                        <div>
+                            <h3 class="text-xl font-black mb-2">پیشنهاد رشد کادوچی</h3>
+                            <p class="text-xs font-bold text-white/50">محصول "ساعت رزگلد" در DMها بسیار پرسیده شده. با یک استوری تخفیف‌دار فروش آن را دوبرابر کنید.</p>
+                        </div>
+                    </div>
+                    <button class="relative z-10 px-8 py-4 bg-primary text-white font-black rounded-2xl shadow-lg shadow-sky-500/20 hover:bg-white hover:text-primary transition-all">اجرای کمپین سریع</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

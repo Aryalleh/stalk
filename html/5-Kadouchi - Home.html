@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>کادوچی - خانه</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <style>
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: #f0f9ff;
+            color: #0c4a6e;
+        }
+        .masonry-container {
+            display: flex;
+            gap: 12px;
+            padding: 0 16px;
+        }
+        .masonry-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header & Search -->
+    <header id="header" class="sticky top-0 z-50 bg-white/90 backdrop-blur-md px-4 py-4 border-b border-sky-100">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="relative flex-1">
+                <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-sky-400"></i>
+                <input type="text" placeholder="جستجو در بین آرزوها و فروشگاه‌ها..." class="w-full bg-sky-50/50 border border-sky-100 rounded-2xl py-3 pr-12 pl-4 text-sm focus:ring-2 focus:ring-sky-500/20 outline-none transition-all">
+            </div>
+            <button class="w-12 h-12 flex items-center justify-center bg-sky-50/50 border border-sky-100 rounded-2xl text-sky-500">
+                <i class="fa-solid fa-sliders"></i>
+            </button>
+        </div>
+
+        <!-- Categories -->
+        <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+            <button class="px-5 py-2 bg-[#0ea5e9] text-white rounded-full text-xs font-bold whitespace-nowrap shadow-lg shadow-sky-500/20">همه</button>
+            <button class="px-5 py-2 bg-white text-sky-600 border border-sky-100 rounded-full text-xs font-medium whitespace-nowrap hover:bg-sky-50 transition-colors">تکنولوژی</button>
+            <button class="px-5 py-2 bg-white text-sky-600 border border-sky-100 rounded-full text-xs font-medium whitespace-nowrap hover:bg-sky-50 transition-colors">مد و فشن</button>
+            <button class="px-5 py-2 bg-white text-sky-600 border border-sky-100 rounded-full text-xs font-medium whitespace-nowrap hover:bg-sky-50 transition-colors">خانه و دکور</button>
+            <button class="px-5 py-2 bg-white text-sky-600 border border-sky-100 rounded-full text-xs font-medium whitespace-nowrap hover:bg-sky-50 transition-colors">کتاب</button>
+        </div>
+    </header>
+
+    <main class="pb-24 pt-6">
+        <!-- Featured Banner -->
+        <section class="px-4 mb-8">
+            <div class="relative h-44 rounded-[32px] overflow-hidden group shadow-sm border border-sky-100">
+                <img class="w-full h-full object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_6795c90287_282a45d8b84492d2.png" alt="modern boutique storefront with stylish display, soft daylight, minimalist architecture, sky blue ac" />
+                <div class="absolute inset-0 bg-gradient-to-l from-sky-900/80 via-sky-900/40 to-transparent flex flex-col justify-center px-8">
+                    <span class="text-sky-300 text-[10px] font-bold uppercase tracking-wider mb-2">پیشنهاد ویژه</span>
+                    <h2 class="text-xl font-black text-white mb-1">بوتیک‌های منتخب هفته</h2>
+                    <p class="text-xs text-sky-100">کمیاب‌ترین کادوها را اینجا پیدا کنید</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feed Masonry Grid -->
+        <div class="masonry-container">
+            <!-- Column 1 -->
+            <div class="masonry-column">
+                <div class="group relative bg-white rounded-[24px] overflow-hidden shadow-sm border border-sky-100 transition-transform active:scale-95">
+                    <img class="w-full h-56 object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_8ed33cab89_185e068234327c57.png" alt="minimalist rose gold watch on clean light background, luxury product photography, soft sky blue shad" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-sky-900/60 via-transparent to-transparent"></div>
+                    
+                    <button class="absolute top-3 left-3 w-8 h-8 rounded-full bg-white/40 backdrop-blur-md text-sky-900 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fa-regular fa-heart"></i>
+                    </button>
+
+                    <div class="absolute inset-x-0 bottom-0 p-4">
+                        <h3 class="text-[11px] font-bold text-white mb-0.5 truncate">ساعت رزگلد الیت</h3>
+                        <div class="text-[10px] text-sky-300 font-bold">۳,۴۵۰,۰۰۰ تومان</div>
+                    </div>
+                </div>
+
+                <div class="group relative bg-white rounded-[24px] overflow-hidden shadow-sm border border-sky-100 transition-transform active:scale-95">
+                    <img class="w-full h-40 object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_658aba7c6b_e40ea2b54fa7a051.png" alt="organic skincare bottles on marble, light blue aesthetic, minimalist packaging" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-sky-900/60 via-transparent to-transparent"></div>
+                    
+                    <div class="absolute inset-x-0 bottom-0 p-4">
+                        <h3 class="text-[11px] font-bold text-white mb-0.5 truncate">پک مراقبت پوست</h3>
+                        <div class="text-[10px] text-sky-300 font-bold">۸۹۰,۰۰۰ تومان</div>
+                    </div>
+                </div>
+                
+                <div class="group relative bg-white rounded-[24px] overflow-hidden shadow-sm border border-sky-100 transition-transform active:scale-95">
+                    <img class="w-full h-72 object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_2375b16bdc_e3e0695a8f9bddf4.png" alt="modern minimalist table lamp, warm glow, bright airy photography" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-sky-900/60 via-transparent to-transparent"></div>
+                    
+                    <div class="absolute inset-x-0 bottom-0 p-4">
+                        <h3 class="text-[11px] font-bold text-white mb-0.5 truncate">آباژور چوبی دست‌ساز</h3>
+                        <div class="text-[10px] text-sky-300 font-bold">۱,۲۰۰,۰۰۰ تومان</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Column 2 -->
+            <div class="masonry-column">
+                <div class="group relative bg-white rounded-[24px] overflow-hidden shadow-sm border border-sky-100 transition-transform active:scale-95">
+                    <img class="w-full h-72 object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_378899e5f7_404e5fa0f16d62df.png" alt="minimalist white sneakers on light sky blue background, clean fashion photography" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-sky-900/60 via-transparent to-transparent"></div>
+                    
+                    <div class="absolute inset-x-0 bottom-0 p-4">
+                        <h3 class="text-[11px] font-bold text-white mb-0.5 truncate">کتانی مینیمال کلاسیک</h3>
+                        <div class="text-[10px] text-sky-300 font-bold">۲,۸۰۰,۰۰۰ تومان</div>
+                    </div>
+                </div>
+
+                <div class="group relative bg-white rounded-[24px] overflow-hidden shadow-sm border border-sky-100 transition-transform active:scale-95">
+                    <img class="w-full h-48 object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_fca58bd3a8_ba86daa26c396dce.png" alt="stack of blue and white notebooks, creative stationery, bright atmosphere" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-sky-900/60 via-transparent to-transparent"></div>
+                    
+                    <div class="absolute inset-x-0 bottom-0 p-4">
+                        <h3 class="text-[11px] font-bold text-white mb-0.5 truncate">دفترچه یادداشت هنری</h3>
+                        <div class="text-[10px] text-sky-300 font-bold">۱۸۵,۰۰۰ تومان</div>
+                    </div>
+                </div>
+
+                <div class="group relative bg-white rounded-[24px] overflow-hidden shadow-sm border border-sky-100 transition-transform active:scale-95">
+                    <img class="w-full h-56 object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/gen_91d6dceaeb_9557c7c0a7aac5ee.png" alt="sleek wireless speaker, metallic blue finish, modern design" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-sky-900/60 via-transparent to-transparent"></div>
+                    
+                    <div class="absolute inset-x-0 bottom-0 p-4">
+                        <h3 class="text-[11px] font-bold text-white mb-0.5 truncate">اسپیکر بلوتوثی پرتابل</h3>
+                        <div class="text-[10px] text-sky-300 font-bold">۱,۴۵۰,۰۰۰ تومان</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav id="footer" class="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-sky-100 px-6 py-4 flex items-center justify-between safe-area-bottom">
+        <div class="flex flex-col items-center gap-1 text-[#0ea5e9]">
+            <i class="fa-solid fa-house text-lg"></i>
+            <span class="text-[10px] font-bold">خانه</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 text-sky-400">
+            <i class="fa-solid fa-gift text-lg"></i>
+            <span class="text-[10px]">آرزوها</span>
+        </div>
+        <div class="relative -top-6">
+            <button class="w-14 h-14 bg-[#0ea5e9] text-white rounded-full shadow-xl shadow-sky-500/30 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+        </div>
+        <div class="flex flex-col items-center gap-1 text-sky-400">
+            <i class="fa-solid fa-store text-lg"></i>
+            <span class="text-[10px]">فروشگاه</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 text-sky-400">
+            <i class="fa-solid fa-user text-lg"></i>
+            <span class="text-[10px]">پروفایل</span>
+        </div>
+    </nav>
+
+</body>
+</html>
