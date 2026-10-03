@@ -40,7 +40,8 @@ import {
   type NewOrderItem,
   type Stage,
 } from "./db";
-import { sendDm } from "./instagram";
+import { fetchAccount, listMedia, sendDm, type IgMedia } from "./instagram";
+import type { MediaLink } from "./comments";
 import {
   AutomationPage,
   CustomerPage,
@@ -50,6 +51,7 @@ import {
   MorePage,
   NewCustomerPage,
   NewSalePage,
+  ReelsPage,
   SalePage,
   SalesPage,
   TasksPage,
@@ -57,6 +59,7 @@ import {
   type Ctx,
   type CustomerStats,
   type Member,
+  type ReelItem,
   type VariantOption,
 } from "./views";
 
@@ -71,7 +74,7 @@ const shopOf = (c: C) => c.get("shop");
 
 // Automation, team and the shop's settings are for the shop's admins only.
 const adminOnly = async (c: C, next: () => Promise<void>) => (isShopAdmin(currentUser(c), shopOf(c)) ? next() : c.text("فقط مدیر فروشگاه دسترسی دارد", 403));
-for (const p of ["/panel/automation", "/panel/automation/*", "/panel/team", "/panel/team/*", "/panel/settings", "/panel/settings/*"]) crmPanel.use(p, adminOnly);
+for (const p of ["/panel/reels", "/panel/reels/*", "/panel/automation", "/panel/automation/*", "/panel/team", "/panel/team/*", "/panel/settings", "/panel/settings/*"]) crmPanel.use(p, adminOnly);
 
 async function ctx(c: C): Promise<Ctx> {
   const shop = shopOf(c);
@@ -772,21 +775,139 @@ crmPanel.post("/panel/team/:id{[0-9]+}/remove", async (c) => {
 crmPanel.post("/panel/settings/instagram", async (c) => {
   const shop = shopOf(c);
   const f = await form(c);
+  const back = (kind: "ok" | "error", msg: string) => c.redirect(`/panel/settings?ig_${kind}=${encodeURIComponent(msg)}#instagram`);
   if (f.disconnect) {
     await db(c).prepare("UPDATE shops SET ig_access_token = '' WHERE id = ?").bind(shop.id).run();
     await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, "instagram disconnected");
-    return c.redirect("/panel/settings#instagram");
+    return back("ok", "اتصال اینستاگرام قطع شد.");
   }
-  const account = (f.ig_account_id ?? "").replace(/\D/g, "").slice(0, 30);
+  let account = normalizeDigits(f.ig_account_id ?? "").replace(/\D/g, "").slice(0, 30);
+  let username = shop.ig_username;
   const token = (f.ig_access_token ?? "").replace(/\s/g, "").slice(0, 600);
-  if (account) {
-    const taken = await db(c).prepare("SELECT 1 AS x FROM shops WHERE ig_account_id = ? AND id <> ?").bind(account, shop.id).first();
-    if (taken) return c.text("این حساب اینستاگرام به فروشگاه دیگری وصل است.", 400);
+  let note = "ذخیره شد.";
+  if (token) {
+    // The token says which account it belongs to; the id webhooks use is its user_id.
+    try {
+      const me = await fetchAccount(token);
+      if (me.accountId) account = me.accountId;
+      username = me.username;
+      note = `وصل شد: @${me.username}`;
+    } catch (e) {
+      if (!account) return back("error", `توکن پذیرفته نشد: ${(e as Error).message}`);
+      note = `ذخیره شد، ولی بررسی توکن با اینستاگرام ممکن نشد (${(e as Error).message}).`;
+    }
   }
+  if (!account) return back("error", "توکن دسترسی را وارد کنید.");
+  const taken = await db(c).prepare("SELECT 1 AS x FROM shops WHERE ig_account_id = ? AND id <> ?").bind(account, shop.id).first();
+  if (taken) return back("error", "این حساب اینستاگرام به فروشگاه دیگری وصل است.");
   await db(c)
-    .prepare("UPDATE shops SET ig_account_id = ?, ig_access_token = CASE WHEN ? <> '' THEN ? ELSE ig_access_token END WHERE id = ?")
-    .bind(account, token, token, shop.id)
+    .prepare(
+      `UPDATE shops SET ig_account_id = ?1, ig_username = ?2,
+         ig_access_token = CASE WHEN ?3 <> '' THEN ?3 ELSE ig_access_token END,
+         ig_token_refreshed_at = CASE WHEN ?3 <> '' THEN ?4 ELSE ig_token_refreshed_at END
+       WHERE id = ?5`,
+    )
+    .bind(account, username, token, now(), shop.id)
     .run();
   await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, "instagram connected");
-  return c.redirect("/panel/settings#instagram");
+  return back("ok", note);
+});
+
+// ---------- reels & posts linked to products (admins) ----------
+
+crmPanel.get("/panel/reels", async (c) => {
+  const shop = shopOf(c);
+  const connected = !!(shop.ig_account_id && shop.ig_access_token);
+  let media: IgMedia[] = [];
+  let apiError: string | undefined;
+  if (connected) {
+    try {
+      media = await listMedia(shop.ig_access_token, shop.ig_account_id);
+    } catch (e) {
+      apiError = (e as Error).message;
+    }
+  }
+  const [links, stats, products, recent] = await Promise.all([
+    db(c).prepare("SELECT * FROM ig_media_links WHERE shop_id = ? ORDER BY created_at DESC").bind(shop.id).all<MediaLink>(),
+    db(c)
+      .prepare("SELECT media_id, COUNT(*) AS comments, COALESCE(SUM(action = 'dm'), 0) AS dms FROM ig_comments WHERE shop_id = ? GROUP BY media_id")
+      .bind(shop.id)
+      .all<{ media_id: string; comments: number; dms: number }>(),
+    db(c).prepare("SELECT id, title FROM products WHERE shop_id = ? ORDER BY is_active DESC, title LIMIT 300").bind(shop.id).all<{ id: number; title: string }>(),
+    db(c)
+      .prepare(
+        `SELECT k.username, k.body, k.action, k.error, k.created_at, k.customer_id, COALESCE(l.caption, '') AS caption
+         FROM ig_comments k LEFT JOIN ig_media_links l ON l.shop_id = k.shop_id AND l.media_id = k.media_id
+         WHERE k.shop_id = ? ORDER BY k.created_at DESC, k.id DESC LIMIT 30`,
+      )
+      .bind(shop.id)
+      .all<{ username: string; body: string; action: string; error: string; created_at: string; caption: string; customer_id: number | null }>(),
+  ]);
+  const byMedia = new Map(links.results.map((l) => [l.media_id, l]));
+  const counts = new Map(stats.results.map((r) => [r.media_id, r]));
+  const item = (id: string, m: Partial<IgMedia>, l: MediaLink | null): ReelItem => ({
+    mediaId: id,
+    permalink: m.permalink ?? l?.permalink ?? "",
+    caption: m.caption ?? l?.caption ?? "",
+    thumb: m.thumbnail_url ?? m.media_url ?? l?.thumb ?? "",
+    kind: m.media_product_type ?? "FEED",
+    at: m.timestamp ?? null,
+    link: l,
+    comments: counts.get(id)?.comments ?? 0,
+    dms: counts.get(id)?.dms ?? 0,
+  });
+  const items = media.map((m) => item(m.id, m, byMedia.get(m.id) ?? null));
+  // Linked posts that are no longer among the latest ones still show (and keep working).
+  for (const l of links.results) if (!media.some((m) => m.id === l.media_id)) items.push(item(l.media_id, {}, l));
+  return render(
+    c,
+    <ReelsPage
+      {...await ctx(c)}
+      connected={connected}
+      items={items}
+      products={products.results}
+      recent={recent.results}
+      apiError={apiError}
+      saved={c.req.query("saved") ? "ذخیره شد." : undefined}
+    />,
+  );
+});
+
+crmPanel.post("/panel/reels/:media{[0-9]{5,30}}", async (c) => {
+  const shop = shopOf(c);
+  const mediaId = c.req.param("media");
+  const f = await form(c);
+  const productId = Number(f.product_id) || null;
+  if (productId && !(await db(c).prepare("SELECT 1 AS x FROM products WHERE id = ? AND shop_id = ?").bind(productId, shop.id).first())) {
+    return c.text("محصول پیدا نشد", 400);
+  }
+  const https = (u: string | undefined) => (u && /^https:\/\//.test(u) ? u.slice(0, 1000) : "");
+  await db(c)
+    .prepare(
+      `INSERT INTO ig_media_links (shop_id, media_id, product_id, permalink, caption, thumb, keywords, comment_reply, dm_text, active, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+       ON CONFLICT (shop_id, media_id) DO UPDATE SET product_id = ?3, permalink = ?4, caption = ?5, thumb = ?6, keywords = ?7,
+         comment_reply = ?8, dm_text = ?9, active = ?10`,
+    )
+    .bind(
+      shop.id,
+      mediaId,
+      productId,
+      https(f.permalink),
+      (f.caption ?? "").slice(0, 300),
+      https(f.thumb),
+      (f.keywords ?? "").slice(0, 300),
+      (f.comment_reply ?? "").slice(0, 300),
+      (f.dm_text ?? "").slice(0, 1000),
+      f.active === "1" ? 1 : 0,
+      now(),
+    )
+    .run();
+  await logActivity(db(c), shop.id, currentUser(c).id, "update", "reel", null, { media: mediaId, product: productId });
+  return c.redirect("/panel/reels?saved=1");
+});
+
+crmPanel.post("/panel/reels/:media{[0-9]{5,30}}/delete", async (c) => {
+  await db(c).prepare("DELETE FROM ig_media_links WHERE shop_id = ? AND media_id = ?").bind(shopOf(c).id, c.req.param("media")).run();
+  return c.redirect("/panel/reels?saved=1");
 });

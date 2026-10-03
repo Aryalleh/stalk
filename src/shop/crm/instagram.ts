@@ -32,6 +32,7 @@ interface Payload {
   object?: string;
   entry?: {
     id?: string;
+    changes?: { field?: string; value?: CommentValue }[];
     messaging?: {
       sender?: { id?: string };
       recipient?: { id?: string };
@@ -100,4 +101,105 @@ export async function fetchProfile(token: string, igsid: string) {
   } catch {
     return {};
   }
+}
+
+// ---------- comments on posts / reels ----------
+
+interface CommentValue {
+  id?: string;
+  text?: string;
+  parent_id?: string;
+  from?: { id?: string; username?: string };
+  media?: { id?: string; media_product_type?: string };
+}
+
+export interface IgComment {
+  accountId: string;
+  commentId: string;
+  mediaId: string;
+  fromId: string;
+  username: string;
+  text: string;
+  parentId: string | null;
+}
+
+/** New comments in a webhook delivery (field "comments"). */
+export function parseComments(body: unknown): IgComment[] {
+  const p = body as Payload;
+  if (p?.object !== "instagram" || !Array.isArray(p.entry)) return [];
+  const out: IgComment[] = [];
+  for (const entry of p.entry) {
+    for (const ch of entry.changes ?? []) {
+      const v = ch.value;
+      if (ch.field !== "comments" || !v?.id || !v.from?.id || !v.media?.id) continue;
+      out.push({
+        accountId: String(entry.id ?? ""),
+        commentId: String(v.id),
+        mediaId: String(v.media.id),
+        fromId: String(v.from.id),
+        username: v.from.username ?? "",
+        text: (v.text ?? "").slice(0, 2000),
+        parentId: v.parent_id ? String(v.parent_id) : null,
+      });
+    }
+  }
+  return out;
+}
+
+async function graph<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${GRAPH}/${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? `instagram ${res.status}`);
+  return data;
+}
+
+/** Private reply: a DM to the person who commented (once per comment, within 7 days). */
+export async function privateReply(token: string, accountId: string, commentId: string, text: string) {
+  const d = await graph<{ message_id?: string }>(token, `${encodeURIComponent(accountId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text } }),
+  });
+  return d.message_id ?? null;
+}
+
+/** Public reply under a comment. */
+export async function replyToComment(token: string, commentId: string, text: string) {
+  const d = await graph<{ id?: string }>(token, `${encodeURIComponent(commentId)}/replies`, { method: "POST", body: JSON.stringify({ message: text }) });
+  return d.id ?? null;
+}
+
+export interface IgMedia {
+  id: string;
+  caption?: string;
+  media_type?: string;
+  media_product_type?: string;
+  permalink?: string;
+  thumbnail_url?: string;
+  media_url?: string;
+  timestamp?: string;
+  comments_count?: number;
+}
+
+/** The account's latest posts and reels. */
+export async function listMedia(token: string, accountId: string, limit = 24) {
+  const fields = "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp,comments_count";
+  const d = await graph<{ data?: IgMedia[] }>(token, `${encodeURIComponent(accountId)}/media?fields=${fields}&limit=${limit}`);
+  return d.data ?? [];
+}
+
+/** The professional account behind a token: user_id is the id webhooks use (not the app-scoped id). */
+export async function fetchAccount(token: string) {
+  const d = await graph<{ user_id?: string | number; id?: string; username?: string }>(token, "me?fields=user_id,username");
+  return { accountId: String(d.user_id ?? d.id ?? ""), username: d.username ?? "" };
+}
+
+/** Long-lived tokens last 60 days; refreshing (allowed once they are a day old) gives another 60. */
+export async function refreshToken(token: string) {
+  const res = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`);
+  const d = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: { message?: string } };
+  if (!res.ok || !d.access_token) throw new Error(d.error?.message ?? `instagram ${res.status}`);
+  return d.access_token;
 }

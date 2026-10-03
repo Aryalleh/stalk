@@ -2,7 +2,8 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { upcomingMonthDays } from "../lib/people";
 import { matchesKeyword } from "../src/shop/crm/automation";
-import { parseWebhook, validSignature } from "../src/shop/crm/instagram";
+import { parseComments, parseWebhook, validSignature } from "../src/shop/crm/instagram";
+import { fillTemplate } from "../src/shop/crm/comments";
 
 describe("instagram webhook", () => {
   const payload = {
@@ -65,5 +66,31 @@ describe("birthdays", () => {
     // 2024-03-19 is 29 Esfand 1402 (Tehran), followed by Farvardin.
     const days = upcomingMonthDays(2, new Date("2024-03-19T08:00:00Z"));
     expect(days).toEqual(["12-29", "01-01", "01-02"]);
+  });
+});
+
+describe("comments", () => {
+  it("parses comment changes", () => {
+    const body = {
+      object: "instagram",
+      entry: [
+        {
+          id: "1784",
+          time: 1,
+          changes: [
+            { field: "comments", value: { id: "c1", text: "چنده؟", from: { id: "555", username: "mina" }, media: { id: "1790", media_product_type: "REELS" } } },
+            { field: "comments", value: { id: "c2", text: "x", from: { id: "555" } } }, // no media: ignored
+            { field: "mentions", value: { id: "c3" } },
+          ],
+        },
+      ],
+    };
+    expect(parseComments(body)).toEqual([{ accountId: "1784", commentId: "c1", mediaId: "1790", fromId: "555", username: "mina", text: "چنده؟", parentId: null }]);
+    expect(parseWebhook(body)).toEqual([]);
+  });
+  it("fills templates", () => {
+    expect(fillTemplate("سلام {name}\n{title}: {price}\n{link} {other}", { name: "@mina", title: "ساعت", price: "۱۰۰ تومان", link: "https://x/p/1" })).toBe(
+      "سلام @mina\nساعت: ۱۰۰ تومان\nhttps://x/p/1 {other}",
+    );
   });
 });

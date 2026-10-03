@@ -50,7 +50,7 @@ export function ShopRegisterPage(props: { user: User; values?: Record<string, st
 }
 
 export type PanelTab =
-  | "dashboard" | "inbox" | "customers" | "leads" | "tasks" | "orders" | "sales" | "products" | "automation" | "team" | "settings" | "more";
+  | "dashboard" | "inbox" | "customers" | "leads" | "tasks" | "orders" | "sales" | "products" | "reels" | "automation" | "team" | "settings" | "more";
 
 /** Shop admin (the owner) vs agent: agents don't manage settings, team or automation. */
 export const isShopAdmin = (u: User, shop: Shop) => u.shop_role === "admin" || shop.owner_id === u.id;
@@ -65,6 +65,7 @@ export const PANEL_SECTIONS: [PanelTab, string, string, string, boolean][] = [
   ["orders", "/panel/orders", "fa-receipt", "سفارش‌های سایت", false],
   ["sales", "/panel/sales", "fa-cash-register", "فروش دایرکت", false],
   ["products", "/panel/products", "fa-box-open", "محصولات", false],
+  ["reels", "/panel/reels", "fa-film", "ریلز و کامنت", true],
   ["automation", "/panel/automation", "fa-robot", "اتوماسیون", true],
   ["team", "/panel/team", "fa-user-group", "تیم", true],
   ["settings", "/panel/settings", "fa-gear", "تنظیمات", true],
@@ -1165,14 +1166,17 @@ export function AdminSettingsPage(props: {
           <p><button class="secondary" formaction="/admin/settings/test-safir">ارسال پیام آزمایشی سفیر به شماره من</button></p>
         )}
 
-        <h2 style="margin-top:20px" id="instagram">اینستاگرام دایرکت (CRM فروشگاه‌ها)</h2>
-        <p class="muted small" style="margin-top:0">
-          یک اپ متا با محصول «Instagram API with Instagram Login» بسازید، در بخش Webhooks آدرس و توکن زیر را وارد و فیلد messages را فعال کنید. هر فروشگاه در
-          تنظیمات پنل خودش شناسه حساب و توکن دسترسی را وارد می‌کند و دایرکت‌هایش در صندوق گفتگو می‌آیند.
-        </p>
+        <h2 style="margin-top:20px" id="instagram">اینستاگرام دایرکت و کامنت (CRM فروشگاه‌ها)</h2>
+        <ol class="small muted list-decimal pr-5 space-y-1" style="margin-top:0">
+          <li>در developers.facebook.com یک اپ با کاربرد «Instagram API» (ورود با اینستاگرام) بسازید و دسترسی‌های instagram_business_basic، instagram_business_manage_messages و instagram_business_manage_comments را اضافه کنید.</li>
+          <li>«Instagram app secret» را همین پایین وارد و ذخیره کنید.</li>
+          <li>در بخش Webhooks آدرس و توکن زیر را بدهید و فیلدهای <b>messages</b> و <b>comments</b> را Subscribe کنید.</li>
+          <li>در App settings ← Basic این دو آدرس را بگذارید و اپ را منتشر (Live) کنید: Privacy policy: <b class="dt ltr">{`${props.webhookBase}/privacy`}</b> · Data deletion: <b class="dt ltr">{`${props.webhookBase}/data-deletion`}</b></li>
+          <li>هر فروشگاه در «تنظیمات» پنل خودش توکن حسابش را وارد می‌کند (حساب باید در زبانه Roles نقش Instagram Tester داشته باشد تا App Review انجام نشده).</li>
+        </ol>
         <p class="small">آدرس Callback: <b class="dt ltr">{`${props.webhookBase}/ig/webhook`}</b><br />Verify token: <b class="dt ltr">{props.igVerifyToken}</b></p>
         {s.meta_app_secret && <p class="small">کلید فعلی: <span class="dt">{mask(s.meta_app_secret)}</span></p>}
-        <label>{s.meta_app_secret ? "App secret جدید (خالی = بدون تغییر)" : "App secret اپ متا (برای بررسی امضای وب‌هوک)"}</label>
+        <label>{s.meta_app_secret ? "Instagram app secret جدید (خالی = بدون تغییر)" : "Instagram app secret (برای بررسی امضای وب‌هوک)"}</label>
         <input name="meta_app_secret" class="ltr" autocomplete="off" />
 
         <p style="margin-top:20px"><button>ذخیره</button></p>

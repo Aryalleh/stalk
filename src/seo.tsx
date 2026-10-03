@@ -50,6 +50,7 @@ seo.get("/sitemap.xml", async (c) => {
     url("/", { priority: "1.0" }),
     url("/about", { priority: "0.6" }),
     url("/faq", { priority: "0.6" }),
+    url("/privacy", { priority: "0.2" }),
     ...categoryList(c.get("settings")).map((cat) => url(`/c/${encodeURIComponent(cat)}`, { priority: "0.7" })),
     ...(shops.results as { slug: string; logo_key: string; created_at: string }[]).map((s) =>
       url(`/s/${s.slug}`, { priority: "0.8", lastmod: s.created_at, image: s.logo_key }),
@@ -218,4 +219,74 @@ seo.get("/llms.txt", async (c) => {
     ...faqs(s).flatMap(([q, a]) => [`### ${q}`, a, ""]),
   ].join("\n");
   return c.text(body, 200, { "Cache-Control": "public, max-age=3600" });
+});
+
+// ---------- privacy policy and data deletion (required by Meta to publish the Instagram app) ----------
+
+function LegalPage(props: { c: C; title: string; children: unknown }) {
+  return (
+    <Layout title={props.title} user={props.c.get("user")} seo={{ description: summary(`${props.title} — ${props.c.get("settings").site_name}`, 158) }}>
+      <article class="space-y-4 text-sm leading-8">
+        <h1>{props.title}</h1>
+        {props.children as never}
+      </article>
+    </Layout>
+  );
+}
+
+const contactLine = (s: Settings) =>
+  [s.contact_email && `ایمیل: ${s.contact_email}`, s.contact_phone && `تلفن: ${s.contact_phone}`].filter(Boolean).join(" · ") || "از صفحه «درباره ما»";
+
+seo.get("/privacy", (c) => {
+  const s = c.get("settings");
+  return render(
+    c,
+    <LegalPage c={c} title="حریم خصوصی">
+      <section class="card">
+        <h2>چه اطلاعاتی نگه می‌داریم</h2>
+        <ul class="list-disc pr-5">
+          <li>شماره موبایل، نام، تاریخ تولد و لیست‌های آرزویی که خودتان در {s.site_name} ثبت می‌کنید.</li>
+          <li>اطلاعات سفارش (گیرنده، آدرس ارسال، مبلغ و رسید واریز) برای انجام سفارش.</li>
+          <li>
+            برای فروشگاه‌هایی که اینستاگرام خود را وصل کرده‌اند: پیام‌های دایرکت و کامنت‌هایی که برای آن فروشگاه فرستاده می‌شود، شناسه و نام کاربری
+            فرستنده، تا فروشگاه بتواند پاسخ بدهد و سفارش ثبت کند.
+          </li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>استفاده و اشتراک‌گذاری</h2>
+        <p>
+          این اطلاعات فقط برای انجام سفارش، ارتباط فروشگاه با مشتری و پشتیبانی استفاده می‌شود. اطلاعات هر مشتری فقط برای همان فروشگاهی که با آن در
+          ارتباط بوده قابل دیدن است. اطلاعات را نمی‌فروشیم و برای تبلیغات به دیگران نمی‌دهیم. پیام‌های اینستاگرام از طریق API رسمی متا دریافت و ارسال
+          می‌شوند.
+        </p>
+      </section>
+      <section class="card">
+        <h2>حذف اطلاعات</h2>
+        <p>
+          هر زمان بخواهید اطلاعاتتان حذف می‌شود؛ راهنما در صفحه <a href="/data-deletion">حذف اطلاعات</a> است. ارتباط: {contactLine(s)}
+        </p>
+      </section>
+    </LegalPage>,
+  );
+});
+
+seo.get("/data-deletion", (c) => {
+  const s = c.get("settings");
+  return render(
+    c,
+    <LegalPage c={c} title="حذف اطلاعات کاربر">
+      <section class="card">
+        <p>برای حذف اطلاعات خود از {s.site_name} (از جمله پیام‌ها و کامنت‌های اینستاگرامی که برای فروشگاه‌ها فرستاده‌اید):</p>
+        <ol class="list-decimal pr-5">
+          <li>درخواست حذف را با ذکر نام کاربری اینستاگرام یا شماره موبایل خود بفرستید: {contactLine(s)}</li>
+          <li>حداکثر تا ۳۰ روز پیام‌ها، کامنت‌ها، پرونده مشتری و حساب کاربری شما حذف می‌شود و نتیجه را به شما اطلاع می‌دهیم.</li>
+          <li>
+            اگر اپ را از اینستاگرام (Settings ← Apps and websites) حذف کنید، دریافت پیام‌های تازه هم قطع می‌شود. اطلاعاتی که قانوناً برای سوابق مالی
+            سفارش لازم است تا زمان لازم نگه داشته می‌شود.
+          </li>
+        </ol>
+      </section>
+    </LegalPage>,
+  );
 });

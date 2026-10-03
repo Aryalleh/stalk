@@ -551,7 +551,13 @@ const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, s
   return render(
     c,
     <SettingsPage user={currentUser(c)} shop={shop} {...extra}>
-      <InstagramSettings shop={shop} webhookUrl={`${siteUrl(c)}/ig/webhook`} platformReady={!!c.get("settings").meta_app_secret} />
+      <InstagramSettings
+        shop={shop}
+        webhookUrl={`${siteUrl(c)}/ig/webhook`}
+        platformReady={!!c.get("settings").meta_app_secret}
+        ok={c.req.query("ig_ok")?.slice(0, 300)}
+        error={c.req.query("ig_error")?.slice(0, 300)}
+      />
     </SettingsPage>,
     status,
   );

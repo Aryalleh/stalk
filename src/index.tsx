@@ -16,7 +16,7 @@ import { admin, panel } from "./shop/routes/panel";
 import { bot } from "./bale/bot";
 import { store } from "./shop/routes/store";
 import { miniapp } from "./bale/miniapp";
-import { igWebhook } from "./shop/crm/webhook";
+import { igWebhook, refreshIgTokens } from "./shop/crm/webhook";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { seo } from "./seo";
@@ -141,4 +141,10 @@ app.onError((err, c) => {
   );
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Daily cron (wrangler.jsonc "triggers"): keep shops' Instagram tokens alive.
+  async scheduled(_event: ScheduledController, env: Env["Bindings"], ctx: ExecutionContext) {
+    ctx.waitUntil(ensureMigrated(env.DB).then(() => refreshIgTokens(env.DB)));
+  },
+} satisfies ExportedHandler<Env["Bindings"]>;

@@ -7,6 +7,7 @@ import { variantLabel } from "../variants";
 import { Errors } from "../views/layout";
 import { PANEL_SECTIONS, PanelShell, isShopAdmin } from "../views/panel";
 import { RULE_LABEL, type Rule } from "./automation";
+import { DEFAULT_COMMENT_REPLY, DEFAULT_DM, DEFAULT_KEYWORDS, type MediaLink } from "./comments";
 import {
   CONVERSATION_STATUS,
   CRM_ORDER_STATUS,
@@ -257,7 +258,7 @@ function Thread(props: ThreadData & { back: string }) {
                   m.direction === "out" ? "bg-sky-500 text-white rounded-2xl rounded-bl-md shadow-sky-500/20" : "bg-white border border-sky-100 text-sky-900 rounded-2xl rounded-br-md"
                 }`}
               >
-                {m.type !== "text" && <div class="text-[10px] opacity-70 mb-1">{m.type === "story_reply" ? "پاسخ به استوری" : m.type}</div>}
+                {m.type !== "text" && <div class="text-[10px] opacity-70 mb-1">{m.type === "story_reply" ? "پاسخ به استوری" : m.type === "comment" ? "کامنت زیر پست" : m.type}</div>}
                 <div class="whitespace-pre-wrap break-words leading-7">{m.body}</div>
                 <div class={`text-[9px] mt-1 ${m.direction === "out" ? "text-sky-100" : "text-slate-400"}`}>
                   <span class="dt">{formatJalali(m.created_at)}</span>
@@ -1318,25 +1319,156 @@ export function TeamPage(
 }
 
 /** Instagram connection on the shop settings page (admins only). */
-export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platformReady: boolean }) {
+export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platformReady: boolean; ok?: string; error?: string }) {
   const s = props.shop;
   return (
     <form method="post" action="/panel/settings/instagram" class="card" id="instagram">
-      <h2>اتصال اینستاگرام (دایرکت)</h2>
+      <h2><i class="fa-brands fa-instagram ml-1"></i> اتصال اینستاگرام (دایرکت و کامنت)</h2>
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <Errors errors={[props.error]} />
       <p class="muted small" style="margin-top:0">
-        پیام‌های دایرکت صفحه اینستاگرام فروشگاه در «گفتگوها» می‌آیند و از همان‌جا جواب داده می‌شوند. شناسه حساب و توکن دسترسی (long-lived) را
-        از پنل توسعه‌دهندگان متا (Instagram API with Instagram Login) وارد کنید.
+        پیام‌های دایرکت صفحه اینستاگرام فروشگاه در «گفتگوها» می‌آیند و از همان‌جا جواب داده می‌شوند؛ کامنت‌های ریلزهایی که به محصول وصل کنید هم
+        خودکار جواب می‌گیرند. توکن دسترسی را از پنل توسعه‌دهندگان متا (Instagram API ← Generate access tokens) کپی کنید؛ شناسه حساب خودکار پیدا
+        می‌شود و توکن هر هفته خودکار تمدید می‌شود.
         {!props.platformReady && <b> مدیر سایت هنوز اپ متا را در تنظیمات سایت وصل نکرده است.</b>}
       </p>
-      {s.ig_access_token && <p class="small"><span class="tag ok">وصل</span> حساب <span class="dt">{s.ig_account_id}</span></p>}
-      <div class="two">
-        <div><label>شناسه حساب اینستاگرام (IG User ID)</label><input name="ig_account_id" value={s.ig_account_id} class="ltr" inputmode="numeric" maxlength={30} /></div>
-        <div><label>{s.ig_access_token ? "توکن جدید (خالی = بدون تغییر)" : "توکن دسترسی"}</label><input name="ig_access_token" class="ltr" autocomplete="off" maxlength={600} /></div>
-      </div>
+      {s.ig_access_token && (
+        <p class="small">
+          <span class="tag ok">وصل</span> {s.ig_username ? <b class="ltr">@{s.ig_username}</b> : null} · شناسه <span class="dt">{s.ig_account_id}</span>
+          {s.ig_token_refreshed_at && <> · تمدید توکن: <span class="dt">{date(s.ig_token_refreshed_at, false)}</span></>}
+        </p>
+      )}
+      <label>{s.ig_access_token ? "توکن جدید (خالی = بدون تغییر)" : "توکن دسترسی (Access token)"}</label>
+      <input name="ig_access_token" class="ltr" autocomplete="off" maxlength={600} />
+      <details class="mt-2">
+        <summary class="cursor-pointer text-xs muted">شناسه حساب دستی (معمولاً لازم نیست)</summary>
+        <input name="ig_account_id" value={s.ig_account_id} class="ltr" inputmode="numeric" maxlength={30} aria-label="شناسه حساب اینستاگرام" />
+      </details>
       <p class="row" style="margin-bottom:0">
-        <button class="small">ذخیره</button>
+        <button class="small">ذخیره و بررسی</button>
+        {s.ig_access_token && <a class="btn small secondary" href="/panel/reels"><i class="fa-solid fa-film"></i> ریلز و کامنت‌ها</a>}
         {s.ig_access_token && <button class="small secondary" name="disconnect" value="1" onclick="return confirm('اتصال قطع شود؟')">قطع اتصال</button>}
       </p>
     </form>
+  );
+}
+
+// ---------- reels & posts → products (comment automation) ----------
+
+export interface ReelItem {
+  mediaId: string;
+  permalink: string;
+  caption: string;
+  thumb: string;
+  kind: string; // REELS / FEED / ...
+  at: string | null;
+  link: MediaLink | null;
+  comments: number;
+  dms: number;
+}
+
+export function ReelsPage(
+  props: Ctx & {
+    connected: boolean;
+    items: ReelItem[];
+    products: { id: number; title: string }[];
+    recent: { username: string; body: string; action: string; error: string; created_at: string; caption: string; customer_id: number | null }[];
+    apiError?: string;
+    saved?: string;
+  },
+) {
+  const ACTION: Record<string, [string, string]> = {
+    dm: ["دایرکت فرستاده شد", "bg-emerald-50 text-emerald-700"],
+    repeat: ["قبلاً فرستاده شده", "bg-slate-100 text-slate-500"],
+    error: ["خطا", "bg-red-50 text-red-600"],
+    none: ["بدون اقدام", "bg-slate-50 text-slate-400"],
+  };
+  return (
+    <PanelShell title="ریلز و کامنت" user={props.user} shop={props.shop} on="reels" unread={props.unread}>
+      <PageHead title="ریلز و پست‌ها ← محصول" sub="هر کس زیر پست بنویسد «چنده؟»، زیر کامنتش جواب می‌گیرد و قیمت و لینک محصول به دایرکتش می‌رود." />
+      {props.saved && <div class="okbox">{props.saved}</div>}
+      {!props.connected && (
+        <div class="warnbox">
+          اینستاگرام فروشگاه وصل نیست. اول در <a href="/panel/settings#instagram">تنظیمات</a> توکن را وارد کنید.
+        </div>
+      )}
+      {props.apiError && <div class="errbox">دریافت پست‌ها از اینستاگرام ممکن نشد: {props.apiError}</div>}
+      <div class="rounded-[1.5rem] p-4 mb-4 bg-white border border-sky-100 text-xs leading-7 text-slate-600">
+        <b class="text-sky-900">چطور کار می‌کند؟</b> برای هر پست یک محصول انتخاب کنید و ذخیره کنید. وقتی کامنتی با یکی از کلمه‌های کلیدی بیاید (یا هر کامنتی
+        اگر کلمه‌ای ننوشته باشید): ۱) پاسخ عمومی زیر کامنت گذاشته می‌شود، ۲) متن دایرکت با قیمت و لینک خرید برای همان شخص فرستاده می‌شود (هر نفر
+        یک بار برای هر پست)، ۳) شخص به «مشتریان» با مرحله «علاقه‌مند» اضافه می‌شود. در متن‌ها می‌توانید از
+        <span class="ltr"> {"{name} {title} {price} {link}"} </span> استفاده کنید.
+      </div>
+      {props.items.length === 0 && props.connected && !props.apiError && <Empty icon="fa-film">پستی پیدا نشد.</Empty>}
+      <div class="grid md:grid-cols-2 gap-4">
+        {props.items.map((m) => {
+          const l = m.link;
+          return (
+            <form method="post" action={`/panel/reels/${m.mediaId}`} class="card !mb-0">
+              <input type="hidden" name="permalink" value={m.permalink} />
+              <input type="hidden" name="caption" value={m.caption.slice(0, 300)} />
+              <input type="hidden" name="thumb" value={m.thumb} />
+              <div class="flex gap-3">
+                <a href={m.permalink || "#"} target="_blank" rel="noopener" class="w-20 h-28 rounded-2xl overflow-hidden bg-sky-50 shrink-0 flex items-center justify-center text-sky-300">
+                  {m.thumb ? <img src={m.thumb} alt="" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" /> : <i class="fa-solid fa-film text-2xl"></i>}
+                </a>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 font-bold">{m.kind === "REELS" ? "ریلز" : "پست"}</span>
+                    {l?.active ? (
+                      <span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold">فعال</span>
+                    ) : l ? (
+                      <span class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-bold">خاموش</span>
+                    ) : null}
+                    {m.at && <span class="text-[10px] text-slate-400 dt">{date(m.at, false)}</span>}
+                  </div>
+                  <p class="text-xs text-slate-600 mt-1 line-clamp-3 whitespace-pre-wrap">{m.caption || "بدون کپشن"}</p>
+                  {(m.comments > 0 || m.dms > 0) && (
+                    <p class="text-[11px] text-slate-500 mt-1"><i class="fa-solid fa-comment ml-1"></i>{fa(m.comments)} کامنت · <i class="fa-solid fa-paper-plane ml-1"></i>{fa(m.dms)} دایرکت</p>
+                  )}
+                </div>
+              </div>
+              <label>محصول این پست</label>
+              <select name="product_id">
+                <option value="">— بدون محصول (لینک فروشگاه) —</option>
+                {props.products.map((p) => <option value={String(p.id)} selected={l?.product_id === p.id}>{p.title}</option>)}
+              </select>
+              <details open={!!l}>
+                <summary class="cursor-pointer text-xs font-bold text-sky-600 mt-3">متن‌ها و کلمه‌های کلیدی</summary>
+                <label>کلمه‌های کلیدی (خالی = هر کامنتی)</label>
+                <input name="keywords" value={l ? l.keywords : DEFAULT_KEYWORDS} maxlength={300} />
+                <label>پاسخ عمومی زیر کامنت (خالی = بدون پاسخ عمومی)</label>
+                <input name="comment_reply" value={l ? l.comment_reply : DEFAULT_COMMENT_REPLY} maxlength={300} />
+                <label>متن دایرکت</label>
+                <textarea name="dm_text" maxlength={1000} style="min-height:90px">{l ? l.dm_text : DEFAULT_DM}</textarea>
+              </details>
+              <div class="row" style="margin-top:12px">
+                <label class="row !m-0" style="color:var(--fg)"><input type="checkbox" name="active" value="1" checked={l ? !!l.active : true} /> فعال</label>
+                <span class="sp" />
+                {l && <button class="small secondary" formaction={`/panel/reels/${m.mediaId}/delete`}>حذف اتصال</button>}
+                <button class="small">{l ? "ذخیره" : "وصل کردن"}</button>
+              </div>
+            </form>
+          );
+        })}
+      </div>
+      {props.recent.length > 0 && (
+        <div class="card mt-4">
+          <h2>آخرین کامنت‌ها</h2>
+          <div class="divide-y divide-sky-50">
+            {props.recent.map((r) => (
+              <div class="py-2.5 flex items-start gap-3 text-sm">
+                <div class="flex-1 min-w-0">
+                  {r.customer_id ? <a href={`/panel/customers/${r.customer_id}`} class="font-bold ltr">@{r.username || "?"}</a> : <b class="ltr">@{r.username || "?"}</b>}
+                  <span class="text-slate-600"> : {r.body}</span>
+                  <div class="text-[10px] text-slate-400"><span class="dt">{date(r.created_at)}</span>{r.caption ? ` · ${r.caption.slice(0, 40)}` : ""}{r.error ? ` · ${r.error}` : ""}</div>
+                </div>
+                <span class={`text-[10px] px-2 py-0.5 rounded-md font-bold whitespace-nowrap ${(ACTION[r.action] ?? ACTION.none)[1]}`}>{(ACTION[r.action] ?? ACTION.none)[0]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </PanelShell>
   );
 }
