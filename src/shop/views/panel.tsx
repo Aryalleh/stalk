@@ -904,7 +904,10 @@ export function AdminSettingsPage(props: {
         <h2>عمومی</h2>
         <label>نام سایت</label>
         <input name="site_name" value={s.site_name} required maxlength={40} />
-        <label>آدرس سایت (برای لینک‌هایی که در بات فرستاده می‌شود؛ خالی = همان آدرسی که سایت با آن باز شده)</label>
+        <label>
+          آدرس اصلی سایت — دامنه پیش‌فرض. اگر چند دامنه به این Worker وصل است، همه بازدیدها به همین آدرس منتقل می‌شوند و لینک‌های بات،
+          نقشه سایت و آدرس‌های canonical هم با آن ساخته می‌شوند. خالی = بدون انتقال (همان دامنه‌ای که سایت با آن باز شده).
+        </label>
         <input name="site_url" value={s.site_url} class="ltr" placeholder={props.webhookBase} maxlength={200} />
         <label>مهلت واریز خریدار (دقیقه) — در این مدت آرزو برای او رزرو است</label>
         <input name="reservation_minutes" value={s.reservation_minutes} class="ltr" inputmode="numeric" style="max-width:140px" />
