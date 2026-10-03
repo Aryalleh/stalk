@@ -51,7 +51,7 @@ const date = (iso: string | null | undefined, time = true) => (iso ? formatJalal
 const STAGE_STYLE: Record<Stage, string> = {
   lead: "bg-slate-100 text-slate-600",
   interested: "bg-amber-50 text-amber-700",
-  offer_sent: "bg-blue-50 text-blue-700",
+  offer_sent: "bg-sky-50 text-sky-700",
   purchased: "bg-emerald-50 text-emerald-700",
 };
 
@@ -73,7 +73,7 @@ const displayName = (c: { name: string; username: string; phone?: string }) => c
 
 function Initial(props: { name: string; size?: string }) {
   return (
-    <div class={`${props.size ?? "w-10 h-10"} rounded-full bg-blue-50 text-blue-600 font-bold flex items-center justify-center shrink-0`}>
+    <div class={`${props.size ?? "w-10 h-10"} rounded-full bg-sky-50 text-sky-600 font-bold flex items-center justify-center shrink-0`}>
       {(props.name.replace(/^@/, "").trim()[0] ?? "؟").toUpperCase()}
     </div>
   );
@@ -83,7 +83,7 @@ function Chip(props: { href: string; on: boolean; children: Child }) {
   return (
     <a
       href={props.href}
-      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-blue-50 !text-blue-600 border-blue-100" : "bg-white !text-slate-500 border-slate-200"}`}
+      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-sky-500 !text-white border-sky-500 shadow-sm shadow-sky-500/30" : "bg-white !text-slate-500 border-sky-100 hover:!text-sky-600"}`}
     >
       {props.children}
     </a>
@@ -108,8 +108,8 @@ export function MorePage(props: Ctx) {
       <h1>منوی پنل</h1>
       <div class="grid grid-cols-2 gap-3">
         {PANEL_SECTIONS.filter(([, , , , onlyAdmin]) => admin || !onlyAdmin).map(([, href, icon, label]) => (
-          <a href={href} class="card !mb-0 flex items-center gap-3 !text-slate-900">
-            <span class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i class={`fa-solid ${icon}`}></i></span>
+          <a href={href} class="card !mb-0 flex items-center gap-3 !text-sky-900">
+            <span class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center"><i class={`fa-solid ${icon}`}></i></span>
             <span class="text-sm font-bold">{label}</span>
           </a>
         ))}
@@ -120,26 +120,43 @@ export function MorePage(props: Ctx) {
 
 // ---------- inbox ----------
 
-function ConversationList(props: { rows: InboxRow[]; active?: number; query: string }) {
-  if (!props.rows.length) return <Empty icon="fa-comments">گفتگویی نیست. پیام‌های دایرکت اینستاگرام اینجا می‌آیند.</Empty>;
+/** Page title with a subtitle and actions on the left (UX Pilot headers). */
+export function PageHead(props: { title: string; sub?: string; children?: Child }) {
   return (
-    <div class="card !p-0 overflow-hidden divide-y divide-slate-100">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div>
+        <h1 class="!mb-0.5 !text-xl font-black text-sky-900">{props.title}</h1>
+        {props.sub && <p class="text-xs text-slate-500">{props.sub}</p>}
+      </div>
+      {props.children && <div class="flex flex-wrap items-center gap-2">{props.children}</div>}
+    </div>
+  );
+}
+
+function ConversationList(props: { rows: InboxRow[]; active?: number; query: string }) {
+  if (!props.rows.length) return <p class="muted small text-center py-10 px-4">گفتگویی نیست. پیام‌های دایرکت اینستاگرام اینجا می‌آیند.</p>;
+  return (
+    <div class="divide-y divide-sky-50">
       {props.rows.map((r) => (
-        <a href={`/panel/inbox/${r.id}${props.query}`} class={`flex items-center gap-3 p-3 !text-slate-900 hover:bg-slate-50 ${props.active === r.id ? "bg-blue-50/60" : ""}`}>
-          <Initial name={displayName(r)} />
+        <a
+          href={`/panel/inbox/${r.id}${props.query}`}
+          class={`relative flex items-center gap-3 p-4 !text-sky-900 hover:bg-sky-50/60 ${props.active === r.id ? "bg-sky-50" : ""}`}
+        >
+          {props.active === r.id && <span class="absolute right-0 inset-y-0 w-1 bg-sky-500 rounded-l" />}
+          <Initial name={displayName(r)} size="w-11 h-11" />
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class={`text-sm truncate ${r.unread ? "font-black" : "font-bold"}`}>{displayName(r)}</span>
               <StageBadge stage={r.stage} />
             </div>
-            <p class={`text-xs truncate ${r.unread ? "text-slate-900" : "text-slate-500"}`}>
+            <p class={`text-xs truncate mt-0.5 ${r.unread ? "text-sky-600 font-bold" : "text-slate-500"}`}>
               {r.last_direction === "out" && <i class="fa-solid fa-reply text-[10px] ml-1 text-slate-400"></i>}
               {r.last_body || "—"}
             </p>
           </div>
           <div class="text-left shrink-0">
             <div class="text-[10px] text-slate-400 dt">{r.last_message_at ? formatJalali(r.last_message_at) : ""}</div>
-            {r.unread > 0 && <span class="inline-block mt-1 min-w-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] text-center">{fa(r.unread)}</span>}
+            {r.unread > 0 && <span class="inline-block mt-1 min-w-5 px-1.5 rounded-full bg-sky-500 text-white text-[10px] text-center">{fa(r.unread)}</span>}
           </div>
         </a>
       ))}
@@ -147,22 +164,20 @@ function ConversationList(props: { rows: InboxRow[]; active?: number; query: str
   );
 }
 
-export function InboxPage(
-  props: Ctx & {
-    rows: InboxRow[];
-    filter: { status: string; mine: boolean; q: string };
-    thread?: {
-      conversation: Conversation;
-      customer: Customer;
-      tags: Tag[];
-      messages: (Message & { sender_name: string | null })[];
-      quickReplies: { id: number; title: string; body: string }[];
-      members: Member[];
-      connected: boolean;
-      error?: string;
-    };
-  },
-) {
+export interface ThreadData {
+  conversation: Conversation;
+  customer: Customer;
+  tags: Tag[];
+  messages: (Message & { sender_name: string | null })[];
+  quickReplies: { id: number; title: string; body: string }[];
+  members: Member[];
+  orders: CrmOrder[];
+  notes: { body: string; created_at: string; user_name: string | null }[];
+  connected: boolean;
+  error?: string;
+}
+
+export function InboxPage(props: Ctx & { rows: InboxRow[]; filter: { status: string; mine: boolean; q: string }; thread?: ThreadData }) {
   const f = props.filter;
   const qs = (o: Partial<typeof f>) => {
     const p = new URLSearchParams();
@@ -170,122 +185,203 @@ export function InboxPage(
     if (v.status) p.set("status", v.status);
     if (v.mine) p.set("mine", "1");
     if (v.q) p.set("q", v.q);
-    const s = p.toString();
-    return s ? `?${s}` : "";
+    const str = p.toString();
+    return str ? `?${str}` : "";
   };
   const t = props.thread;
-  const list = (
-    <div class={t ? "hidden md:block" : ""}>
-      <form method="get" class="mb-3">
-        <input name="q" value={f.q} placeholder="جستجوی نام، آیدی یا تلفن" />
-        {f.status && <input type="hidden" name="status" value={f.status} />}
-      </form>
-      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3">
-        <Chip href={`/panel/inbox${qs({ status: "" })}`} on={!f.status}>همه</Chip>
-        {Object.entries(CONVERSATION_STATUS).map(([k, l]) => <Chip href={`/panel/inbox${qs({ status: k })}`} on={f.status === k}>{l}</Chip>)}
-        <Chip href={`/panel/inbox${qs({ mine: !f.mine })}`} on={f.mine}>مال من</Chip>
-      </div>
-      <ConversationList rows={props.rows} active={t?.conversation.id} query={qs({})} />
-    </div>
-  );
   return (
-    <PanelShell title="گفتگوها" user={props.user} shop={props.shop} on="inbox" unread={props.unread} wide>
-      {!t && <h1>گفتگوها</h1>}
-      <div class={t ? "grid md:grid-cols-[320px_1fr] gap-4" : ""}>
-        {list}
-        {t && <Thread {...t} back={`/panel/inbox${qs({})}`} />}
+    <PanelShell title="صندوق پیام‌ها" user={props.user} shop={props.shop} on="inbox" unread={props.unread} full>
+      <div class={t ? "hidden lg:block" : ""}>
+        <PageHead title="صندوق پیام‌ها" sub="دایرکت‌های اینستاگرام فروشگاه، پاسخ سریع و ثبت سفارش از گفتگو" />
+      </div>
+      <div class={`grid gap-4 ${t ? "lg:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)_300px]" : "lg:grid-cols-[360px_minmax(0,1fr)]"}`}>
+        <section class={`card !p-0 overflow-hidden self-start ${t ? "hidden lg:block" : ""}`}>
+          <div class="p-4 border-b border-sky-50">
+            <form method="get">
+              <input name="q" value={f.q} placeholder="جستجوی نام، آیدی یا تلفن" />
+              {f.status && <input type="hidden" name="status" value={f.status} />}
+            </form>
+            <div class="flex gap-1.5 overflow-x-auto no-scrollbar mt-3">
+              <Chip href={`/panel/inbox${qs({ status: "" })}`} on={!f.status}>همه</Chip>
+              {Object.entries(CONVERSATION_STATUS).map(([k, l]) => <Chip href={`/panel/inbox${qs({ status: k })}`} on={f.status === k}>{l}</Chip>)}
+              <Chip href={`/panel/inbox${qs({ mine: !f.mine })}`} on={f.mine}>مال من</Chip>
+            </div>
+          </div>
+          <ConversationList rows={props.rows} active={t?.conversation.id} query={qs({})} />
+        </section>
+        {t ? (
+          <Thread {...t} back={`/panel/inbox${qs({})}`} />
+        ) : (
+          <div class="hidden lg:flex card flex-col items-center justify-center text-center min-h-[420px]">
+            <span class="w-20 h-20 rounded-3xl border border-sky-100 bg-sky-50 text-sky-400 flex items-center justify-center text-3xl mb-4"><i class="fa-solid fa-comments"></i></span>
+            <b class="text-sky-900">یک گفتگو را انتخاب کنید</b>
+            <p class="muted small">برای پاسخ، دیدن پرونده مشتری و ثبت سفارش روی یک گفتگو بزنید.</p>
+          </div>
+        )}
       </div>
     </PanelShell>
   );
 }
 
-function Thread(props: NonNullable<Parameters<typeof InboxPage>[0]["thread"]> & { back: string }) {
+function Thread(props: ThreadData & { back: string }) {
   const c = props.customer;
   const v = props.conversation;
-  const script = `(function(){var s=document.getElementById('qr'),t=document.getElementById('reply');if(s)s.addEventListener('change',function(){if(s.value){t.value=(t.value?t.value+'\\n':'')+s.value;s.value='';t.focus();}});
+  const script = `(function(){var t=document.getElementById('reply');document.querySelectorAll('[data-qr]').forEach(function(b){b.addEventListener('click',function(){t.value=(t.value?t.value+'\\n':'')+b.getAttribute('data-qr');t.focus();});});
     var box=document.getElementById('msgs');if(box)box.scrollTop=box.scrollHeight;})();`;
   return (
-    <section class="min-w-0">
-      <div class="card !p-3 flex items-center gap-3">
-        <a href={props.back} class="md:hidden w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 !text-slate-500" aria-label="بازگشت"><i class="fa-solid fa-chevron-right"></i></a>
-        <Initial name={displayName(c)} />
-        <div class="flex-1 min-w-0">
-          <a href={`/panel/customers/${c.id}`} class="text-sm font-bold">{displayName(c)}</a>
-          <div class="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5">
-            {c.username && <span class="ltr">@{c.username}</span>}
-            <StageBadge stage={c.stage} />
-            <TagChips tags={props.tags} />
-          </div>
-        </div>
-        <form method="post" action={`/panel/inbox/${v.id}/status`} class="flex gap-1">
-          {(["open", "pending", "closed"] as const).map((st) => (
-            <button name="status" value={st} class={`small ${v.status === st ? "" : "secondary"}`}>{CONVERSATION_STATUS[st]}</button>
-          ))}
-        </form>
-      </div>
-      <div id="msgs" class="card !p-3 space-y-2 overflow-y-auto" style="max-height:55vh;min-height:240px">
-        {props.messages.length === 0 && <p class="muted small text-center">پیامی نیست.</p>}
-        {props.messages.map((m) => (
-          <div class={`flex ${m.direction === "out" ? "justify-start" : "justify-end"}`}>
-            <div class={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.direction === "out" ? "bg-blue-600 text-white rounded-bl-sm" : "bg-slate-100 text-slate-900 rounded-br-sm"}`}>
-              {m.type !== "text" && <div class="text-[10px] opacity-70 mb-1">{m.type === "story_reply" ? "پاسخ به استوری" : m.type}</div>}
-              <div class="whitespace-pre-wrap break-words">{m.body}</div>
-              <div class={`text-[9px] mt-1 ${m.direction === "out" ? "text-blue-100" : "text-slate-400"}`}>
-                <span class="dt">{formatJalali(m.created_at)}</span>
-                {m.direction === "out" && <> · {m.sender_name ?? "خودکار / اینستاگرام"}</>}
-                {m.status === "failed" && <> · <b class="text-red-200">ارسال نشد: {m.error}</b></>}
-              </div>
+    <>
+      <section class="card !p-0 overflow-hidden flex flex-col min-w-0 !mb-0 self-start lg:row-span-2 2xl:row-span-1">
+        <div class="p-4 border-b border-sky-50 flex items-center gap-3">
+          <a href={props.back} class="lg:hidden w-9 h-9 flex items-center justify-center rounded-full bg-sky-50 !text-sky-600" aria-label="بازگشت"><i class="fa-solid fa-chevron-right"></i></a>
+          <Initial name={displayName(c)} size="w-11 h-11" />
+          <div class="flex-1 min-w-0">
+            <a href={`/panel/customers/${c.id}`} class="text-sm font-black !text-sky-900">{displayName(c)}</a>
+            <div class="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5">
+              {c.username && <span class="ltr">@{c.username}</span>}
+              <StageBadge stage={c.stage} />
             </div>
           </div>
-        ))}
-      </div>
-      <Errors errors={[props.error]} />
-      <form method="post" action={`/panel/inbox/${v.id}/send`} class="card !p-3">
-        {!props.connected && <div class="warnbox small">اینستاگرام فروشگاه وصل نیست؛ پیام فقط در تاریخچه ثبت می‌شود. اتصال در <a href="/panel/settings#instagram">تنظیمات</a>.</div>}
-        {props.quickReplies.length > 0 && (
-          <select id="qr" aria-label="پاسخ آماده" class="mb-2">
-            <option value="">پاسخ آماده…</option>
-            {props.quickReplies.map((q) => <option value={q.body}>{q.title}</option>)}
-          </select>
-        )}
-        <textarea id="reply" name="body" required maxlength={1000} placeholder="پیام…" style="min-height:70px"></textarea>
-        <div class="row" style="margin-top:8px">
-          <button><i class="fa-solid fa-paper-plane"></i> ارسال</button>
-          <span class="sp" />
-          <a class="btn small secondary" href={`/panel/sales/new?customer=${c.id}`}><i class="fa-solid fa-cart-plus"></i> ثبت سفارش</a>
+          <form method="post" action={`/panel/inbox/${v.id}/status`} class="flex p-1 rounded-xl bg-sky-50 border border-sky-100">
+            {(["open", "pending", "closed"] as const).map((st) => (
+              <button name="status" value={st} class={`!px-3 !py-1.5 !text-[11px] !rounded-lg !shadow-none ${v.status === st ? "" : "!bg-transparent !text-slate-500"}`}>{CONVERSATION_STATUS[st]}</button>
+            ))}
+          </form>
+          <a class="btn small hidden sm:inline-flex !bg-emerald-50 !text-emerald-700 !border-emerald-100 !shadow-none" href={`/panel/sales/new?customer=${c.id}`}><i class="fa-solid fa-cart-plus"></i> ثبت سفارش</a>
         </div>
-      </form>
-      <div class="grid md:grid-cols-2 gap-3">
-        <form method="post" action={`/panel/inbox/${v.id}/assign`} class="card !mb-0">
-          <label style="margin-top:0">مسئول گفتگو</label>
-          <div class="row">
-            <select name="user_id" style="flex:1">
+        <div id="msgs" class="p-4 space-y-3 overflow-y-auto bg-gradient-to-b from-white to-sky-50/40" style="max-height:60vh;min-height:300px">
+          {props.messages.length === 0 && <p class="muted small text-center">پیامی نیست.</p>}
+          {props.messages.map((m) => (
+            <div class={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
+              <div
+                class={`max-w-[78%] px-4 py-2.5 text-sm shadow-sm ${
+                  m.direction === "out" ? "bg-sky-500 text-white rounded-2xl rounded-bl-md shadow-sky-500/20" : "bg-white border border-sky-100 text-sky-900 rounded-2xl rounded-br-md"
+                }`}
+              >
+                {m.type !== "text" && <div class="text-[10px] opacity-70 mb-1">{m.type === "story_reply" ? "پاسخ به استوری" : m.type}</div>}
+                <div class="whitespace-pre-wrap break-words leading-7">{m.body}</div>
+                <div class={`text-[9px] mt-1 ${m.direction === "out" ? "text-sky-100" : "text-slate-400"}`}>
+                  <span class="dt">{formatJalali(m.created_at)}</span>
+                  {m.direction === "out" && <> · {m.sender_name ?? "خودکار / اینستاگرام"}</>}
+                  {m.status === "failed" && <> · <b class="text-red-100">ارسال نشد: {m.error}</b></>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <form method="post" action={`/panel/inbox/${v.id}/send`} class="p-4 border-t border-sky-50">
+          <Errors errors={[props.error]} />
+          {!props.connected && <div class="warnbox small">اینستاگرام فروشگاه وصل نیست؛ پیام فقط در تاریخچه ثبت می‌شود. اتصال در <a href="/panel/settings#instagram">تنظیمات</a>.</div>}
+          {props.quickReplies.length > 0 && (
+            <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3" aria-label="پاسخ‌های آماده">
+              {props.quickReplies.map((q) => (
+                <button type="button" data-qr={q.body} class="!rounded-full !px-4 !py-1.5 !text-[11px] whitespace-nowrap !bg-white !text-sky-600 !border-sky-100 !shadow-none">{q.title}</button>
+              ))}
+            </div>
+          )}
+          <div class="flex items-end gap-2 p-2 rounded-2xl bg-sky-50/60 border border-sky-100">
+            <textarea id="reply" name="body" required maxlength={1000} placeholder="پیام خود را بنویسید…" class="!border-0 !bg-transparent !shadow-none" style="min-height:48px"></textarea>
+            <button class="!w-12 !h-12 !p-0 !rounded-xl shrink-0" aria-label="ارسال"><i class="fa-solid fa-paper-plane"></i><span class="sr-only">ارسال</span></button>
+          </div>
+        </form>
+      </section>
+      <CustomerSide {...props} />
+      <script dangerouslySetInnerHTML={{ __html: script }} />
+    </>
+  );
+}
+
+/** The customer next to the conversation: stats, contact, orders, notes, stage and owner. */
+function CustomerSide(props: ThreadData) {
+  const c = props.customer;
+  const v = props.conversation;
+  return (
+    <aside class="card !mb-0 self-start lg:col-start-1 lg:row-start-2 2xl:col-start-3 2xl:row-start-1">
+      <div class="text-center">
+        <Initial name={displayName(c)} size="w-20 h-20 text-2xl mx-auto rounded-3xl" />
+        <a href={`/panel/customers/${c.id}`} class="block mt-3 font-black !text-sky-900">{displayName(c)}</a>
+        <p class="text-[11px] text-slate-500">مشتری از <span class="dt">{date(c.created_at, false)}</span></p>
+        <div class="flex flex-wrap justify-center gap-1.5 mt-2"><StageBadge stage={c.stage} /><TagChips tags={props.tags} /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mt-4">
+        <div class="rounded-2xl border border-sky-100 p-3 text-center"><span class="text-[10px] text-slate-500 block">خرید کل</span><b class="text-sm">{toman(c.total_spent)}</b></div>
+        <div class="rounded-2xl border border-sky-100 p-3 text-center"><span class="text-[10px] text-slate-500 block">تعداد سفارش</span><b class="text-sm">{fa(c.orders_count)} مورد</b></div>
+      </div>
+      {(c.phone || c.city || c.address) && (
+        <div class="mt-4 pt-4 border-t border-sky-50 text-xs space-y-2">
+          <b class="block text-sky-900">اطلاعات تماس</b>
+          {c.phone && <a class="dt block" href={`tel:${c.phone}`}>{c.phone}</a>}
+          {(c.city || c.address) && <p class="text-slate-500">{[c.city, c.address].filter(Boolean).join("، ")}</p>}
+        </div>
+      )}
+      {props.orders.length > 0 && (
+        <div class="mt-4 pt-4 border-t border-sky-50">
+          <b class="block text-xs text-sky-900 mb-2">آخرین سفارش‌ها</b>
+          {props.orders.map((o) => (
+            <a href={`/panel/sales/${o.id}`} class="flex items-center justify-between gap-2 p-2.5 mb-1.5 rounded-xl border border-sky-100 text-xs !text-sky-900">
+              <span>#{fa(o.number)} · {toman(o.total)}</span>
+              <span class={`px-2 py-0.5 rounded-md text-[10px] font-bold ${ORDER_STYLE[o.status]}`}>{CRM_ORDER_STATUS[o.status]}</span>
+            </a>
+          ))}
+        </div>
+      )}
+      {props.notes.length > 0 && (
+        <div class="mt-4 pt-4 border-t border-sky-50">
+          <b class="block text-xs text-sky-900 mb-2">یادداشت‌های داخلی</b>
+          {props.notes.map((n) => (
+            <p class="p-3 mb-1.5 rounded-xl bg-amber-50 border border-amber-100 text-[11px] text-amber-900 whitespace-pre-wrap">{n.body}</p>
+          ))}
+        </div>
+      )}
+      <div class="mt-4 pt-4 border-t border-sky-50 space-y-3">
+        <form method="post" action={`/panel/customers/${c.id}/stage`}>
+          <input type="hidden" name="back" value={`/panel/inbox/${v.id}`} />
+          <label class="!mt-0">مرحله مشتری</label>
+          <div class="flex gap-2">
+            <select name="stage" class="flex-1">{STAGES.map((st) => <option value={st} selected={c.stage === st}>{STAGE_LABEL[st]}</option>)}</select>
+            <button class="small">ذخیره</button>
+          </div>
+        </form>
+        <form method="post" action={`/panel/inbox/${v.id}/assign`}>
+          <label class="!mt-0">مسئول گفتگو</label>
+          <div class="flex gap-2">
+            <select name="user_id" class="flex-1">
               <option value="">بدون مسئول</option>
               {props.members.map((m) => <option value={String(m.id)} selected={v.assigned_to === m.id}>{m.name}</option>)}
             </select>
             <button class="small">ذخیره</button>
           </div>
         </form>
-        <form method="post" action={`/panel/customers/${c.id}/stage`} class="card !mb-0">
-          <label style="margin-top:0">مرحله مشتری</label>
-          <input type="hidden" name="back" value={`/panel/inbox/${v.id}`} />
-          <div class="row">
-            <select name="stage" style="flex:1">
-              {STAGES.map((st) => <option value={st} selected={c.stage === st}>{STAGE_LABEL[st]}</option>)}
-            </select>
-            <button class="small">ذخیره</button>
-          </div>
-        </form>
+        <details>
+          <summary class="cursor-pointer text-xs font-bold text-sky-600">+ وظیفه برای این گفتگو</summary>
+          <TaskForm customerId={c.id} conversationId={v.id} members={props.members} back={`/panel/inbox/${v.id}`} />
+        </details>
       </div>
-      <TaskForm customerId={c.id} conversationId={v.id} members={props.members} back={`/panel/inbox/${v.id}`} />
-      <script dangerouslySetInnerHTML={{ __html: script }} />
-    </section>
+      <a href={`/panel/sales/new?customer=${c.id}`} class="btn w-full mt-4 !bg-sky-900 !py-3.5 !rounded-2xl"><i class="fa-solid fa-cart-plus"></i> ثبت سفارش جدید</a>
+    </aside>
   );
 }
 
+const ORDER_STYLE: Record<CrmOrder["status"], string> = {
+  new: "bg-amber-50 text-amber-700",
+  confirmed: "bg-sky-50 text-sky-700",
+  shipped: "bg-emerald-50 text-emerald-700",
+  delivered: "bg-emerald-50 text-emerald-700",
+  canceled: "bg-red-50 text-red-600",
+};
+
 // ---------- customers ----------
 
-export function CustomersPage(props: Ctx & { rows: CustomerRow[]; tags: Tag[]; filter: { q: string; stage: string; tag: number }; page: number; hasNext: boolean }) {
+export interface CustomerStats {
+  total: number;
+  loyal: number;
+  oneTime: number;
+  noPurchase: number;
+  inactive: number;
+}
+
+export function CustomersPage(
+  props: Ctx & { rows: CustomerRow[]; tags: Tag[]; stats: CustomerStats; filter: { q: string; stage: string; tag: number }; page: number; hasNext: boolean },
+) {
   const f = props.filter;
   const qs = (o: Partial<typeof f & { page: number }>) => {
     const v = { ...f, page: 1, ...o };
@@ -294,61 +390,132 @@ export function CustomersPage(props: Ctx & { rows: CustomerRow[]; tags: Tag[]; f
     if (v.stage) p.set("stage", v.stage);
     if (v.tag) p.set("tag", String(v.tag));
     if (v.page > 1) p.set("page", String(v.page));
-    const s = p.toString();
-    return s ? `?${s}` : "";
+    const str = p.toString();
+    return str ? `?${str}` : "";
   };
+  const st = props.stats;
+  const kpi = (icon: string, tone: string, label: string, value: number, note: string) => (
+    <div class="card !mb-0">
+      <span class={`w-11 h-11 rounded-2xl flex items-center justify-center mb-3 ${tone}`}><i class={`fa-solid ${icon}`}></i></span>
+      <span class="text-[11px] text-slate-500 block">{label}</span>
+      <b class="text-2xl font-black text-sky-900">{fa(value)} <span class="text-sm">نفر</span></b>
+      <span class="text-[10px] text-slate-400 block">{note}</span>
+    </div>
+  );
+  const last = (c: CustomerRow) => c.last_message_at ?? c.last_order_at ?? c.updated_at;
   return (
     <PanelShell title="مشتریان" user={props.user} shop={props.shop} on="customers" unread={props.unread}>
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="!mb-0">مشتریان</h1>
+      <PageHead title="پایگاه داده مشتریان" sub={`${fa(st.total)} مشتری از دایرکت، سایت و ثبت دستی`}>
+        <a class="btn small secondary" href={`/panel/customers.csv${qs({})}`}><i class="fa-solid fa-file-arrow-down"></i> خروجی اکسل</a>
         <a class="btn small" href="/panel/customers/new"><i class="fa-solid fa-user-plus"></i> مشتری جدید</a>
+      </PageHead>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {kpi("fa-crown", "bg-amber-50 text-amber-500", "مشتریان وفادار", st.loyal, "دو خرید یا بیشتر")}
+        {kpi("fa-bag-shopping", "bg-sky-50 text-sky-500", "تک‌خرید", st.oneTime, "یک خرید")}
+        {kpi("fa-user-clock", "bg-rose-50 text-rose-500", "غیرفعال (۳ ماه+)", st.inactive, "خریدار بدون خرید در ۹۰ روز")}
+        {kpi("fa-seedling", "bg-emerald-50 text-emerald-500", "بدون خرید", st.noPurchase, "سرنخ‌ها و علاقه‌مندها")}
       </div>
-      <form method="get" class="mb-3">
-        <input name="q" value={f.q} placeholder="جستجوی نام، آیدی، تلفن یا شهر" />
-        {f.stage && <input type="hidden" name="stage" value={f.stage} />}
-      </form>
-      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-2">
-        <Chip href={`/panel/customers${qs({ stage: "" })}`} on={!f.stage}>همه</Chip>
-        {STAGES.map((st) => <Chip href={`/panel/customers${qs({ stage: st })}`} on={f.stage === st}>{STAGE_LABEL[st]}</Chip>)}
-      </div>
-      {props.tags.length > 0 && (
-        <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4">
-          {props.tags.map((t) => (
-            <a href={`/panel/customers${qs({ tag: f.tag === t.id ? 0 : t.id })}`} class={`text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap border ${f.tag === t.id ? "!text-white" : "!text-slate-600"}`} style={f.tag === t.id ? `background:${t.color};border-color:${t.color}` : `border-color:${t.color}`}>
-              {t.name}
-            </a>
-          ))}
+      <div class="card !p-0 overflow-hidden">
+        <div class="p-4 flex flex-wrap items-center gap-3 border-b border-sky-50">
+          <form method="get" class="flex-1 min-w-[220px]">
+            <input name="q" value={f.q} placeholder="نام، آیدی، شماره تماس یا شهر…" />
+            {f.stage && <input type="hidden" name="stage" value={f.stage} />}
+            {f.tag > 0 && <input type="hidden" name="tag" value={String(f.tag)} />}
+          </form>
+          <div class="flex gap-1.5 overflow-x-auto no-scrollbar">
+            <Chip href={`/panel/customers${qs({ stage: "" })}`} on={!f.stage}>همه</Chip>
+            {STAGES.map((x) => <Chip href={`/panel/customers${qs({ stage: x })}`} on={f.stage === x}>{STAGE_LABEL[x]}</Chip>)}
+          </div>
+          {props.tags.length > 0 && (
+            <div class="flex gap-1.5 overflow-x-auto no-scrollbar w-full">
+              {props.tags.map((t) => (
+                <a
+                  href={`/panel/customers${qs({ tag: f.tag === t.id ? 0 : t.id })}`}
+                  class={`text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap border ${f.tag === t.id ? "!text-white" : "!text-slate-600"}`}
+                  style={f.tag === t.id ? `background:${t.color};border-color:${t.color}` : `border-color:${t.color}`}
+                >
+                  {t.name}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-      {props.rows.length === 0 ? (
-        <Empty icon="fa-users">مشتری‌ای پیدا نشد. هر کس در اینستاگرام پیام بدهد یا از سایت بخرد، اینجا اضافه می‌شود.</Empty>
-      ) : (
-        <div class="card !p-0 overflow-hidden divide-y divide-slate-100">
-          {props.rows.map((c) => (
-            <a href={`/panel/customers/${c.id}`} class="flex items-center gap-3 p-3 !text-slate-900 hover:bg-slate-50">
-              <Initial name={displayName(c)} />
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-sm font-bold truncate">{displayName(c)}</span>
-                  <StageBadge stage={c.stage} />
-                  <TagChips tags={parseTags(c.tags)} />
-                </div>
-                <div class="text-[11px] text-slate-500 truncate">
-                  {[c.username && `@${c.username}`, c.phone, c.city].filter(Boolean).join(" · ") || c.source}
-                </div>
-              </div>
-              <div class="text-left shrink-0">
-                {c.orders_count > 0 && <div class="text-xs font-bold">{toman(c.total_spent)}</div>}
-                <div class="text-[10px] text-slate-400">{c.orders_count ? `${fa(c.orders_count)} سفارش` : ""}</div>
-                {c.unread > 0 && <span class="inline-block min-w-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] text-center">{fa(c.unread)}</span>}
-              </div>
-            </a>
-          ))}
+        {props.rows.length === 0 ? (
+          <p class="muted small text-center py-10">مشتری‌ای پیدا نشد. هر کس در اینستاگرام پیام بدهد یا از سایت بخرد، اینجا اضافه می‌شود.</p>
+        ) : (
+          <>
+            <table class="hidden md:table w-full text-sm">
+              <thead class="bg-sky-50/60 text-[11px] text-slate-500">
+                <tr>
+                  <th class="text-right font-bold p-4">مشتری</th>
+                  <th class="text-right font-bold p-4">آیدی اینستاگرام</th>
+                  <th class="text-center font-bold p-4">سفارش</th>
+                  <th class="text-right font-bold p-4">مجموع خرید</th>
+                  <th class="text-right font-bold p-4">آخرین تعامل</th>
+                  <th class="p-4"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-sky-50">
+                {props.rows.map((c) => (
+                  <tr class="hover:bg-sky-50/40">
+                    <td class="p-4">
+                      <a href={`/panel/customers/${c.id}`} class="flex items-center gap-3 !text-sky-900">
+                        <Initial name={displayName(c)} />
+                        <span class="min-w-0">
+                          <b class="block truncate">{displayName(c)}</b>
+                          <span class="flex flex-wrap gap-1 mt-0.5"><StageBadge stage={c.stage} /><TagChips tags={parseTags(c.tags)} /></span>
+                        </span>
+                      </a>
+                    </td>
+                    <td class="p-4 text-slate-500 ltr text-right">{c.username ? `@${c.username}` : c.phone || "—"}</td>
+                    <td class="p-4 text-center">
+                      <span class={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${c.orders_count > 1 ? "bg-sky-50 text-sky-600" : c.orders_count ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-400"}`}>
+                        {fa(c.orders_count)} سفارش
+                      </span>
+                    </td>
+                    <td class="p-4 font-bold">{c.total_spent ? toman(c.total_spent) : "—"}</td>
+                    <td class="p-4 text-xs">
+                      <span class="dt">{date(last(c))}</span>
+                      {c.unread > 0 && <span class="block text-[10px] text-emerald-600 font-bold">{fa(c.unread)} پیام خوانده‌نشده</span>}
+                    </td>
+                    <td class="p-4">
+                      <div class="flex gap-1.5 justify-end">
+                        {c.conversation_id && <a href={`/panel/inbox/${c.conversation_id}`} title="گفتگو" aria-label="گفتگو" class="w-9 h-9 rounded-xl bg-sky-50 !text-sky-600 flex items-center justify-center"><i class="fa-solid fa-comment"></i></a>}
+                        <a href={`/panel/sales/new?customer=${c.id}`} title="ثبت سفارش" aria-label="ثبت سفارش" class="w-9 h-9 rounded-xl bg-sky-50 !text-sky-600 flex items-center justify-center"><i class="fa-solid fa-cart-plus"></i></a>
+                        <a href={`/panel/customers/${c.id}`} title="پرونده" aria-label="پرونده" class="w-9 h-9 rounded-xl bg-sky-50 !text-sky-600 flex items-center justify-center"><i class="fa-solid fa-id-card"></i></a>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div class="md:hidden divide-y divide-sky-50">
+              {props.rows.map((c) => (
+                <a href={`/panel/customers/${c.id}`} class="flex items-center gap-3 p-4 !text-sky-900">
+                  <Initial name={displayName(c)} />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-sm font-bold truncate">{displayName(c)}</span>
+                      <StageBadge stage={c.stage} />
+                    </div>
+                    <div class="text-[11px] text-slate-500 truncate">{[c.username && `@${c.username}`, c.phone, c.city].filter(Boolean).join(" · ") || c.source}</div>
+                  </div>
+                  <div class="text-left shrink-0">
+                    {c.orders_count > 0 && <div class="text-xs font-bold">{toman(c.total_spent)}</div>}
+                    {c.unread > 0 && <span class="inline-block min-w-5 px-1.5 rounded-full bg-sky-500 text-white text-[10px] text-center">{fa(c.unread)}</span>}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </>
+        )}
+        <div class="p-4 flex items-center justify-between border-t border-sky-50">
+          <span class="text-[11px] text-slate-500">صفحه {fa(props.page)}</span>
+          <div class="flex gap-2">
+            {props.page > 1 && <a class="btn small secondary" href={`/panel/customers${qs({ page: props.page - 1 })}`}>قبلی</a>}
+            {props.hasNext && <a class="btn small secondary" href={`/panel/customers${qs({ page: props.page + 1 })}`}>بعدی</a>}
+          </div>
         </div>
-      )}
-      <div class="row" style="justify-content:center;margin-top:12px">
-        {props.page > 1 && <a class="btn small secondary" href={`/panel/customers${qs({ page: props.page - 1 })}`}>قبلی</a>}
-        {props.hasNext && <a class="btn small secondary" href={`/panel/customers${qs({ page: props.page + 1 })}`}>بعدی</a>}
       </div>
     </PanelShell>
   );
@@ -444,7 +611,7 @@ function TaskList(props: { tasks: TaskRow[]; back: string; showCustomer?: boolea
   const nowIso = new Date().toISOString();
   if (!props.tasks.length) return <p class="muted small">وظیفه‌ای نیست.</p>;
   return (
-    <div class="divide-y divide-slate-100">
+    <div class="divide-y divide-sky-50">
       {props.tasks.map((t) => {
         const overdue = !t.done_at && t.due_at && t.due_at < nowIso;
         return (
@@ -634,7 +801,7 @@ export function CustomerPage(
                 const [title, body] = timelineText(e);
                 return (
                   <li class="relative">
-                    <span class="absolute -right-[29px] top-0 w-6 h-6 rounded-full bg-white border-2 border-slate-200 text-slate-500 flex items-center justify-center text-[10px]">
+                    <span class="absolute -right-[29px] top-0 w-6 h-6 rounded-full bg-white border-2 border-sky-100 text-slate-500 flex items-center justify-center text-[10px]">
                       <i class={`fa-solid ${TIMELINE_ICON[e.kind]}`}></i>
                     </span>
                     <div class="text-[11px] text-slate-500">{title} · <span class="dt">{formatJalali(e.at)}</span></div>
@@ -652,28 +819,47 @@ export function CustomerPage(
 
 // ---------- leads pipeline ----------
 
+const STAGE_DOT: Record<Stage, string> = { lead: "bg-sky-400", interested: "bg-amber-400", offer_sent: "bg-violet-400", purchased: "bg-emerald-400" };
+
 export function LeadsPage(props: Ctx & { columns: Record<Stage, (Customer & { last_body: string })[]>; counts: Record<Stage, number> }) {
   return (
-    <PanelShell title="سرنخ‌ها" user={props.user} shop={props.shop} on="leads" unread={props.unread} wide>
-      <h1>قیف فروش</h1>
-      <p class="muted small" style="margin-top:-8px">هر کس در دایرکت پیام بدهد سرنخ است؛ با اولین سفارش خودکار «خریدار» می‌شود.</p>
-      <div class="flex gap-3 overflow-x-auto pb-3 snap-x">
+    <PanelShell title="سرنخ‌ها" user={props.user} shop={props.shop} on="leads" unread={props.unread} full>
+      <PageHead title="قیف فروش (سرنخ‌ها)" sub="هر کس در دایرکت پیام بدهد سرنخ است؛ با اولین سفارش خودکار «خریدار» می‌شود.">
+        <a class="btn small secondary" href="/panel/automation"><i class="fa-solid fa-robot"></i> اتوماسیون</a>
+        <a class="btn small" href="/panel/customers/new"><i class="fa-solid fa-plus"></i> سرنخ جدید</a>
+      </PageHead>
+      <div class="flex gap-4 overflow-x-auto pb-3 snap-x">
         {STAGES.map((st, i) => (
-          <section class="w-72 shrink-0 snap-start">
-            <div class="flex items-center justify-between mb-2 px-1">
-              <h2 class="!mb-0">{STAGE_LABEL[st]}</h2>
-              <span class="text-xs text-slate-500">{fa(props.counts[st])}</span>
+          <section class="w-[270px] shrink-0 snap-start xl:w-auto xl:flex-1 xl:min-w-0">
+            <div class="flex items-center gap-2 mb-3 px-1">
+              <span class={`w-2.5 h-2.5 rounded-full ${STAGE_DOT[st]}`}></span>
+              <h2 class="!mb-0 !text-sm font-black text-sky-900">{STAGE_LABEL[st]}</h2>
+              <span class="px-2 rounded-md bg-sky-100 text-sky-600 text-[11px] font-bold">{fa(props.counts[st])}</span>
             </div>
-            <div class="space-y-2 bg-slate-100/70 rounded-2xl p-2 min-h-[120px]">
+            <div class="space-y-3 min-h-[120px]">
+              {props.columns[st].length === 0 && <div class="rounded-[1.5rem] border-2 border-dashed border-sky-100 p-6 text-center text-[11px] text-slate-400">خالی</div>}
               {props.columns[st].map((c) => (
-                <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
-                  <a href={`/panel/customers/${c.id}`} class="text-sm font-bold block truncate">{displayName(c)}</a>
-                  <p class="text-[11px] text-slate-500 truncate">{c.last_body || c.phone || c.source}</p>
-                  {c.total_spent > 0 && <p class="text-[11px] font-bold">{toman(c.total_spent)}</p>}
-                  <form method="post" action={`/panel/customers/${c.id}/stage`} class="flex justify-between mt-2">
+                <div class={`bg-white rounded-[1.5rem] border p-4 shadow-sm ${st === "purchased" ? "border-emerald-100" : "border-sky-100"}`}>
+                  <a href={`/panel/customers/${c.id}`} class="flex items-center gap-2.5 !text-sky-900">
+                    <Initial name={displayName(c)} size="w-9 h-9 text-sm" />
+                    <span class="min-w-0">
+                      <b class="text-sm block truncate">{displayName(c)}</b>
+                      {c.username && <span class="text-[10px] text-slate-400 ltr block">@{c.username}</span>}
+                    </span>
+                  </a>
+                  <p class="text-xs text-slate-600 mt-3 line-clamp-2">{c.last_body || c.phone || c.source || "—"}</p>
+                  {c.total_spent > 0 && (
+                    <div class="mt-3 flex justify-between items-center rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-2 text-xs">
+                      <span class="font-bold">مجموع خرید:</span><b class="text-emerald-600">{toman(c.total_spent)}</b>
+                    </div>
+                  )}
+                  <form method="post" action={`/panel/customers/${c.id}/stage`} class="flex items-center justify-between mt-3">
                     <input type="hidden" name="back" value="/panel/leads" />
-                    {i > 0 ? <button name="stage" value={STAGES[i - 1]} class="small secondary !px-2" aria-label="مرحله قبل"><i class="fa-solid fa-arrow-right"></i></button> : <span />}
-                    {i < STAGES.length - 1 ? <button name="stage" value={STAGES[i + 1]} class="small !px-2" aria-label="مرحله بعد">{STAGE_LABEL[STAGES[i + 1]]} <i class="fa-solid fa-arrow-left"></i></button> : <span />}
+                    <span class="text-[10px] text-slate-400 dt">{date(c.updated_at)}</span>
+                    <span class="flex gap-1">
+                      {i > 0 && <button name="stage" value={STAGES[i - 1]} class="small secondary !px-2.5" aria-label="مرحله قبل" title={STAGE_LABEL[STAGES[i - 1]]}><i class="fa-solid fa-arrow-right"></i></button>}
+                      {i < STAGES.length - 1 && <button name="stage" value={STAGES[i + 1]} class="small !px-2.5" aria-label="مرحله بعد">{STAGE_LABEL[STAGES[i + 1]]} <i class="fa-solid fa-arrow-left"></i></button>}
+                    </span>
                   </form>
                 </div>
               ))}
@@ -709,36 +895,103 @@ export function TasksPage(props: Ctx & { tasks: TaskRow[]; view: string; members
 
 const PAY_STYLE: Record<string, string> = { unpaid: "bg-amber-50 text-amber-700", paid: "bg-emerald-50 text-emerald-700", refunded: "bg-slate-100 text-slate-600" };
 
-export function SalesPage(props: Ctx & { orders: (CrmOrder & { customer_name: string; customer_username: string })[]; status: string }) {
+export function SalesPage(
+  props: Ctx & { orders: (CrmOrder & { customer_name: string; customer_username: string })[]; status: string; q: string; counts: Record<string, number> },
+) {
+  const all = Object.values(props.counts).reduce((a, b) => a + b, 0);
+  const qs = (status: string) => {
+    const p = new URLSearchParams();
+    if (status) p.set("status", status);
+    if (props.q) p.set("q", props.q);
+    const str = p.toString();
+    return `/panel/sales${str ? `?${str}` : ""}`;
+  };
+  const tab = (key: string, label: string, n: number, tone: string) => (
+    <a
+      href={qs(key)}
+      class={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border text-sm font-bold whitespace-nowrap ${
+        props.status === key ? "bg-white border-sky-500 !text-sky-600 ring-2 ring-sky-100" : "bg-white border-sky-100 !text-slate-500"
+      }`}
+    >
+      {label}
+      <span class={`px-2 py-0.5 rounded-lg text-[11px] ${tone}`}>{fa(n)}</span>
+    </a>
+  );
+  const name = (o: (typeof props.orders)[number]) => o.customer_name || (o.customer_username ? `@${o.customer_username}` : "مشتری");
   return (
     <PanelShell title="فروش دایرکت" user={props.user} shop={props.shop} on="sales" unread={props.unread}>
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="!mb-0">فروش دایرکت</h1>
-        <a class="btn small" href="/panel/sales/new"><i class="fa-solid fa-plus"></i> سفارش جدید</a>
+      <PageHead title="مدیریت سفارش‌های دایرکت" sub="ثبت، تأیید، ارسال و رهگیری سفارش‌هایی که در دایرکت می‌گیرید">
+        <a class="btn small secondary" href="/panel/orders"><i class="fa-solid fa-globe"></i> سفارش‌های سایت</a>
+        <a class="btn small" href="/panel/sales/new"><i class="fa-solid fa-plus"></i> ثبت سفارش دستی</a>
+      </PageHead>
+      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4 pb-1">
+        {tab("", "همه سفارش‌ها", all, "bg-sky-50 text-sky-600")}
+        {tab("new", CRM_ORDER_STATUS.new, props.counts.new ?? 0, "bg-amber-50 text-amber-600")}
+        {tab("confirmed", CRM_ORDER_STATUS.confirmed, props.counts.confirmed ?? 0, "bg-sky-50 text-sky-600")}
+        {tab("shipped", CRM_ORDER_STATUS.shipped, props.counts.shipped ?? 0, "bg-emerald-50 text-emerald-600")}
+        {tab("delivered", CRM_ORDER_STATUS.delivered, props.counts.delivered ?? 0, "bg-emerald-50 text-emerald-600")}
+        {tab("canceled", CRM_ORDER_STATUS.canceled, props.counts.canceled ?? 0, "bg-red-50 text-red-600")}
       </div>
-      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3">
-        <Chip href="/panel/sales" on={!props.status}>همه</Chip>
-        {Object.entries(CRM_ORDER_STATUS).map(([k, l]) => <Chip href={`/panel/sales?status=${k}`} on={props.status === k}>{l}</Chip>)}
+      <div class="card !p-0 overflow-hidden">
+        <form method="get" class="p-4 border-b border-sky-50">
+          <input name="q" value={props.q} placeholder="شماره سفارش، نام یا آیدی مشتری…" />
+          {props.status && <input type="hidden" name="status" value={props.status} />}
+        </form>
+        {props.orders.length === 0 ? (
+          <p class="muted small text-center py-10">سفارشی نیست. سفارش‌هایی که در دایرکت می‌گیرید را اینجا ثبت کنید.</p>
+        ) : (
+          <>
+            <table class="hidden md:table w-full text-sm">
+              <thead class="bg-sky-50/60 text-[11px] text-slate-500">
+                <tr>
+                  <th class="text-right font-bold p-4">شماره</th>
+                  <th class="text-right font-bold p-4">مشتری</th>
+                  <th class="text-right font-bold p-4">تاریخ ثبت</th>
+                  <th class="text-right font-bold p-4">مبلغ نهایی</th>
+                  <th class="text-right font-bold p-4">پرداخت</th>
+                  <th class="text-right font-bold p-4">وضعیت</th>
+                  <th class="p-4"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-sky-50">
+                {props.orders.map((o) => (
+                  <tr class="hover:bg-sky-50/40">
+                    <td class="p-4"><a href={`/panel/sales/${o.id}`} class="font-black">#{fa(o.number)}</a></td>
+                    <td class="p-4">
+                      <a href={`/panel/customers/${o.customer_id}`} class="flex items-center gap-2 !text-sky-900">
+                        <Initial name={name(o)} size="w-8 h-8 text-xs" />
+                        <span><b class="block text-xs">{name(o)}</b>{o.customer_username && <span class="text-[10px] text-slate-400 ltr">@{o.customer_username}</span>}</span>
+                      </a>
+                    </td>
+                    <td class="p-4 text-xs"><span class="dt">{date(o.created_at)}</span></td>
+                    <td class="p-4 font-bold">{toman(o.total)}</td>
+                    <td class="p-4"><span class={`text-[11px] font-bold px-2 py-0.5 rounded-md ${PAY_STYLE[o.payment_status]}`}>{PAYMENT_STATUS[o.payment_status]}</span></td>
+                    <td class="p-4"><span class={`text-[11px] font-bold px-2 py-0.5 rounded-md ${ORDER_STYLE[o.status]}`}>{CRM_ORDER_STATUS[o.status]}</span></td>
+                    <td class="p-4 text-left">
+                      <a href={`/panel/sales/${o.id}`} title="جزئیات" aria-label="جزئیات" class="inline-flex w-9 h-9 rounded-xl bg-sky-50 !text-sky-600 items-center justify-center"><i class="fa-solid fa-eye"></i></a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div class="md:hidden divide-y divide-sky-50">
+              {props.orders.map((o) => (
+                <a href={`/panel/sales/${o.id}`} class="flex items-center gap-3 p-4 !text-sky-900">
+                  <div class="w-12 text-center text-xs font-black text-sky-600">#{fa(o.number)}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold truncate">{name(o)}</div>
+                    <div class="text-[11px] text-slate-500"><span class="dt">{date(o.created_at)}</span></div>
+                  </div>
+                  <div class="text-left">
+                    <div class="text-sm font-bold">{toman(o.total)}</div>
+                    <span class={`text-[10px] px-1.5 py-0.5 rounded ${ORDER_STYLE[o.status]}`}>{CRM_ORDER_STATUS[o.status]}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </>
+        )}
       </div>
-      {props.orders.length === 0 ? (
-        <Empty icon="fa-cash-register">سفارشی نیست. سفارش‌هایی که در دایرکت می‌گیرید را اینجا ثبت کنید.</Empty>
-      ) : (
-        <div class="card !p-0 overflow-hidden divide-y divide-slate-100">
-          {props.orders.map((o) => (
-            <a href={`/panel/sales/${o.id}`} class="flex items-center gap-3 p-3 !text-slate-900 hover:bg-slate-50">
-              <div class="w-12 text-center text-xs font-bold text-slate-500">#{fa(o.number)}</div>
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-bold truncate">{o.customer_name || (o.customer_username ? `@${o.customer_username}` : "مشتری")}</div>
-                <div class="text-[11px] text-slate-500"><span class="dt">{date(o.created_at)}</span> · {CRM_ORDER_STATUS[o.status]}</div>
-              </div>
-              <div class="text-left">
-                <div class="text-sm font-bold">{toman(o.total)}</div>
-                <span class={`text-[10px] px-1.5 py-0.5 rounded ${PAY_STYLE[o.payment_status]}`}>{PAYMENT_STATUS[o.payment_status]}</span>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
     </PanelShell>
   );
 }
@@ -878,36 +1131,71 @@ export function SalePage(props: Ctx & { o: CrmOrder; items: CrmOrderItem[]; cust
 
 // ---------- automation, quick replies, tags ----------
 
+function RuleRow(props: { r: Rule & { tag_name: string | null }; soft?: boolean }) {
+  const r = props.r;
+  return (
+    <div class={`flex items-start gap-3 ${props.soft ? "p-4 mb-2.5 rounded-2xl bg-sky-50/70 border border-sky-100" : "py-3 border-b border-sky-50"}`}>
+      <div class="flex-1 min-w-0 text-sm">
+        <b class="text-sky-900">{r.kind === "keyword" ? <>کلمه: «{r.keyword}»</> : RULE_LABEL[r.kind]}</b>
+        {r.kind === "offer_followup" && <div class="text-[11px] text-slate-500">{fa(r.hours)} ساعت بعد از «پیشنهاد ارسال‌شده» یک وظیفه پیگیری ساخته می‌شود.</div>}
+        {r.reply && <div class="text-[11px] text-slate-500 whitespace-pre-wrap">{r.kind === "offer_followup" ? "عنوان وظیفه: " : "اقدام: پاسخ «"}{r.reply}{r.kind === "offer_followup" ? "" : "»"}</div>}
+        {(r.set_stage || r.tag_name) && (
+          <div class="text-[11px] text-slate-500">
+            {r.set_stage && <>مرحله ← {STAGE_LABEL[r.set_stage as Stage]} </>}
+            {r.tag_name && <>برچسب ← {r.tag_name}</>}
+          </div>
+        )}
+      </div>
+      <form method="post" action={`/panel/automation/rules/${r.id}`} class="flex items-center gap-2 shrink-0">
+        <button
+          name="do"
+          value="toggle"
+          role="switch"
+          aria-checked={r.active ? "true" : "false"}
+          aria-label={r.active ? "فعال (غیرفعال کردن)" : "غیرفعال (فعال کردن)"}
+          class={`!w-11 !h-6 !p-0.5 !rounded-full !shadow-none !justify-start ${r.active ? "" : "!bg-slate-200"}`}
+        >
+          <span class={`block w-5 h-5 rounded-full bg-white shadow transition ${r.active ? "" : "-translate-x-5"}`}></span>
+        </button>
+        <button name="do" value="delete" class="!w-8 !h-8 !p-0 !bg-transparent !text-slate-400 !shadow-none" aria-label="حذف" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></button>
+      </form>
+    </div>
+  );
+}
+
 export function AutomationPage(props: Ctx & { rules: (Rule & { tag_name: string | null })[]; replies: { id: number; title: string; body: string }[]; tags: Tag[]; saved?: string; error?: string }) {
+  const connected = !!(props.shop.ig_account_id && props.shop.ig_access_token);
+  const general = props.rules.filter((r) => r.kind !== "keyword");
+  const keywords = props.rules.filter((r) => r.kind === "keyword");
   return (
     <PanelShell title="اتوماسیون" user={props.user} shop={props.shop} on="automation" unread={props.unread}>
-      <h1>اتوماسیون و پاسخ‌های آماده</h1>
+      <PageHead title="اتوماسیون و پاسخ‌های آماده" sub="پاسخ خودکار دایرکت، کلمات کلیدی، پیگیری پیشنهادها و برچسب‌ها" />
       {props.saved && <div class="okbox">{props.saved}</div>}
       <Errors errors={[props.error]} />
+      <div class="rounded-[2rem] p-6 mb-4 text-white bg-gradient-to-l from-sky-500 to-sky-400 shadow-xl shadow-sky-500/20 flex items-center gap-4">
+        <span class="w-14 h-14 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-2xl shrink-0"><i class="fa-brands fa-instagram"></i></span>
+        <div class="flex-1">
+          <b class="text-lg block">دستیار دایرکت اینستاگرام</b>
+          <span class="text-xs text-sky-50">
+            {connected ? "حساب اینستاگرام وصل است؛ قانون‌های فعال روی پیام‌های تازه اجرا می‌شوند." : "حساب اینستاگرام وصل نیست؛ قانون‌ها بعد از اتصال اجرا می‌شوند."}
+          </span>
+        </div>
+        {!connected && <a href="/panel/settings#instagram" class="btn small !bg-white !text-sky-600">اتصال</a>}
+      </div>
+      <div class="grid md:grid-cols-2 gap-4 mb-4">
+        <div class="card !mb-0">
+          <h2>کلمات کلیدی و محرک‌ها</h2>
+          {keywords.length === 0 && <p class="muted small">هنوز کلمه کلیدی‌ای تعریف نشده.</p>}
+          {keywords.map((r) => <RuleRow r={r} soft />)}
+        </div>
+        <div class="card !mb-0">
+          <h2>قوانین پاسخ‌دهی خودکار</h2>
+          {general.length === 0 && <p class="muted small">پیام خوش‌آمد یا پیگیری پیشنهاد هنوز تعریف نشده.</p>}
+          {general.map((r) => <RuleRow r={r} />)}
+        </div>
+      </div>
       <div class="card">
-        <h2>قانون‌ها</h2>
-        {props.rules.length === 0 && <p class="muted small">هنوز قانونی نساخته‌اید.</p>}
-        {props.rules.map((r) => (
-          <div class="flex items-start gap-3 py-2 border-b border-slate-100">
-            <div class="flex-1 min-w-0 text-sm">
-              <b>{RULE_LABEL[r.kind]}</b>
-              {r.kind === "keyword" && <> — وقتی پیام شامل «{r.keyword}» باشد</>}
-              {r.kind === "offer_followup" && <> — {fa(r.hours)} ساعت بعد از «پیشنهاد داده شد»</>}
-              {r.reply && <div class="small muted whitespace-pre-wrap">{r.kind === "offer_followup" ? "عنوان وظیفه: " : "پاسخ: "}{r.reply}</div>}
-              {(r.set_stage || r.tag_name) && (
-                <div class="small muted">
-                  {r.set_stage && <>مرحله ← {STAGE_LABEL[r.set_stage as Stage]} </>}
-                  {r.tag_name && <>برچسب ← {r.tag_name}</>}
-                </div>
-              )}
-            </div>
-            <form method="post" action={`/panel/automation/rules/${r.id}`} class="flex gap-1">
-              <button name="do" value="toggle" class={`small ${r.active ? "" : "secondary"}`}>{r.active ? "فعال" : "غیرفعال"}</button>
-              <button name="do" value="delete" class="small secondary" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></button>
-            </form>
-          </div>
-        ))}
-        <form method="post" action="/panel/automation/rules" style="margin-top:12px">
+        <form method="post" action="/panel/automation/rules">
           <h2>قانون جدید</h2>
           <select name="kind">
             {Object.entries(RULE_LABEL).map(([k, l]) => <option value={k}>{l}</option>)}
@@ -936,7 +1224,7 @@ export function AutomationPage(props: Ctx & { rules: (Rule & { tag_name: string 
 
       <div class="card">
         <h2>پاسخ‌های آماده</h2>
-        <p class="muted small" style="margin-top:0">در صفحه گفتگو با یک انتخاب داخل متن پیام قرار می‌گیرند.</p>
+        <p class="muted small" style="margin-top:0">در صفحه گفتگو بالای کادر پیام می‌آیند و با یک لمس داخل متن قرار می‌گیرند.</p>
         {props.replies.map((q) => (
           <form method="post" action={`/panel/automation/replies/${q.id}`} class="border-b border-slate-100 py-2">
             <div class="row">

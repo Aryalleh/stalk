@@ -250,6 +250,10 @@ export function Layout(props: {
   bare?: boolean;
   panel?: boolean;
   wide?: boolean;
+  /** Use the whole width (panel inbox). */
+  full?: boolean;
+  /** Fixed side navigation for desktop (panel): the page moves aside for it. */
+  sidebar?: Child;
   seo?: Seo;
   /** Use the title as is, without " · site name". */
   fullTitle?: boolean;
@@ -281,7 +285,8 @@ export function Layout(props: {
         {accent && accent !== "255 92 147" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${accent}}` }} />}
         {!props.panel && <Analytics />}
       </head>
-      <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
+      <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar ? "md:pr-64" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
+        {props.sidebar}
         {props.header ?? (
           <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
             <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -293,7 +298,7 @@ export function Layout(props: {
             </div>
           </header>
         )}
-        <main class={`${props.wide ? "max-w-5xl" : "max-w-3xl"} mx-auto ${props.bare ? "" : "ui px-4 py-6"}`}>{props.children}</main>
+        <main class={`${props.full ? "max-w-[1400px]" : props.wide ? "max-w-5xl" : "max-w-3xl"} mx-auto ${props.bare ? "" : "ui px-4 py-6"}`}>{props.children}</main>
         {showNav && <Footer />}
         {showNav && <BottomNav active={nav} user={props.user} />}
         <script dangerouslySetInnerHTML={{ __html: HELPERS }} />

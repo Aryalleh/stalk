@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { birthDate } from "../../../lib/people";
-import { normalizePhone } from "../../../lib/normalize";
+import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import type { C, Env } from "../../env";
 import { render } from "../../render";
 import { now } from "../db";
@@ -14,6 +14,7 @@ import {
   PAYMENT_METHODS,
   PAYMENT_STATUS,
   STAGES,
+  STAGE_LABEL,
   addInterest,
   addOutgoing,
   cancelCrmOrder,
@@ -29,6 +30,7 @@ import {
   listTasks,
   logActivity,
   orderItems,
+  parseTags,
   refreshCustomerStats,
   shopTags,
   timeline,
@@ -53,6 +55,7 @@ import {
   TasksPage,
   TeamPage,
   type Ctx,
+  type CustomerStats,
   type Member,
   type VariantOption,
 } from "./views";
@@ -124,12 +127,17 @@ async function threadView(c: C, id: number, error?: string) {
   }
   const customer = (await getCustomer(db(c), shop.id, conversation.customer_id))!;
   const f = inboxFilter(c);
-  const [rows, tags, messages, quickReplies, team] = await Promise.all([
+  const [rows, tags, messages, quickReplies, team, orders, notes] = await Promise.all([
     inboxRows(c, f),
     customerTags(db(c), customer.id),
     conversationMessages(db(c), id),
     db(c).prepare("SELECT id, title, body FROM quick_replies WHERE shop_id = ? ORDER BY title").bind(shop.id).all<{ id: number; title: string; body: string }>(),
     members(c),
+    db(c).prepare("SELECT * FROM crm_orders WHERE customer_id = ? AND shop_id = ? ORDER BY created_at DESC LIMIT 3").bind(customer.id, shop.id).all<CrmOrder>(),
+    db(c)
+      .prepare("SELECT n.body, n.created_at, u.name AS user_name FROM notes n LEFT JOIN users u ON u.id = n.user_id WHERE n.customer_id = ? ORDER BY n.created_at DESC LIMIT 3")
+      .bind(customer.id)
+      .all<{ body: string; created_at: string; user_name: string | null }>(),
   ]);
   return render(
     c,
@@ -144,6 +152,8 @@ async function threadView(c: C, id: number, error?: string) {
         messages,
         quickReplies: quickReplies.results,
         members: team,
+        orders: orders.results,
+        notes: notes.results,
         connected: !!(shop.ig_account_id && shop.ig_access_token && customer.ig_user_id),
         error,
       }}
@@ -211,10 +221,49 @@ crmPanel.get("/panel/customers", async (c) => {
   const page = pageParam(c);
   const f = { q: (c.req.query("q") ?? "").trim().slice(0, 60), stage: isStage(c.req.query("stage") ?? "") ? c.req.query("stage")! : "", tag: Number(c.req.query("tag")) || 0 };
   const rows = await listCustomers(db(c), shop.id, { q: f.q || undefined, stage: f.stage || undefined, tag: f.tag || undefined, limit: CUSTOMERS_PAGE + 1, offset: (page - 1) * CUSTOMERS_PAGE });
+  const stats = await db(c)
+    .prepare(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(orders_count >= 2), 0) AS loyal, COALESCE(SUM(orders_count = 1), 0) AS oneTime,
+              COALESCE(SUM(orders_count = 0), 0) AS noPurchase, COALESCE(SUM(orders_count > 0 AND last_order_at < ?), 0) AS inactive
+       FROM customers WHERE shop_id = ?`,
+    )
+    .bind(new Date(Date.now() - 90 * 86400_000).toISOString(), shop.id)
+    .first<CustomerStats>();
   return render(
     c,
-    <CustomersPage {...await ctx(c)} rows={rows.slice(0, CUSTOMERS_PAGE)} tags={await shopTags(db(c), shop.id)} filter={f} page={page} hasNext={rows.length > CUSTOMERS_PAGE} />,
+    <CustomersPage
+      {...await ctx(c)}
+      rows={rows.slice(0, CUSTOMERS_PAGE)}
+      tags={await shopTags(db(c), shop.id)}
+      stats={stats!}
+      filter={f}
+      page={page}
+      hasNext={rows.length > CUSTOMERS_PAGE}
+    />,
   );
+});
+
+/** The filtered customer list as CSV (opens in Excel; BOM for the Persian text). */
+crmPanel.get("/panel/customers.csv", async (c) => {
+  const shop = shopOf(c);
+  const stage = isStage(c.req.query("stage") ?? "") ? c.req.query("stage") : undefined;
+  const rows = await listCustomers(db(c), shop.id, { q: (c.req.query("q") ?? "").trim() || undefined, stage, tag: Number(c.req.query("tag")) || undefined, limit: 5000, offset: 0 });
+  const cell = (v: unknown) => {
+    const t = String(v ?? "");
+    const safe = /^[=+\-@]/.test(t) ? `'${t}` : t; // no formulas in spreadsheets
+    return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
+  const head = ["نام", "آیدی اینستاگرام", "تلفن", "شهر", "آدرس", "تولد", "منبع", "مرحله", "برچسب‌ها", "تعداد سفارش", "مجموع خرید", "آخرین سفارش", "ثبت"];
+  const lines = rows.map((r) =>
+    [r.name, r.username, r.phone, r.city, r.address, r.birthday, r.source, STAGE_LABEL[r.stage], parseTags(r.tags).map((t) => t.name).join("، "), r.orders_count, r.total_spent, r.last_order_at ?? "", r.created_at]
+      .map(cell)
+      .join(","),
+  );
+  await logActivity(db(c), shop.id, currentUser(c).id, "export", "customer", null, `${rows.length}`);
+  return c.body("\ufeff" + [head.join(","), ...lines].join("\r\n"), 200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="customers-${shop.slug}.csv"`,
+  });
 });
 
 /** The editable fields from a customer form, or an error. */
@@ -449,14 +498,37 @@ crmPanel.post("/panel/tasks/:id{[0-9]+}/toggle", async (c) => {
 crmPanel.get("/panel/sales", async (c) => {
   const shop = shopOf(c);
   const status = (c.req.query("status") ?? "") in CRM_ORDER_STATUS ? c.req.query("status")! : "";
-  const { results } = await db(c)
-    .prepare(
-      `SELECT o.*, cu.name AS customer_name, cu.username AS customer_username FROM crm_orders o JOIN customers cu ON cu.id = o.customer_id
-       WHERE o.shop_id = ? ${status ? "AND o.status = ?" : ""} ORDER BY o.created_at DESC LIMIT 200`,
-    )
-    .bind(...(status ? [shop.id, status] : [shop.id]))
-    .all<CrmOrder & { customer_name: string; customer_username: string }>();
-  return render(c, <SalesPage {...await ctx(c)} orders={results} status={status} />);
+  const q = (c.req.query("q") ?? "").trim().slice(0, 60);
+  const where = ["o.shop_id = ?"];
+  const args: (string | number)[] = [shop.id];
+  if (status) {
+    where.push("o.status = ?");
+    args.push(status);
+  }
+  if (q) {
+    const n = Number(normalizeDigits(q).replace(/\D/g, ""));
+    where.push("(cu.name LIKE ? OR cu.username LIKE ? OR cu.phone LIKE ? OR o.number = ?)");
+    args.push(`%${q}%`, `%${q.replace(/^@/, "")}%`, `%${q}%`, n || -1);
+  }
+  const [orders, counts] = await db(c).batch([
+    db(c)
+      .prepare(
+        `SELECT o.*, cu.name AS customer_name, cu.username AS customer_username FROM crm_orders o JOIN customers cu ON cu.id = o.customer_id
+         WHERE ${where.join(" AND ")} ORDER BY o.created_at DESC LIMIT 200`,
+      )
+      .bind(...args),
+    db(c).prepare("SELECT status, COUNT(*) AS n FROM crm_orders WHERE shop_id = ? GROUP BY status").bind(shop.id),
+  ]);
+  return render(
+    c,
+    <SalesPage
+      {...await ctx(c)}
+      orders={orders.results as (CrmOrder & { customer_name: string; customer_username: string })[]}
+      status={status}
+      q={q}
+      counts={Object.fromEntries((counts.results as { status: string; n: number }[]).map((r) => [r.status, r.n]))}
+    />,
+  );
 });
 
 /** Every sellable variant of the shop's products, with its price and (tracked) stock. */

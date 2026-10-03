@@ -33,9 +33,10 @@
   --warn-fg: #b45309; --warn-bg: #fffbeb; --err-fg: #b91c1c; --err-bg: #fef2f2; --ok: #15803d; --ok-bg: #ecfdf5;
 }
 /* Shop panel: light slate + blue, as in html/shoppanel.html */
+/* Panels (shop CRM and site admin): the sky palette of the UX Pilot designs. */
 .theme-panel {
-  --bg: #f8fafc; --card: #ffffff; --fg: #0f172a; --muted: #64748b; --line: #e2e8f0;
-  --field: #f8fafc; --accent: #2563eb; --accent-fg: #fff; --ok: #059669; --ok-bg: #ecfdf5;
+  --bg: #f0f9ff; --card: #ffffff; --fg: #0c4a6e; --muted: #64748b; --line: #e0f2fe;
+  --field: #f8fcff; --accent: #0ea5e9; --accent-fg: #fff; --ok: #059669; --ok-bg: #ecfdf5;
   --warn-bg: #fffbeb; --warn-fg: #b45309; --err-bg: #fef2f2; --err-fg: #b91c1c;
 }
 
@@ -99,7 +100,11 @@
   .ui :where(button.small, .btn.small) { @apply px-3 py-1.5 text-xs; }
   .ui :where(button.danger) { background: #e53935; color: #fff; }
   .ui :where(button:disabled) { opacity: 0.45; cursor: not-allowed; }
+  .theme-panel .ui :where(button, .btn) { box-shadow: 0 6px 16px -6px rgb(14 165 233 / 0.45); }
+  .theme-panel .ui :where(button.secondary, .btn.secondary) { background: #f0f9ff; color: #0284c7; border-color: #e0f2fe; box-shadow: none; }
+  .theme-panel .ui :where(button.danger) { box-shadow: none; }
   .ui .card { @apply rounded-2xl p-4 mb-4; background: var(--card); border: 1px solid var(--line); }
+  .theme-panel .ui .card { @apply rounded-[1.75rem] p-5; box-shadow: 0 1px 3px rgb(14 165 233 / 0.06); }
   .ui .muted { color: var(--muted); }
   .ui .small { @apply text-xs; }
   .ui .price { color: var(--accent); font-weight: 700; }

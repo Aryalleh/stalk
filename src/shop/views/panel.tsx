@@ -70,49 +70,106 @@ export const PANEL_SECTIONS: [PanelTab, string, string, string, boolean][] = [
   ["settings", "/panel/settings", "fa-gear", "تنظیمات", true],
 ];
 
-/** Shop panel shell: light theme, shop header with section tabs (desktop) and a bottom bar (phones). */
-export function PanelShell(props: { title: string; user: User; shop: Shop; on: PanelTab; children?: Child; wide?: boolean; unread?: number }) {
+/** Desktop side navigation of the panels (UX Pilot design): brand on top, sections, a card at the bottom. */
+function SideNav(props: { brand: Child; items: { href: string; icon: string; label: string; on: boolean; badge?: number; divider?: boolean }[]; footer: Child }) {
+  return (
+    <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 flex-col bg-white border-l border-sky-100" aria-label="بخش‌های پنل">
+      <div class="h-20 flex items-center px-6 border-b border-sky-100 shrink-0">{props.brand}</div>
+      <nav class="flex-1 overflow-y-auto no-scrollbar px-4 py-5 space-y-1.5">
+        {props.items.map((i) => (
+          <>
+            {i.divider && <div class="h-px bg-sky-100 my-3" />}
+            <a
+              href={i.href}
+              class={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition ${
+                i.on ? "bg-sky-500 !text-white shadow-lg shadow-sky-500/25" : "!text-sky-900/60 hover:bg-sky-50 hover:!text-sky-600"
+              }`}
+            >
+              <i class={`fa-solid ${i.icon} w-5 text-center`}></i>
+              <span class="flex-1">{i.label}</span>
+              {(i.badge ?? 0) > 0 && (
+                <span class={`min-w-6 h-6 px-1.5 rounded-lg text-[11px] flex items-center justify-center ${i.on ? "bg-white/25 text-white" : "bg-sky-100 text-sky-600"}`}>
+                  {(i.badge ?? 0) > 99 ? "99+" : (i.badge ?? 0).toLocaleString("fa-IR")}
+                </span>
+              )}
+            </a>
+          </>
+        ))}
+      </nav>
+      <div class="p-4 border-t border-sky-100 shrink-0">{props.footer}</div>
+    </aside>
+  );
+}
+
+/** Shop panel shell: sky theme, side navigation (desktop), shop header and bottom bar (phones). */
+export function PanelShell(props: { title: string; user: User; shop: Shop; on: PanelTab; children?: Child; wide?: boolean; full?: boolean; unread?: number }) {
   const s = props.shop;
   const admin = isShopAdmin(props.user, s);
   const sections = PANEL_SECTIONS.filter(([, , , , onlyAdmin]) => admin || !onlyAdmin);
   const tab = (key: PanelTab, href: string, icon: string, label: string, badge = 0) => (
-    <a href={href} class={`relative flex flex-col items-center gap-1 ${props.on === key ? "text-blue-600" : "text-slate-400"}`}>
+    <a href={href} class={`relative flex flex-col items-center gap-1 ${props.on === key ? "text-sky-500" : "text-slate-400"}`}>
       <i class={`fa-solid ${icon} text-lg`}></i>
       {badge > 0 && <span class="absolute -top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center">{badge > 99 ? "99+" : badge.toLocaleString("fa-IR")}</span>}
       <span class="text-[10px] font-bold">{label}</span>
     </a>
   );
   const moreOn = !["dashboard", "inbox", "customers", "orders"].includes(props.on);
+  const logo = (size: string) => (
+    <div class={`${size} rounded-xl bg-sky-500 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 overflow-hidden shrink-0`}>
+      {s.logo_key ? <img src={`/img/${s.logo_key}`} alt="" class="w-full h-full object-cover" /> : <i class="fa-solid fa-store text-lg"></i>}
+    </div>
+  );
+  const status = (
+    <>
+      {admin ? "مدیر فروشگاه" : "پشتیبان"} · <span class={s.status === "approved" ? "text-emerald-600" : "text-amber-600"}>{SHOP_STATUS[s.status]}</span>
+    </>
+  );
+  const sidebar = (
+    <SideNav
+      brand={
+        <a href="/panel" class="flex items-center gap-3 text-xl font-black !text-sky-500">
+          {logo("w-10 h-10")} پنل فروشگاه
+        </a>
+      }
+      items={sections.map(([key, href, icon, label, onlyAdmin], n) => ({
+        href,
+        icon,
+        label,
+        on: props.on === key,
+        badge: key === "inbox" ? props.unread : 0,
+        divider: !!onlyAdmin && !sections[n - 1]?.[4],
+      }))}
+      footer={
+        <div class="flex items-center gap-3 p-3 rounded-2xl bg-sky-50/60 border border-sky-100">
+          {logo("w-10 h-10")}
+          <div class="flex-1 min-w-0">
+            <b class="text-xs text-sky-900 block truncate">{s.name}</b>
+            <span class="text-[10px] text-slate-500">{status}</span>
+          </div>
+          <a href={`/s/${s.slug}`} title="صفحه عمومی فروشگاه" aria-label="صفحه عمومی فروشگاه" class="!text-slate-400 hover:!text-sky-500"><i class="fa-solid fa-eye"></i></a>
+          <a href="/" title="بازگشت به سایت" aria-label="بازگشت به سایت" class="!text-slate-400 hover:!text-sky-500"><i class="fa-solid fa-house"></i></a>
+        </div>
+      }
+    />
+  );
   const header = (
     <>
-      <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div class={`${props.wide ? "max-w-5xl" : "max-w-5xl"} mx-auto px-4 py-3 flex items-center justify-between gap-3`}>
+      <header class="md:hidden bg-white border-b border-sky-100 sticky top-0 z-40">
+        <div class="px-4 py-3 flex items-center justify-between gap-3">
           <a href="/panel" class="flex items-center gap-3 min-w-0">
-            <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20 overflow-hidden shrink-0">
-              {s.logo_key ? <img src={`/img/${s.logo_key}`} alt="" class="w-full h-full object-cover" /> : <i class="fa-solid fa-store text-lg"></i>}
-            </div>
+            {logo("w-10 h-10")}
             <div class="min-w-0">
-              <h1 class="text-sm font-bold text-slate-900 truncate">{s.name}</h1>
-              <p class="text-[10px] text-slate-500">
-                {admin ? "مدیر فروشگاه" : "پشتیبان"} · <span class={s.status === "approved" ? "text-emerald-600" : "text-amber-600"}>{SHOP_STATUS[s.status]}</span>
-              </p>
+              <h1 class="text-sm font-bold text-sky-900 truncate">{s.name}</h1>
+              <p class="text-[10px] text-slate-500">{status}</p>
             </div>
           </a>
           <div class="flex gap-2">
-            <a href={`/s/${s.slug}`} aria-label="صفحه عمومی فروشگاه" title="صفحه عمومی فروشگاه" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-eye"></i></a>
-            <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-house"></i></a>
+            <a href={`/s/${s.slug}`} aria-label="صفحه عمومی فروشگاه" title="صفحه عمومی فروشگاه" class="w-10 h-10 flex items-center justify-center rounded-full bg-sky-50 text-sky-600"><i class="fa-solid fa-eye"></i></a>
+            <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-sky-50 text-sky-600"><i class="fa-solid fa-house"></i></a>
           </div>
         </div>
-        <nav class={`hidden md:flex ${props.wide ? "max-w-5xl" : "max-w-5xl"} mx-auto px-4 gap-1 overflow-x-auto no-scrollbar`} aria-label="بخش‌های پنل">
-          {sections.map(([key, href, icon, label]) => (
-            <a href={href} class={`whitespace-nowrap px-3 py-2.5 text-xs font-bold border-b-2 ${props.on === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-900"}`}>
-              <i class={`fa-solid ${icon} ml-1`}></i>{label}
-              {key === "inbox" && (props.unread ?? 0) > 0 && <span class="mr-1 px-1.5 rounded-full bg-red-500 text-white text-[9px]">{(props.unread ?? 0).toLocaleString("fa-IR")}</span>}
-            </a>
-          ))}
-        </nav>
       </header>
-      <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 safe-bottom">
+      <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-sky-100 safe-bottom">
         <div class="max-w-md mx-auto px-6 pt-3 flex items-center justify-between">
           {tab("dashboard", "/panel", "fa-chart-pie", "داشبورد")}
           {tab("inbox", "/panel/inbox", "fa-comments", "گفتگوها", props.unread ?? 0)}
@@ -124,8 +181,8 @@ export function PanelShell(props: { title: string; user: User; shop: Shop; on: P
     </>
   );
   return (
-    <Layout title={props.title} user={props.user} panel header={header} wide>
-      <div class="pb-20">
+    <Layout title={props.title} user={props.user} panel header={header} sidebar={sidebar} wide full={props.full}>
+      <div class="pb-20 md:pb-0">
         {s.status === "pending" && <div class="warnbox">فروشگاه در انتظار تأیید است. می‌توانید محصولات را اضافه کنید؛ بعد از تأیید نمایش داده می‌شوند.</div>}
         {s.status === "suspended" && <div class="errbox">فروشگاه معلق است و محصولاتش نمایش داده نمی‌شود.</div>}
         {!s.card_number && (
@@ -148,7 +205,7 @@ export const ORDER_FILTERS: [string, string][] = [
 const STATUS_STYLE: Record<string, string> = {
   pending: "bg-slate-100 text-slate-500",
   awaiting: "bg-amber-50 text-amber-600",
-  paid: "bg-blue-50 text-blue-600",
+  paid: "bg-sky-50 text-sky-600",
   shipped: "bg-emerald-50 text-emerald-600",
   delivered: "bg-emerald-50 text-emerald-600",
   rejected: "bg-red-50 text-red-600",
@@ -163,26 +220,26 @@ export type PanelOrder = Order & { image_key: string };
 function OrderCard(props: { o: PanelOrder }) {
   const o = props.o;
   return (
-    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+    <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-sm">
       <div class="flex items-start justify-between gap-3 mb-4">
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-12 h-12 rounded-lg bg-slate-50 overflow-hidden border border-slate-100 shrink-0 flex items-center justify-center">
             {o.image_key ? <img class="w-full h-full object-cover" src={`/img/${o.image_key}`} alt="" loading="lazy" /> : "🎁"}
           </div>
           <div class="min-w-0">
-            <h3 class="text-xs font-bold text-slate-900 truncate">{o.product_title}{variantLabel(o.size, o.color) && <span class="text-slate-500"> · {variantLabel(o.size, o.color)}</span>}</h3>
+            <h3 class="text-xs font-bold text-sky-900 truncate">{o.product_title}{variantLabel(o.size, o.color) && <span class="text-slate-500"> · {variantLabel(o.size, o.color)}</span>}</h3>
             <p class="text-[10px] text-slate-500">سفارش #{o.id} · <span class="dt">{formatJalali(o.reported_at ?? o.created_at, false)}</span></p>
-            <p class="text-[11px] font-bold text-slate-900 mt-0.5">{toman(o.amount)}</p>
+            <p class="text-[11px] font-bold text-sky-900 mt-0.5">{toman(o.amount)}</p>
           </div>
         </div>
         <span class={`px-2 py-1 text-[10px] font-bold rounded-md whitespace-nowrap ${STATUS_STYLE[o.status] ?? ""}`}>{o.cancel_kind === "out_of_stock" ? "لغو، ناموجود" : o.change_status === "pending" ? "منتظر پاسخ تغییر" : SHORT_STATUS[o.status]}</span>
       </div>
       <div class="flex items-center justify-between pt-3 border-t border-slate-100">
         <div class="text-[11px] text-slate-500">
-          خریدار: <span class="text-slate-900 font-medium">{o.giver_name}</span>
+          خریدار: <span class="text-sky-900 font-medium">{o.giver_name}</span>
           {o.delivery_method && <> · {DELIVERY_LABEL[o.delivery_method]}</>}
         </div>
-        <a href={`/panel/orders/${o.id}`} class="text-[11px] font-bold text-blue-600 flex items-center gap-1">
+        <a href={`/panel/orders/${o.id}`} class="text-[11px] font-bold text-sky-600 flex items-center gap-1">
           مشاهده جزئیات <i class="fa-solid fa-arrow-left text-[9px]"></i>
         </a>
       </div>
@@ -199,7 +256,7 @@ function Chip(props: { href: string; on: boolean; children: Child }) {
   return (
     <a
       href={props.href}
-      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-blue-50 !text-blue-600 border-blue-100" : "bg-white !text-slate-500 border-slate-200"}`}
+      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-sky-500 !text-white border-sky-500 shadow-sm shadow-sky-500/30" : "bg-white !text-slate-500 border-sky-100 hover:!text-sky-600"}`}
     >
       {props.children}
     </a>
@@ -222,15 +279,15 @@ export function DashboardPage(props: {
   const fa = (n: number) => n.toLocaleString("fa-IR");
   const nowIso = new Date().toISOString();
   const kpi = (href: string, icon: string, label: string, value: string, alert = false) => (
-    <a href={href} class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3 !text-slate-900">
-      <span class={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${alert ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}><i class={`fa-solid ${icon}`}></i></span>
+    <a href={href} class="bg-white p-3 rounded-2xl border border-sky-100 shadow-sm flex items-center gap-3 !text-sky-900">
+      <span class={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${alert ? "bg-red-50 text-red-600" : "bg-sky-50 text-sky-600"}`}><i class={`fa-solid ${icon}`}></i></span>
       <span class="min-w-0"><span class="text-[11px] text-slate-500 block">{label}</span><b class="text-base">{value}</b></span>
     </a>
   );
   const stat = (label: string, value: string, note?: Child) => (
-    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+    <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-sm">
       <span class="text-[11px] text-slate-500 block mb-1">{label}</span>
-      <span class="text-lg font-bold text-slate-900">{value}</span>
+      <span class="text-lg font-bold text-sky-900">{value}</span>
       {note}
     </div>
   );
@@ -248,9 +305,9 @@ export function DashboardPage(props: {
         <section class="grid md:grid-cols-3 gap-3 mb-6">
           {props.tasks.length > 0 && (
             <div class="card !mb-0">
-              <h2><i class="fa-solid fa-list-check ml-1 text-blue-600"></i> وظایف من</h2>
+              <h2><i class="fa-solid fa-list-check ml-1 text-sky-600"></i> وظایف من</h2>
               {props.tasks.map((t) => (
-                <a href={t.customer_id ? `/panel/customers/${t.customer_id}` : "/panel/tasks"} class="flex justify-between gap-2 py-1 text-sm !text-slate-900">
+                <a href={t.customer_id ? `/panel/customers/${t.customer_id}` : "/panel/tasks"} class="flex justify-between gap-2 py-1 text-sm !text-sky-900">
                   <span class="truncate">{t.title}{t.customer_name ? ` · ${t.customer_name}` : ""}</span>
                   {t.due_at && <span class={`text-[10px] shrink-0 dt ${t.due_at < nowIso ? "text-red-600 font-bold" : "text-slate-500"}`}>{formatJalali(t.due_at)}</span>}
                 </a>
@@ -261,7 +318,7 @@ export function DashboardPage(props: {
             <div class="card !mb-0">
               <h2><i class="fa-solid fa-triangle-exclamation ml-1 text-amber-500"></i> موجودی کم</h2>
               {props.lowStock.map((r) => (
-                <a href={`/panel/products/${r.id}#stock`} class="flex justify-between gap-2 py-1 text-sm !text-slate-900">
+                <a href={`/panel/products/${r.id}#stock`} class="flex justify-between gap-2 py-1 text-sm !text-sky-900">
                   <span class="truncate">{r.title}{variantLabel(r.size, r.color) ? ` (${variantLabel(r.size, r.color)})` : ""}</span>
                   <b class={r.quantity === 0 ? "text-red-600" : "text-amber-600"}>{fa(r.quantity)}</b>
                 </a>
@@ -272,7 +329,7 @@ export function DashboardPage(props: {
             <div class="card !mb-0">
               <h2>🎂 تولدهای پیش رو</h2>
               {props.birthdays.map((b) => (
-                <a href={`/panel/customers/${b.id}`} class="flex justify-between gap-2 py-1 text-sm !text-slate-900">
+                <a href={`/panel/customers/${b.id}`} class="flex justify-between gap-2 py-1 text-sm !text-sky-900">
                   <span class="truncate">{b.name || `@${b.username}`}</span>
                   <span class="text-[11px] text-slate-500">{birthdayLabel(b.birthday)}</span>
                 </a>
@@ -285,7 +342,7 @@ export function DashboardPage(props: {
       <section class="grid grid-cols-2 gap-4 mb-8">
         {stat("فروش امروز", toman(st.today))}
         {stat("فیش‌های جدید", st.awaiting.toLocaleString("fa-IR"), st.awaiting ? <span class="text-[10px] text-amber-600 mr-1 font-bold">منتظر تأیید</span> : null)}
-        {stat("آماده ارسال", st.toShip.toLocaleString("fa-IR"), st.toShip ? <span class="text-[10px] text-blue-600 mr-1 font-bold">فعال</span> : null)}
+        {stat("آماده ارسال", st.toShip.toLocaleString("fa-IR"), st.toShip ? <span class="text-[10px] text-sky-600 mr-1 font-bold">فعال</span> : null)}
         {stat("کل فروش موفق", st.sales.toLocaleString("fa-IR"), <span class="text-[10px] text-slate-500 mr-1">{st.products.toLocaleString("fa-IR")} محصول</span>)}
       </section>
       <section>
@@ -299,7 +356,7 @@ export function DashboardPage(props: {
         <OrderList orders={props.orders} empty={props.onlyAwaiting ? "فیشی منتظر تأیید نیست." : "هنوز سفارشی ثبت نشده."} />
         <p class="text-center mt-4"><a href="/panel/orders" class="text-xs font-bold">همه سفارش‌ها</a></p>
       </section>
-      <a href="/panel/products/new" class="mt-6 w-full py-4 bg-slate-900 !text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10">
+      <a href="/panel/products/new" class="mt-6 w-full py-4 bg-sky-900 !text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-sky-900/10">
         <i class="fa-solid fa-plus text-sm"></i> افزودن محصول جدید
       </a>
     </PanelShell>
@@ -488,15 +545,15 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
       {props.products.length === 0 && <div class="card text-center text-sm muted py-10">هنوز محصولی ثبت نشده.</div>}
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         {props.products.map((p) => (
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <a href={`/panel/products/${p.id}`} class="block !text-slate-900">
+          <div class="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
+            <a href={`/panel/products/${p.id}`} class="block !text-sky-900">
               <div class="aspect-square bg-slate-50 flex items-center justify-center text-4xl">
                 {p.image_key ? <img src={`/img/${p.image_key}`} alt={p.title} loading="lazy" class="w-full h-full object-cover" /> : "🎁"}
               </div>
               <div class="p-3 pb-1">
                 <h3 class="text-xs font-bold truncate">{p.title}</h3>
                 <div class="flex items-center justify-between mt-1">
-                  <span class="text-[11px] font-bold text-blue-600">{toman(p.price)}</span>
+                  <span class="text-[11px] font-bold text-sky-600">{toman(p.price)}</span>
                   <span class={`text-[10px] px-1.5 py-0.5 rounded ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
                 </div>
               </div>
@@ -752,13 +809,13 @@ export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok
         <div class="flex flex-wrap gap-6 items-start">
           <div>
             <label style="margin-top:0">لوگو (مربعی)</label>
-            <img id="logo-preview" src={s.logo_key ? `/img/${s.logo_key}` : ""} alt="" class={`w-20 h-20 rounded-2xl object-cover border border-slate-200 mb-2 ${s.logo_key ? "" : "hidden"}`} />
+            <img id="logo-preview" src={s.logo_key ? `/img/${s.logo_key}` : ""} alt="" class={`w-20 h-20 rounded-2xl object-cover border border-sky-100 mb-2 ${s.logo_key ? "" : "hidden"}`} />
             <FilePicker name="logo" label="انتخاب لوگو" attrs={{ "data-preview": "logo-preview" }} />
             {s.logo_key && <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_logo" value="1" /> حذف لوگو</label>}
           </div>
           <div class="flex-1 min-w-[220px]">
             <label style="margin-top:0">عکس کاور (افقی)</label>
-            <img id="cover-preview" src={s.cover_key ? `/img/${s.cover_key}` : ""} alt="" class={`w-full max-w-sm h-24 rounded-2xl object-cover border border-slate-200 mb-2 ${s.cover_key ? "" : "hidden"}`} />
+            <img id="cover-preview" src={s.cover_key ? `/img/${s.cover_key}` : ""} alt="" class={`w-full max-w-sm h-24 rounded-2xl object-cover border border-sky-100 mb-2 ${s.cover_key ? "" : "hidden"}`} />
             <FilePicker name="cover" label="انتخاب کاور" attrs={{ "data-preview": "cover-preview" }} />
             {s.cover_key && <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_cover" value="1" /> حذف کاور</label>}
           </div>
@@ -946,28 +1003,49 @@ export function SetupPage(props: { step: "details" | "code"; error?: string; val
 /** Admin area: light theme (like the shop panel) with its own header and tabs. */
 function AdminShell(props: { title: string; user: User; on: string; children?: Child }) {
   const tabs: [string, string, string][] = [
-    ["/admin", "fa-store", "فروشگاه‌ها و فروش"],
+    ["/admin", "fa-chart-simple", "آمار و فروشگاه‌ها"],
     ["/admin/content", "fa-pen-to-square", "درباره و سوالات"],
     ["/admin/settings", "fa-gear", "تنظیمات سایت"],
     ["/crm", "fa-address-book", "CRM"],
   ];
+  const sidebar = (
+    <SideNav
+      brand={
+        <a href="/admin" class="flex items-center gap-3 text-xl font-black !text-sky-500">
+          <span class="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center text-white shadow-lg shadow-sky-500/20"><i class="fa-solid fa-shield-halved"></i></span>
+          مدیریت سایت
+        </a>
+      }
+      items={tabs.map(([href, icon, label]) => ({ href, icon, label, on: props.on === href, divider: href === "/crm" }))}
+      footer={
+        <div class="flex items-center gap-3 p-3 rounded-2xl bg-sky-50/60 border border-sky-100">
+          <span class="w-10 h-10 rounded-full bg-sky-100 text-sky-600 font-bold flex items-center justify-center">{props.user.name.trim()[0] ?? "؟"}</span>
+          <div class="flex-1 min-w-0">
+            <b class="text-xs text-sky-900 block truncate">{props.user.name}</b>
+            <span class="text-[10px] text-slate-500">مدیر پلتفرم</span>
+          </div>
+          <a href="/" title="بازگشت به سایت" aria-label="بازگشت به سایت" class="!text-slate-400 hover:!text-sky-500"><i class="fa-solid fa-house"></i></a>
+        </div>
+      }
+    />
+  );
   const header = (
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
-      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <header class="md:hidden bg-white border-b border-sky-100 sticky top-0 z-40">
+      <div class="px-4 py-3 flex items-center justify-between gap-3">
         <a href="/admin" class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white"><i class="fa-solid fa-shield-halved"></i></div>
+          <div class="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center text-white"><i class="fa-solid fa-shield-halved"></i></div>
           <div>
-            <h1 class="text-sm font-bold text-slate-900">مدیریت سایت</h1>
+            <h1 class="text-sm font-bold text-sky-900">مدیریت سایت</h1>
             <p class="text-[10px] text-slate-500">{props.user.name}</p>
           </div>
         </a>
-        <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500"><i class="fa-solid fa-house"></i></a>
+        <a href="/" aria-label="بازگشت به سایت" title="بازگشت به سایت" class="w-10 h-10 flex items-center justify-center rounded-full bg-sky-50 text-sky-600"><i class="fa-solid fa-house"></i></a>
       </div>
-      <nav class="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto no-scrollbar" aria-label="بخش‌های مدیریت">
+      <nav class="px-4 flex gap-1 overflow-x-auto no-scrollbar" aria-label="بخش‌های مدیریت">
         {tabs.map(([href, icon, label]) => (
           <a
             href={href}
-            class={`whitespace-nowrap px-3 py-2.5 text-xs font-bold border-b-2 ${props.on === href ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+            class={`whitespace-nowrap px-3 py-2.5 text-xs font-bold border-b-2 ${props.on === href ? "border-sky-500 text-sky-600" : "border-transparent text-slate-500 hover:text-sky-900"}`}
           >
             <i class={`fa-solid ${icon} ml-1`}></i>{label}
           </a>
@@ -976,7 +1054,7 @@ function AdminShell(props: { title: string; user: User; on: string; children?: C
     </header>
   );
   return (
-    <Layout title={props.title} user={props.user} panel wide header={header}>
+    <Layout title={props.title} user={props.user} panel wide header={header} sidebar={sidebar}>
       {props.children}
     </Layout>
   );
