@@ -1339,7 +1339,7 @@ export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platf
         </p>
       )}
       <label>{s.ig_access_token ? "توکن جدید (خالی = بدون تغییر)" : "توکن دسترسی (Access token)"}</label>
-      <input name="ig_access_token" class="ltr" autocomplete="off" maxlength={600} />
+      <input name="ig_access_token" class="ltr" autocomplete="off" maxlength={2000} placeholder="IGAA…" />
       <details class="mt-2">
         <summary class="cursor-pointer text-xs muted">شناسه حساب دستی (معمولاً لازم نیست)</summary>
         <input name="ig_account_id" value={s.ig_account_id} class="ltr" inputmode="numeric" maxlength={30} aria-label="شناسه حساب اینستاگرام" />
@@ -1392,7 +1392,17 @@ export function ReelsPage(
           اینستاگرام فروشگاه وصل نیست. اول در <a href="/panel/settings#instagram">تنظیمات</a> توکن را وارد کنید.
         </div>
       )}
-      {props.apiError && <div class="errbox">دریافت پست‌ها از اینستاگرام ممکن نشد: {props.apiError}</div>}
+      {props.apiError && (
+        <div class="errbox">
+          دریافت پست‌ها از اینستاگرام ممکن نشد: {props.apiError}
+          {/oauth|access token|session|expired/i.test(props.apiError) && (
+            <div class="mt-1">
+              توکن ذخیره‌شده فروشگاه معتبر نیست (مربوط به تنظیمات مدیر سایت نیست). در <a href="/panel/settings#instagram">تنظیمات ← اتصال اینستاگرام</a> توکن تازه‌ای
+              که با IG شروع می‌شود وارد کنید.
+            </div>
+          )}
+        </div>
+      )}
       <div class="rounded-[1.5rem] p-4 mb-4 bg-white border border-sky-100 text-xs leading-7 text-slate-600">
         <b class="text-sky-900">چطور کار می‌کند؟</b> برای هر پست یک محصول انتخاب کنید و ذخیره کنید. وقتی کامنتی با یکی از کلمه‌های کلیدی بیاید (یا هر کامنتی
         اگر کلمه‌ای ننوشته باشید): ۱) پاسخ عمومی زیر کامنت گذاشته می‌شود، ۲) متن دایرکت با قیمت و لینک خرید برای همان شخص فرستاده می‌شود (هر نفر

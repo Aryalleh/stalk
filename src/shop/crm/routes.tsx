@@ -772,6 +772,14 @@ crmPanel.post("/panel/team/:id{[0-9]+}/remove", async (c) => {
 
 // ---------- Instagram connection (admins) ----------
 
+/** A pasted token without the wrapping people copy along: spaces, quotes, "Bearer ", a URL around it. */
+export function cleanIgToken(raw: string) {
+  let t = raw.trim().replace(/^["'`]+|["'`]+$/g, "").replace(/^bearer\s+/i, "");
+  const inUrl = t.match(/access_token=([^&#\s]+)/);
+  if (inUrl) t = decodeURIComponent(inUrl[1]);
+  return t.replace(/\s/g, "").slice(0, 1000);
+}
+
 crmPanel.post("/panel/settings/instagram", async (c) => {
   const shop = shopOf(c);
   const f = await form(c);
@@ -783,9 +791,15 @@ crmPanel.post("/panel/settings/instagram", async (c) => {
   }
   let account = normalizeDigits(f.ig_account_id ?? "").replace(/\D/g, "").slice(0, 30);
   let username = shop.ig_username;
-  const token = (f.ig_access_token ?? "").replace(/\s/g, "").slice(0, 600);
+  const token = cleanIgToken(f.ig_access_token ?? "");
   let note = "ذخیره شد.";
   if (token) {
+    if (/^EAA/.test(token)) {
+      return back(
+        "error",
+        "این توکن فیسبوک است (با EAA شروع می‌شود)، نه توکن اینستاگرام. در developers.facebook.com ← Instagram API ← «Generate access tokens» توکنی بسازید که با IG شروع شود.",
+      );
+    }
     // The token says which account it belongs to; the id webhooks use is its user_id.
     try {
       const me = await fetchAccount(token);
@@ -793,8 +807,12 @@ crmPanel.post("/panel/settings/instagram", async (c) => {
       username = me.username;
       note = `وصل شد: @${me.username}`;
     } catch (e) {
-      if (!account) return back("error", `توکن پذیرفته نشد: ${(e as Error).message}`);
-      note = `ذخیره شد، ولی بررسی توکن با اینستاگرام ممکن نشد (${(e as Error).message}).`;
+      const msg = (e as Error).message;
+      // Instagram rejected the token itself: never store it. Only a network problem lets it through.
+      if (!account || /oauth|access token|session|expired|invalid|permission/i.test(msg)) {
+        return back("error", `اینستاگرام توکن را نپذیرفت: ${msg}. توکن را دوباره از صفحه اپ (Generate access tokens) کامل کپی کنید؛ باید با IG شروع شود.`);
+      }
+      note = `ذخیره شد، ولی بررسی توکن با اینستاگرام ممکن نشد (${msg}).`;
     }
   }
   if (!account) return back("error", "توکن دسترسی را وارد کنید.");

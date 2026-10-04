@@ -4,6 +4,7 @@ import { upcomingMonthDays } from "../lib/people";
 import { matchesKeyword } from "../src/shop/crm/automation";
 import { parseComments, parseWebhook, validSignature } from "../src/shop/crm/instagram";
 import { fillTemplate } from "../src/shop/crm/comments";
+import { cleanIgToken } from "../src/shop/crm/routes";
 
 describe("instagram webhook", () => {
   const payload = {
@@ -92,5 +93,14 @@ describe("comments", () => {
     expect(fillTemplate("سلام {name}\n{title}: {price}\n{link} {other}", { name: "@mina", title: "ساعت", price: "۱۰۰ تومان", link: "https://x/p/1" })).toBe(
       "سلام @mina\nساعت: ۱۰۰ تومان\nhttps://x/p/1 {other}",
     );
+  });
+});
+
+describe("instagram token input", () => {
+  it("strips what people copy along with the token", () => {
+    expect(cleanIgToken("  IGAAabc123 \n")).toBe("IGAAabc123");
+    expect(cleanIgToken('"IGAAabc123"')).toBe("IGAAabc123");
+    expect(cleanIgToken("Bearer IGAAabc123")).toBe("IGAAabc123");
+    expect(cleanIgToken("https://graph.instagram.com/me?fields=id&access_token=IGAAabc123&x=1")).toBe("IGAAabc123");
   });
 });
