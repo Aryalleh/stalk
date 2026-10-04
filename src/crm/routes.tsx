@@ -18,13 +18,13 @@ import {
   getFieldDefs,
   getLogs,
   logMessage,
-  recentLogs,
   saveContact,
   searchContacts,
   type ContactRow,
 } from "./db";
 import { CORE_FIELDS, CORE_NAMES, cleanContact, contactName, fieldLabel } from "./fields";
-import { buildSnapshot, type Extras } from "./history";
+import { buildSnapshot, type Extras, type LogRow } from "./history";
+import { clientDossier, listFacts } from "./dossier";
 import { formatJalali, parseJalali } from "../../lib/jalali";
 import {
   ContactPage,
@@ -34,6 +34,7 @@ import {
   ListPage,
   SnapshotPage,
   UsersPage,
+  type ListStats,
   type Messaging,
 } from "./views/pages";
 
@@ -63,10 +64,21 @@ const idParam = (c: C) => Number(c.req.param("id"));
 crm.get("/", async (c) => {
   const q = c.req.query("q") ?? "";
   const page = pageParam(c);
-  const rows = await searchContacts(c.env.DB, q, page);
-  return render(c, 
-    <ListPage user={me(c)} q={q} page={page} rows={rows.slice(0, PAGE_SIZE)} hasNext={rows.length > PAGE_SIZE} />,
-  );
+  const rows = (await searchContacts(c.env.DB, q, page)).slice(0, PAGE_SIZE + 1);
+  const shown = rows.slice(0, PAGE_SIZE);
+  const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const [stats, facts] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT (SELECT COUNT(*) FROM contacts) AS total,
+              (SELECT COUNT(*) FROM contacts WHERE created_at >= ?) AS newMonth,
+              (SELECT COUNT(*) FROM contacts k WHERE k.phone <> '' AND EXISTS (SELECT 1 FROM users u WHERE u.phone = k.phone)) AS accounts,
+              (SELECT COUNT(*) FROM contacts k WHERE k.phone <> '' AND EXISTS (SELECT 1 FROM orders o WHERE o.giver_phone = k.phone AND o.status IN ('awaiting','paid','shipped','delivered'))) AS buyers`,
+    )
+      .bind(monthAgo)
+      .first<ListStats>(),
+    listFacts(c.env.DB, shown),
+  ]);
+  return render(c, <ListPage user={me(c)} q={q} page={page} rows={shown} hasNext={rows.length > PAGE_SIZE} stats={stats!} facts={facts} />);
 });
 
 async function readForm(c: C) {
@@ -118,11 +130,12 @@ crm.get("/contacts/:id{[0-9]+}", async (c) => {
   const id = idParam(c);
   const contact = await getContact(c.env.DB, id);
   if (!contact) return c.notFound();
-  const [extras, defs, logs, messaging] = await Promise.all([
+  const [extras, defs, logs, messaging, dossier] = await Promise.all([
     getExtras(c.env.DB, id),
     getFieldDefs(c.env.DB),
     getLogs(c.env.DB, id),
     messagingInfo(c, contact),
+    clientDossier(c.env.DB, contact),
   ]);
   return render(c, 
     <ContactPage
@@ -135,6 +148,7 @@ crm.get("/contacts/:id{[0-9]+}", async (c) => {
       saved={c.req.query("saved") === "1"}
       messaging={messaging}
       notice={MESSAGE_NOTICES[c.req.query("msg") ?? ""]}
+      dossier={dossier}
     />,
   );
 });
@@ -230,8 +244,46 @@ crm.get("/contacts/:id{[0-9]+}/snapshot", async (c) => {
 
 crm.get("/history", async (c) => {
   const page = pageParam(c);
-  const logs = await recentLogs(c.env.DB, page);
-  return render(c, <HistoryPage user={me(c)} logs={logs.slice(0, PAGE_SIZE)} page={page} hasNext={logs.length > PAGE_SIZE} />);
+  const filter = {
+    q: (c.req.query("q") ?? "").trim().slice(0, 80),
+    user: (c.req.query("user") ?? "").trim().slice(0, 80),
+    type: ["create", "update", "delete"].includes(c.req.query("type") ?? "") ? c.req.query("type")! : "",
+  };
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+  if (filter.q) {
+    const like = `%${filter.q.replace(/[\\%_]/g, (x) => "\\" + x)}%`;
+    where.push("(contact_repr LIKE ? ESCAPE '\\' OR field_label LIKE ? ESCAPE '\\' OR old_value LIKE ? ESCAPE '\\' OR new_value LIKE ? ESCAPE '\\')");
+    args.push(like, like, like, like);
+  }
+  if (filter.user) {
+    where.push("username = ?");
+    args.push(filter.user);
+  }
+  if (filter.type) {
+    where.push("action = ?");
+    args.push(filter.type);
+  }
+  const [logs, staff] = await c.env.DB.batch([
+    c.env.DB.prepare(`SELECT * FROM change_log ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY changed_at DESC, id DESC LIMIT ? OFFSET ?`).bind(
+      ...args,
+      PAGE_SIZE + 1,
+      (page - 1) * PAGE_SIZE,
+    ),
+    c.env.DB.prepare("SELECT DISTINCT username FROM change_log WHERE username <> '' ORDER BY username LIMIT 100"),
+  ]);
+  const rows = logs.results as LogRow[];
+  return render(
+    c,
+    <HistoryPage
+      user={me(c)}
+      logs={rows.slice(0, PAGE_SIZE)}
+      page={page}
+      hasNext={rows.length > PAGE_SIZE}
+      filter={filter}
+      staff={(staff.results as { username: string }[]).map((r) => r.username)}
+    />,
+  );
 });
 
 const csvCell = (v: unknown) => {
@@ -265,12 +317,19 @@ crm.get("/export.csv", async (c) => {
 
 // ---------- extra field definitions ----------
 
-crm.get("/fields", async (c) => render(c, <FieldsPage user={me(c)} defs={await getFieldDefs(c.env.DB)} />));
+const fieldsWithUse = async (c: C) => {
+  const { results } = await c.env.DB.prepare(
+    "SELECT d.id, d.name, (SELECT COUNT(*) FROM extra_values e WHERE e.field_id = d.id AND e.value <> '') AS used FROM field_definitions d ORDER BY d.id",
+  ).all<{ id: number; name: string; used: number }>();
+  return results;
+};
+
+crm.get("/fields", async (c) => render(c, <FieldsPage user={me(c)} defs={await fieldsWithUse(c)} />));
 
 async function saveFieldName(c: C, id: number | null) {
   const name = String((await c.req.parseBody()).name ?? "").trim();
   const fail = async (error: string) =>
-    render(c, <FieldsPage user={me(c)} defs={await getFieldDefs(c.env.DB)} error={error} />, 400);
+    render(c, <FieldsPage user={me(c)} defs={await fieldsWithUse(c)} error={error} />, 400);
   if (!name) return fail("عنوان فیلد لازم است.");
   if (CORE_FIELDS.some((f) => f.label === name)) return fail("این فیلد جزو فیلدهای اصلی است.");
   try {
@@ -290,9 +349,15 @@ crm.post("/fields/:id{[0-9]+}/rename", requireAdmin, (c) => saveFieldName(c, idP
 // ---------- staff (admin): which site users may use the CRM ----------
 
 async function staffPage(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
+  const today = new Date(Date.now() - 86400_000).toISOString();
   const { results } = await c.env.DB.prepare(
-    "SELECT id, phone, name, is_admin, is_staff, created_at FROM users WHERE is_staff = 1 OR is_admin = 1 ORDER BY id",
-  ).all<User & { created_at: string }>();
+    `SELECT u.id, u.phone, u.name, u.is_admin, u.is_staff, u.created_at,
+            (SELECT COUNT(*) FROM change_log l WHERE l.user_id = u.id AND l.changed_at >= ?) AS changes,
+            (SELECT MAX(changed_at) FROM change_log l WHERE l.user_id = u.id) AS last_change
+     FROM users u WHERE u.is_staff = 1 OR u.is_admin = 1 ORDER BY u.is_admin DESC, u.id`,
+  )
+    .bind(today)
+    .all<User & { created_at: string; changes: number; last_change: string | null }>();
   return render(c, <UsersPage user={me(c)} users={results} {...extra} />, status);
 }
 

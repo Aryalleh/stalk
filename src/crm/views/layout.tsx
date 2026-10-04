@@ -1,64 +1,95 @@
 import type { Child } from "hono/jsx";
+import { CSS_URL } from "../../assets";
 import type { User } from "../../session";
 
-const CSS = `
-:root{--bg:#f5f6f8;--card:#fff;--text:#1d2330;--muted:#6b7280;--line:#e3e6eb;--accent:#2563eb;--accent-text:#fff;--danger:#c62828;--ok:#1b7f3b;--hl:#eef3ff}
-@media (prefers-color-scheme:dark){:root{--bg:#14171c;--card:#1d2128;--text:#e6e8ec;--muted:#9aa3af;--line:#2e333c;--accent:#4f8cff;--hl:#1e2a44}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 Vazirmatn,Tahoma,sans-serif}
-a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-header .brand{font-weight:700;font-size:17px;color:var(--fg)}header .sp{flex:1}
-main{max-width:1100px;margin:20px auto;padding:0 16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
-h1{font-size:20px;margin:0 0 14px}h2{font-size:16px;margin:0 0 12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px 16px}
-label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
-input,textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);font:inherit}
-textarea{min-height:80px}.ltr{direction:ltr;text-align:left}
-button,.btn{display:inline-block;padding:8px 16px;border:0;border-radius:7px;background:var(--accent);color:var(--accent-text);font:inherit;cursor:pointer}
-.btn.secondary,button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
-button.danger{background:var(--danger)}
-.err{color:var(--danger);font-size:13px}.errbox{background:#fdecea;color:#8a1c1c;padding:10px 14px;border-radius:7px;margin-bottom:14px}
-.okbox{background:#e7f6ec;color:#14532d;padding:10px 14px;border-radius:7px;margin-bottom:14px}
-.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
-th{color:var(--muted);font-weight:500;white-space:nowrap}tr:hover td{background:var(--hl)}
-.muted{color:var(--muted)}.nowrap{white-space:nowrap}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.tag{font-size:12px;padding:1px 8px;border-radius:10px;background:var(--hl)}
-.dt{direction:ltr;unicode-bidi:isolate;display:inline-block}
-.pager{display:flex;gap:12px;margin-top:12px}
-`;
+// Super-admin CRM shell (UX Pilot "Super Admin CRM" designs): sky palette, side navigation on
+// desktop, a header with the page title, subtitle and actions, a tab row on phones.
 
-export function Layout(props: { title: string; user?: User | null; children?: Child }) {
+export type CrmTab = "dashboard" | "clients" | "history" | "fields" | "team";
+
+const NAV: [CrmTab, string, string, string, boolean][] = [
+  ["dashboard", "/admin", "fa-chart-pie", "داشبورد آماری", true],
+  ["clients", "/crm", "fa-users", "مدیریت مشتریان", false],
+  ["history", "/crm/history", "fa-clock-rotate-left", "لاگ‌های سیستم", false],
+  ["fields", "/crm/fields", "fa-list", "فیلدهای منعطف", false],
+  ["team", "/crm/users", "fa-shield-halved", "تیم عملیات", true],
+];
+
+export function Layout(props: {
+  title: string;
+  user?: User | null;
+  on?: CrmTab;
+  sub?: Child;
+  actions?: Child;
+  wide?: boolean;
+  children?: Child;
+}) {
+  const u = props.user;
+  const items = NAV.filter(([, , , , admin]) => !admin || u?.is_admin);
   return (
     <html lang="fa" dir="rtl">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex" />
         <title>{props.title} · CRM</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet" />
-        <style dangerouslySetInnerHTML={{ __html: CSS }} />
+        <link rel="preload" href="/static/fonts/vazirmatn.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+        <link rel="stylesheet" href={CSS_URL} />
       </head>
-      <body>
-        {props.user && (
-          <header>
-            <a class="brand" href="/crm">CRM</a>
-            <a href="/crm">مخاطبین</a>
-            <a href="/crm/contacts/new">+ مخاطب جدید</a>
-            <a href="/crm/history">سوابق تغییرات</a>
-            <a href="/crm/fields">فیلدهای اضافه</a>
-            {props.user.is_admin ? <a href="/crm/users">کاربران</a> : null}
-            <span class="sp" />
-            <a href="/">سایت</a>
-            <span class="muted">{props.user.name}</span>
-            <form method="post" action="/logout" style="margin:0">
-              <button class="secondary" style="padding:3px 10px">خروج</button>
-            </form>
+      <body class={`min-h-screen theme-panel ${u ? "md:pr-64" : ""}`}>
+        {u && (
+          <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 flex-col bg-white border-l border-sky-100" aria-label="بخش‌های CRM">
+            <div class="h-20 flex items-center gap-3 px-6 border-b border-sky-100 shrink-0">
+              <span class="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-lg shadow-sky-500/20"><i class="fa-solid fa-address-book"></i></span>
+              <a href="/crm" class="text-xl font-black text-sky-900">CRM مشتریان</a>
+            </div>
+            <nav class="flex-1 overflow-y-auto px-4 py-5 space-y-1.5">
+              {items.map(([key, href, icon, label]) => (
+                <a
+                  href={href}
+                  class={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold ${
+                    props.on === key ? "bg-sky-500 !text-white shadow-lg shadow-sky-500/25" : "!text-sky-900/60 hover:bg-sky-50 hover:!text-sky-600"
+                  }`}
+                >
+                  <i class={`fa-solid ${icon} w-5 text-center`}></i>
+                  {label}
+                </a>
+              ))}
+            </nav>
+            <div class="p-4 border-t border-sky-100">
+              <div class="flex items-center gap-3 p-3 rounded-2xl bg-sky-50/70 border border-sky-100">
+                <span class="w-10 h-10 rounded-xl bg-sky-100 text-sky-600 font-black flex items-center justify-center">{(u.name.trim()[0] ?? "؟").toUpperCase()}</span>
+                <div class="flex-1 min-w-0">
+                  <b class="text-xs text-sky-900 block truncate">{u.name}</b>
+                  <span class="text-[10px] text-slate-500">{u.is_admin ? "مدیر پلتفرم" : "کارشناس CRM"}</span>
+                </div>
+                <a href="/" title="سایت" aria-label="سایت" class="!text-slate-400 hover:!text-sky-500"><i class="fa-solid fa-house"></i></a>
+                <form method="post" action="/logout" class="m-0">
+                  <button title="خروج" aria-label="خروج" class="!bg-transparent !text-slate-400 hover:!text-red-500 !p-0 !border-0"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+                </form>
+              </div>
+            </div>
+          </aside>
+        )}
+        {u && (
+          <header class="ui bg-white border-b border-sky-100 sticky top-0 z-30">
+            <div class="px-4 md:px-8 min-h-20 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div class="min-w-0">
+                <h1 class="text-lg md:text-xl font-black text-sky-900 leading-tight">{props.title}</h1>
+                {props.sub && <div class="text-[11px] font-bold text-slate-400 mt-1">{props.sub}</div>}
+              </div>
+              {props.actions && <div class="flex flex-wrap items-center gap-2">{props.actions}</div>}
+            </div>
+            <nav class="md:hidden flex gap-1 px-3 overflow-x-auto no-scrollbar" aria-label="بخش‌های CRM">
+              {items.map(([key, href, icon, label]) => (
+                <a href={href} class={`whitespace-nowrap px-3 py-2.5 text-xs font-bold border-b-2 ${props.on === key ? "border-sky-500 text-sky-600" : "border-transparent text-slate-500"}`}>
+                  <i class={`fa-solid ${icon} ml-1`}></i>{label}
+                </a>
+              ))}
+            </nav>
           </header>
         )}
-        <main>{props.children}</main>
+        <main class={`ui ${props.wide ? "max-w-[1500px]" : "max-w-[1200px]"} mx-auto px-4 md:px-8 py-6`}>{props.children}</main>
       </body>
     </html>
   );
@@ -71,6 +102,19 @@ export function Errors(props: { errors?: string[] }) {
       {props.errors.map((e) => (
         <div>{e}</div>
       ))}
+    </div>
+  );
+}
+
+export function Stat(props: { icon: string; tone: string; label: string; value: string; note?: string }) {
+  return (
+    <div class="card !mb-0 flex items-center gap-4">
+      <span class={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-xl ${props.tone}`}><i class={`fa-solid ${props.icon}`}></i></span>
+      <div class="min-w-0">
+        <p class="text-[11px] font-black text-slate-400">{props.label}</p>
+        <p class="text-lg font-black text-sky-900">{props.value}</p>
+        {props.note && <p class="text-[10px] text-slate-400">{props.note}</p>}
+      </div>
     </div>
   );
 }
