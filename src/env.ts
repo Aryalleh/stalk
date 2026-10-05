@@ -7,6 +7,8 @@ import type { Shop } from "./shop/db";
 export type Bindings = {
   DB: D1Database;
   IMAGES: R2Bucket;
+  /** Local tests only (.dev.vars): a mock Telegram Bot API. Never set in production. */
+  TELEGRAM_API_BASE?: string;
 };
 
 export type Env = { Bindings: Bindings; Variables: { user: User | null; shop: Shop; settings: Settings } };

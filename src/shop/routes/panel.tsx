@@ -9,12 +9,13 @@ import type { C, Env } from "../../env";
 import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, igVerifyToken, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
 import { sendSafirText } from "../../bale/safir";
-import { botToken, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
+import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
 import { AdminContentPage, AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
-import { InstagramSettings } from "../crm/views";
+import { InstagramSettings, TelegramSettings } from "../crm/views";
+import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 
@@ -548,6 +549,7 @@ async function saveSettings(c: C) {
 
 const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) => {
   const shop = (await myShop(c))!;
+  const tgImported = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE shop_id = ? AND tg_chat_id IS NOT NULL").bind(shop.id).first<{ n: number }>();
   return render(
     c,
     <SettingsPage user={currentUser(c)} shop={shop} {...extra}>
@@ -559,6 +561,14 @@ const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, s
         redirectUri={`${siteUrl(c)}/panel/settings/instagram/callback`}
         ok={c.req.query("ig_ok")?.slice(0, 300)}
         error={c.req.query("ig_error")?.slice(0, 300)}
+      />
+      <TelegramSettings
+        shop={shop}
+        botUsername={botUsername(c.get("settings"), "telegram")}
+        storeLink={miniAppLink(c.get("settings"), `s_${shop.slug}`)}
+        imported={tgImported?.n ?? 0}
+        ok={c.req.query("tg_ok")?.slice(0, 300)}
+        error={c.req.query("tg_error")?.slice(0, 300)}
       />
     </SettingsPage>,
     status,

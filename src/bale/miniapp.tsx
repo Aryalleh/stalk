@@ -20,10 +20,13 @@ import { MINIAPP_COOKIE, PENDING_TTL_MS, linkChat, userByChat } from "./chatlink
 export const miniapp = new Hono<Env>();
 
 /** start_param from a t.me/<bot>/<app>?startapp=… link → page to open. */
-function startTarget(param: string) {
-  const m = param.match(/^(p|s|w)_([\w-]{1,60})$/);
+export function startTarget(param: string) {
+  const m = param.match(/^(p|b|h|s|w)_([\w-]{1,60})$/);
   if (!m) return "";
-  return m[1] === "p" && /^\d+$/.test(m[2]) ? `/p/${m[2]}` : m[1] === "s" ? `/s/${m[2]}` : m[1] === "w" ? `/w/${m[2]}` : "";
+  const [, kind, id] = m;
+  if ("pbh".includes(kind) && !/^\d+$/.test(id)) return "";
+  // p_ product · b_ buy it (channel post button) · h_ add it to a wishlist · s_ shop · w_ wishlist
+  return { p: `/p/${id}`, b: `/p/${id}/buy`, h: `/p/${id}#wish`, s: `/s/${id}`, w: `/w/${id}` }[kind] ?? "";
 }
 
 const pageScript = (next: string) => `

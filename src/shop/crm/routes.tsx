@@ -41,6 +41,7 @@ import {
   type NewOrderItem,
   type Stage,
 } from "./db";
+import { newLinkCode } from "../telegram/channel";
 import { authorizeUrl, exchangeCode, fetchAccount, listMedia, sendDm, type IgMedia } from "./instagram";
 import type { MediaLink } from "./comments";
 import {
@@ -873,6 +874,27 @@ crmPanel.get("/panel/settings/instagram/callback", async (c) => {
     .run();
   await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, `instagram connected @${me.username}`);
   return igBack(c, "ok", `وصل شد: @${me.username}`);
+});
+
+// ---------- Telegram channel → products (admins) ----------
+
+crmPanel.post("/panel/settings/telegram", async (c) => {
+  const shop = shopOf(c);
+  const f = await form(c);
+  const back = (kind: "ok" | "error", msg: string) => c.redirect(`/panel/settings?tg_${kind}=${encodeURIComponent(msg)}#telegram`);
+  if (f.do === "code") {
+    await db(c).prepare("UPDATE shops SET tg_link_code = ? WHERE id = ?").bind(newLinkCode(), shop.id).run();
+    return back("ok", "کد ساخته شد؛ آن را در کانال پست کنید.");
+  }
+  if (f.do === "disconnect") {
+    await db(c).prepare("UPDATE shops SET tg_channel_id = '', tg_channel_title = '', tg_channel_username = '', tg_last_error = '' WHERE id = ?").bind(shop.id).run();
+    await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, "telegram channel disconnected");
+    return back("ok", "اتصال کانال قطع شد.");
+  }
+  const tag = (f.tg_tag ?? "").replace(/\s+/g, "").replace(/^#*/, "#").slice(0, 40);
+  if (tag.length < 2) return back("error", "برچسب را وارد کنید، مثلاً #محصول");
+  await db(c).prepare("UPDATE shops SET tg_tag = ?, tg_buttons = ? WHERE id = ?").bind(tag, f.tg_buttons === "1" ? 1 : 0, shop.id).run();
+  return back("ok", "ذخیره شد.");
 });
 
 // ---------- reels & posts linked to products (admins) ----------

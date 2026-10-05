@@ -49,6 +49,13 @@ export interface Shop {
   ig_access_token: string;
   ig_username: string;
   ig_token_refreshed_at: string | null;
+  tg_channel_id: string;
+  tg_channel_title: string;
+  tg_channel_username: string;
+  tg_link_code: string;
+  tg_tag: string;
+  tg_buttons: number;
+  tg_last_error: string;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;

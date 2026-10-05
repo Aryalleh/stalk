@@ -6,6 +6,13 @@ const BOT_API = {
   telegram: "https://api.telegram.org/bot",
 } as const;
 export type BotKind = keyof typeof BOT_API;
+
+// Local tests only: TELEGRAM_API_BASE in .dev.vars points the Telegram calls at a mock server.
+let telegramBase = "";
+export function setTelegramApiBase(base: string | undefined) {
+  telegramBase = (base ?? "").replace(/\/$/, "");
+}
+const apiBase = (kind: BotKind) => (kind === "telegram" && telegramBase ? `${telegramBase}/bot` : BOT_API[kind]);
 export const BOT_KINDS: BotKind[] = ["bale", "telegram"];
 
 export function botToken(s: Settings, kind: BotKind) {
@@ -30,7 +37,7 @@ async function callBot(s: Settings, kind: BotKind, method: string, body: object 
   const token = botToken(s, kind);
   if (!token) throw new Error(`${kind} bot token is not configured`);
   const isForm = body instanceof FormData;
-  const res = await fetch(`${BOT_API[kind]}${token}/${method}`, {
+  const res = await fetch(`${apiBase(kind)}${token}/${method}`, {
     method: "POST",
     headers: isForm ? undefined : { "Content-Type": "application/json" },
     body: isForm ? body : JSON.stringify(body),
@@ -64,6 +71,25 @@ export async function sendBotPhoto(
 
 export async function answerCallback(s: Settings, kind: BotKind, callbackId: string, text: string) {
   await callBot(s, kind, "answerCallbackQuery", { callback_query_id: callbackId, text });
+}
+
+/** Download a file the bot received (a channel post's photo). Bots may fetch files up to 20 MB. */
+export async function downloadBotFile(s: Settings, kind: BotKind, fileId: string) {
+  const f = (await callBot(s, kind, "getFile", { file_id: fileId })) as { file_path?: string; file_size?: number };
+  if (!f.file_path) throw new Error("no file_path");
+  const host = kind === "bale" ? "https://tapi.bale.ai/file/bot" : telegramBase ? `${telegramBase}/file/bot` : "https://api.telegram.org/file/bot";
+  const res = await fetch(`${host}${botToken(s, kind)}/${f.file_path}`);
+  if (!res.ok) throw new Error(`download ${res.status}`);
+  return { data: await res.arrayBuffer(), path: f.file_path };
+}
+
+/** Set the inline buttons under a message the bot may edit (its own, or a channel post as admin). */
+export async function setButtons(s: Settings, kind: BotKind, chatId: string, messageId: number, markup: InlineKeyboard) {
+  await callBot(s, kind, "editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: markup });
+}
+
+export async function deleteBotMessage(s: Settings, kind: BotKind, chatId: string, messageId: number) {
+  await callBot(s, kind, "deleteMessage", { chat_id: chatId, message_id: messageId });
 }
 
 /** Remove the inline buttons under a message (best effort). */

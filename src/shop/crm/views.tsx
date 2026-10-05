@@ -1501,3 +1501,102 @@ export function ReelsPage(
     </PanelShell>
   );
 }
+
+// ---------- Telegram channel + mini app storefront ----------
+
+export function TelegramSettings(props: {
+  shop: Shop;
+  botUsername: string;
+  storeLink: string;
+  imported: number;
+  ok?: string;
+  error?: string;
+}) {
+  const s = props.shop;
+  const bot = props.botUsername ? `@${props.botUsername}` : "";
+  const connected = !!s.tg_channel_id;
+  return (
+    <div class="card" id="telegram">
+      <h2><i class="fa-brands fa-telegram ml-1"></i> تلگرام: کانال و ویترین</h2>
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <Errors errors={[props.error]} />
+      {!bot ? (
+        <div class="warnbox small">بات تلگرام سایت هنوز در تنظیمات مدیر سایت وصل نشده است.</div>
+      ) : (
+        <>
+          <h3 class="text-sm font-black text-sky-900 mt-2">ویترین داخل تلگرام</h3>
+          <p class="muted small" style="margin-top:4px">این لینک را در بیو و پیام پین‌شده کانالتان بگذارید؛ فروشگاهتان داخل تلگرام باز می‌شود و مشتری بدون خروج می‌خرد.</p>
+          {props.storeLink && (
+            <div class="row">
+              <span class="dt ltr text-xs font-bold bg-sky-50 px-3 py-2 rounded-xl">{props.storeLink}</span>
+              <button type="button" class="small secondary" data-copy={props.storeLink} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی</button>
+            </div>
+          )}
+
+          <h3 class="text-sm font-black text-sky-900 mt-5">کانال تلگرام ← محصولات سایت</h3>
+          {connected ? (
+            <>
+              <p class="small">
+                <span class="tag ok">وصل</span> کانال <b>{s.tg_channel_title || s.tg_channel_id}</b>
+                {s.tg_channel_username && <> (<a href={`https://t.me/${s.tg_channel_username}`} target="_blank" rel="noopener" class="ltr">@{s.tg_channel_username}</a>)</>}
+                {" · "}{props.imported.toLocaleString("fa-IR")} محصول از کانال
+              </p>
+              {s.tg_last_error && <div class="warnbox small">آخرین مشکل: {s.tg_last_error}</div>}
+              <form method="post" action="/panel/settings/telegram">
+                <input type="hidden" name="do" value="save" />
+                <div class="two">
+                  <div>
+                    <label>برچسب پست‌های محصول</label>
+                    <input name="tg_tag" value={s.tg_tag} maxlength={40} />
+                  </div>
+                  <div>
+                    <label class="row" style="color:var(--fg);margin-top:30px">
+                      <input type="checkbox" name="tg_buttons" value="1" checked={!!s.tg_buttons} /> دکمه «خرید / لیست آرزو» زیر پست‌ها
+                    </label>
+                  </div>
+                </div>
+                <p class="row" style="margin-bottom:0">
+                  <button class="small">ذخیره</button>
+                  <button class="small secondary" name="do" value="disconnect" onclick="return confirm('اتصال کانال قطع شود؟ محصولات ساخته‌شده می‌مانند.')">قطع اتصال کانال</button>
+                </p>
+              </form>
+            </>
+          ) : (
+            <>
+              <ol class="small list-decimal pr-5 space-y-1.5 leading-7">
+                <li>بات <b class="ltr">{bot}</b> را به کانالتان اضافه و <b>ادمین</b> کنید، با دسترسی‌های «Post messages»، «Edit messages of others» و «Delete messages».</li>
+                <li>
+                  کد زیر را به‌عنوان یک پست در کانال بفرستید؛ بات آن را می‌خواند، پاک می‌کند و کانال وصل می‌شود.
+                  {s.tg_link_code ? (
+                    <div class="row mt-1">
+                      <b class="dt ltr text-base bg-sky-50 px-3 py-1.5 rounded-xl">{s.tg_link_code}</b>
+                      <button type="button" class="small secondary" data-copy={s.tg_link_code} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی</button>
+                    </div>
+                  ) : (
+                    <form method="post" action="/panel/settings/telegram" class="mt-1">
+                      <button class="small" name="do" value="code">ساخت کد اتصال</button>
+                    </form>
+                  )}
+                </li>
+                <li>بعد از ارسال، این صفحه را دوباره باز کنید (پیام تأیید هم در بات برایتان می‌آید).</li>
+              </ol>
+            </>
+          )}
+          <details class="mt-3">
+            <summary class="cursor-pointer text-xs font-bold">پست محصول را چطور بنویسم؟</summary>
+            <p class="muted small leading-7">
+              یک عکس (یا آلبوم) با کپشنی که برچسب <b>{s.tg_tag || "#محصول"}</b> و یک خط قیمت دارد. خط اول نام محصول می‌شود، خط «رنگ:» رنگ‌ها و بقیه
+              توضیحات. ویرایش پست، محصول را به‌روز می‌کند؛ اگر برچسب را از پست بردارید، محصول از سایت برداشته می‌شود. (تلگرام حذف پست را به بات خبر نمی‌دهد؛
+              برای حذف کامل، محصول را از پنل حذف کنید.)
+            </p>
+            <pre class="text-xs bg-sky-50 rounded-xl p-3 whitespace-pre-wrap">{`تی‌شرت نخی 👕
+پارچه پنبه، قابل شستشو
+رنگ: مشکی، سفید
+قیمت: ۴۵۰ هزار تومان
+${s.tg_tag || "#محصول"}`}</pre>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}

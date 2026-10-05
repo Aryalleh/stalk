@@ -6,7 +6,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { crm } from "./crm/routes";
 import type { Env } from "./env";
 import { SESSION_COOKIE, assignUsername, isConnected, needsProfile, sessionUser } from "./session";
-import { activeBots } from "./bale/botapi";
+import { activeBots, setTelegramApiBase } from "./bale/botapi";
 import { CONNECT_EXEMPT, connect } from "./bale/connect";
 import { appCss } from "./assets";
 import { ensureMigrated } from "./migrate";
@@ -42,6 +42,7 @@ app.get("/static/app.css", (c) =>
 );
 
 app.use(async (c, next) => {
+  setTelegramApiBase(c.env.TELEGRAM_API_BASE);
   await ensureMigrated(c.env.DB);
   await next();
 });

@@ -1148,6 +1148,9 @@ export function AdminSettingsPage(props: {
             با «اتصال» بات، دکمه منوی بات خودکار سایت را داخل بله/تلگرام باز می‌کند. برای ساخت مینی‌اپ جدا در BotFather (مثلاً با /newapp)،
             این آدرس را بدهید: <b class="dt">{`${props.webhookBase}/app`}</b>
             <br />کاربری که بات را قبلاً وصل کرده، داخل مینی‌اپ بدون کد وارد می‌شود؛ کاربر جدید یک‌بار با کد وارد می‌شود و حسابش خودکار به بات وصل می‌شود.
+            <br />
+            <b>تلگرام:</b> برای لینک ویترین فروشگاه‌ها و دکمه‌های زیر پست کانال‌ها (<span class="ltr">t.me/bot?startapp=…</span>)، در BotFather ← /mybots ← Bot
+            Settings ← <b>Configure Mini App</b> مینی‌اپ اصلی (Main Mini App) را با همین آدرس فعال کنید.
           </p>
         </div>
         {bot("bale", "بله", "@BotFather در بله")}
