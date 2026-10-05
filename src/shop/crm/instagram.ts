@@ -203,3 +203,30 @@ export async function refreshToken(token: string) {
   if (!res.ok || !d.access_token) throw new Error(d.error?.message ?? `instagram ${res.status}`);
   return d.access_token;
 }
+
+// ---------- "Connect with Instagram" (Instagram Business Login, OAuth) ----------
+
+export const IG_SCOPES = ["instagram_business_basic", "instagram_business_manage_messages", "instagram_business_manage_comments"];
+
+export function authorizeUrl(appId: string, redirectUri: string, state: string) {
+  const p = new URLSearchParams({ client_id: appId, redirect_uri: redirectUri, response_type: "code", scope: IG_SCOPES.join(","), state });
+  return `https://www.instagram.com/oauth/authorize?force_reauth=true&${p}`;
+}
+
+/** Code → short-lived token → long-lived (60-day) token. */
+export async function exchangeCode(appId: string, appSecret: string, redirectUri: string, code: string) {
+  const res = await fetch("https://api.instagram.com/oauth/access_token", {
+    method: "POST",
+    body: new URLSearchParams({ client_id: appId, client_secret: appSecret, grant_type: "authorization_code", redirect_uri: redirectUri, code: code.replace(/#_$/, "") }),
+  });
+  type Short = { access_token?: string; user_id?: string | number; error_message?: string; error?: { message?: string } };
+  const raw = (await res.json().catch(() => ({}))) as Short & { data?: Short[] };
+  const d = raw.data?.[0] ?? raw;
+  if (!res.ok || !d.access_token) throw new Error(d.error_message ?? d.error?.message ?? raw.error_message ?? `instagram ${res.status}`);
+  const long = await fetch(
+    `${GRAPH.replace(/\/v[\d.]+$/, "")}/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(appSecret)}&access_token=${encodeURIComponent(d.access_token)}`,
+  );
+  const l = (await long.json().catch(() => ({}))) as { access_token?: string; error?: { message?: string } };
+  if (!long.ok || !l.access_token) throw new Error(l.error?.message ?? `instagram ${long.status}`);
+  return l.access_token;
+}

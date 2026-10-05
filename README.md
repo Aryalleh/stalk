@@ -156,7 +156,9 @@
 2. «Instagram app secret» را در `/admin/settings` بخش «اینستاگرام» ذخیره کنید. همان‌جا آدرس Callback (`https://<دامنه>/ig/webhook`) و Verify token نمایش داده می‌شود؛ آن‌ها را در Webhooks اپ وارد و فیلدهای `messages` و `comments` را Subscribe کنید.
 3. در App settings ← Basic آدرس‌های `https://<دامنه>/privacy` و `https://<دامنه>/data-deletion` را بدهید و اپ را Live کنید. تا App Review تأیید نشده، فقط حساب‌هایی کار می‌کنند که در Roles نقش Instagram Tester دارند.
 
-**هر فروشگاه:** در «تنظیمات» پنل، توکن دسترسی حسابش (Generate access tokens در همان صفحه متا) را وارد می‌کند؛ شناسه حساب از روی توکن پیدا می‌شود. توکن‌ها ۶۰ روز اعتبار دارند و یک Cron روزانه (`triggers` در `wrangler.jsonc`) هر هفته تمدیدشان می‌کند. روی گوشی در تنظیمات پیام‌های اینستاگرام «Allow access to messages» باید روشن باشد.
+**دکمه «اتصال با اینستاگرام»:** مدیر سایت در `/admin/settings` «Instagram app ID» را هم وارد می‌کند و آدرس نمایش‌داده‌شده (`https://<دامنه>/panel/settings/instagram/callback`) را در اپ متا، بخش Business login settings ← OAuth redirect URIs می‌گذارد. بعد هر فروشگاه در «تنظیمات» فقط دکمه را می‌زند، در اینستاگرام اجازه می‌دهد و حساب با توکن ۶۰ روزه وصل می‌شود.
+
+**روش دستی (اگر دکمه فعال نیست):** در «تنظیمات» پنل، توکن دسترسی حسابش (Generate access tokens در همان صفحه متا) را وارد می‌کند؛ شناسه حساب از روی توکن پیدا می‌شود. توکن‌ها ۶۰ روز اعتبار دارند و یک Cron روزانه (`triggers` در `wrangler.jsonc`) هر هفته تمدیدشان می‌کند. روی گوشی در تنظیمات پیام‌های اینستاگرام «Allow access to messages» باید روشن باشد.
 
 ## CRM (`/crm`)
 

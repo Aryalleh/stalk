@@ -1319,37 +1319,53 @@ export function TeamPage(
 }
 
 /** Instagram connection on the shop settings page (admins only). */
-export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platformReady: boolean; ok?: string; error?: string }) {
+export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platformReady: boolean; oauthReady?: boolean; ok?: string; error?: string }) {
   const s = props.shop;
+  const connected = !!s.ig_access_token;
   return (
-    <form method="post" action="/panel/settings/instagram" class="card" id="instagram">
+    <div class="card" id="instagram">
       <h2><i class="fa-brands fa-instagram ml-1"></i> اتصال اینستاگرام (دایرکت و کامنت)</h2>
       {props.ok && <div class="okbox">{props.ok}</div>}
       <Errors errors={[props.error]} />
       <p class="muted small" style="margin-top:0">
-        پیام‌های دایرکت صفحه اینستاگرام فروشگاه در «گفتگوها» می‌آیند و از همان‌جا جواب داده می‌شوند؛ کامنت‌های ریلزهایی که به محصول وصل کنید هم
-        خودکار جواب می‌گیرند. توکن دسترسی را از پنل توسعه‌دهندگان متا (Instagram API ← Generate access tokens) کپی کنید؛ شناسه حساب خودکار پیدا
-        می‌شود و توکن هر هفته خودکار تمدید می‌شود.
-        {!props.platformReady && <b> مدیر سایت هنوز اپ متا را در تنظیمات سایت وصل نکرده است.</b>}
+        پیام‌های دایرکت صفحه اینستاگرام فروشگاه در «گفتگوها» می‌آیند و از همان‌جا جواب داده می‌شوند؛ کامنت ریلزهایی که به محصول وصل کنید هم خودکار جواب
+        می‌گیرند. توکن هر هفته خودکار تمدید می‌شود.
       </p>
-      {s.ig_access_token && (
+      {connected && (
         <p class="small">
           <span class="tag ok">وصل</span> {s.ig_username ? <b class="ltr">@{s.ig_username}</b> : null} · شناسه <span class="dt">{s.ig_account_id}</span>
           {s.ig_token_refreshed_at && <> · تمدید توکن: <span class="dt">{date(s.ig_token_refreshed_at, false)}</span></>}
         </p>
       )}
-      <label>{s.ig_access_token ? "توکن جدید (خالی = بدون تغییر)" : "توکن دسترسی (Access token)"}</label>
-      <input name="ig_access_token" class="ltr" autocomplete="off" maxlength={2000} placeholder="IGAA…" />
-      <details class="mt-2">
-        <summary class="cursor-pointer text-xs muted">شناسه حساب دستی (معمولاً لازم نیست)</summary>
-        <input name="ig_account_id" value={s.ig_account_id} class="ltr" inputmode="numeric" maxlength={30} aria-label="شناسه حساب اینستاگرام" />
+      {props.oauthReady ? (
+        <div class="row">
+          <a class="btn !bg-gradient-to-l !from-fuchsia-500 !to-amber-400 !border-0" href="/panel/settings/instagram/connect">
+            <i class="fa-brands fa-instagram"></i> {connected ? "اتصال دوباره / حساب دیگر" : "اتصال با اینستاگرام"}
+          </a>
+          {connected && <a class="btn small secondary" href="/panel/reels"><i class="fa-solid fa-film"></i> ریلز و کامنت‌ها</a>}
+        </div>
+      ) : (
+        <div class="warnbox small">دکمه «اتصال با اینستاگرام» وقتی فعال می‌شود که مدیر سایت Instagram app ID و App secret را در تنظیمات سایت وارد کند. تا آن موقع از روش دستی استفاده کنید.</div>
+      )}
+      <p class="text-[11px] muted mt-2">حساب باید Business یا Creator باشد. تا وقتی App Review متا تأیید نشده، فقط حساب‌هایی که نقش Instagram Tester دارند می‌توانند وصل شوند.</p>
+      <details class={props.oauthReady ? "mt-3" : "mt-3"} open={!props.oauthReady}>
+        <summary class="cursor-pointer text-xs font-bold">روش دستی با توکن</summary>
+        <form method="post" action="/panel/settings/instagram">
+          <label>{connected ? "توکن جدید (خالی = بدون تغییر)" : "توکن دسترسی (Access token)"}</label>
+          <input name="ig_access_token" class="ltr" autocomplete="off" maxlength={2000} placeholder="IGAA…" />
+          <label>شناسه حساب (معمولاً لازم نیست؛ از توکن پیدا می‌شود)</label>
+          <input name="ig_account_id" value={s.ig_account_id} class="ltr" inputmode="numeric" maxlength={30} aria-label="شناسه حساب اینستاگرام" />
+          <p class="row" style="margin-bottom:0">
+            <button class="small">ذخیره و بررسی</button>
+          </p>
+        </form>
       </details>
-      <p class="row" style="margin-bottom:0">
-        <button class="small">ذخیره و بررسی</button>
-        {s.ig_access_token && <a class="btn small secondary" href="/panel/reels"><i class="fa-solid fa-film"></i> ریلز و کامنت‌ها</a>}
-        {s.ig_access_token && <button class="small secondary" name="disconnect" value="1" onclick="return confirm('اتصال قطع شود؟')">قطع اتصال</button>}
-      </p>
-    </form>
+      {connected && (
+        <form method="post" action="/panel/settings/instagram" class="mt-3">
+          <button class="small secondary" name="disconnect" value="1" onclick="return confirm('اتصال قطع شود؟')">قطع اتصال</button>
+        </form>
+      )}
+    </div>
   );
 }
 

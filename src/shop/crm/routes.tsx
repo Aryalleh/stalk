@@ -4,7 +4,8 @@ import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import type { C, Env } from "../../env";
 import { render } from "../../render";
 import { now } from "../db";
-import { safeNext, currentUser, form, intParam, pageParam } from "../routes/helpers";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { safeNext, currentUser, form, intParam, pageParam, siteUrl } from "../routes/helpers";
 import { isShopAdmin } from "../views/panel";
 import { variantLabel, variants } from "../variants";
 import { onStageChange, type Rule } from "./automation";
@@ -40,7 +41,7 @@ import {
   type NewOrderItem,
   type Stage,
 } from "./db";
-import { fetchAccount, listMedia, sendDm, type IgMedia } from "./instagram";
+import { authorizeUrl, exchangeCode, fetchAccount, listMedia, sendDm, type IgMedia } from "./instagram";
 import type { MediaLink } from "./comments";
 import {
   AutomationPage,
@@ -829,6 +830,49 @@ crmPanel.post("/panel/settings/instagram", async (c) => {
     .run();
   await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, "instagram connected");
   return back("ok", note);
+});
+
+// "Connect with Instagram": Instagram Business Login. The state cookie ties the callback to this
+// browser and shop admin; the redirect URI must be listed in the Meta app exactly as built here.
+const IG_STATE_COOKIE = "ig_oauth";
+const igRedirectUri = (c: C) => `${siteUrl(c)}/panel/settings/instagram/callback`;
+const igBack = (c: C, kind: "ok" | "error", msg: string) => c.redirect(`/panel/settings?ig_${kind}=${encodeURIComponent(msg)}#instagram`);
+
+crmPanel.get("/panel/settings/instagram/connect", (c) => {
+  const s = c.get("settings");
+  if (!s.ig_app_id || !s.meta_app_secret) return igBack(c, "error", "مدیر سایت هنوز Instagram app ID و App secret را در تنظیمات سایت وارد نکرده است.");
+  const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  setCookie(c, IG_STATE_COOKIE, state, { httpOnly: true, secure: true, sameSite: "Lax", path: "/panel/settings/instagram", maxAge: 600 });
+  return c.redirect(authorizeUrl(s.ig_app_id, igRedirectUri(c), state));
+});
+
+crmPanel.get("/panel/settings/instagram/callback", async (c) => {
+  const shop = shopOf(c);
+  const s = c.get("settings");
+  const expected = getCookie(c, IG_STATE_COOKIE);
+  deleteCookie(c, IG_STATE_COOKIE, { path: "/panel/settings/instagram" });
+  if (c.req.query("error")) {
+    return igBack(c, "error", c.req.query("error_reason") === "user_denied" ? "اجازه دسترسی داده نشد." : `اینستاگرام: ${(c.req.query("error_description") ?? c.req.query("error") ?? "").slice(0, 200)}`);
+  }
+  const code = c.req.query("code") ?? "";
+  if (!code || !expected || c.req.query("state") !== expected) return igBack(c, "error", "درخواست اتصال منقضی یا نامعتبر بود؛ دوباره دکمه «اتصال با اینستاگرام» را بزنید.");
+  if (!s.ig_app_id || !s.meta_app_secret) return igBack(c, "error", "تنظیمات اپ اینستاگرام در سایت کامل نیست.");
+  let token: string, me: { accountId: string; username: string };
+  try {
+    token = await exchangeCode(s.ig_app_id, s.meta_app_secret, igRedirectUri(c), code);
+    me = await fetchAccount(token);
+  } catch (e) {
+    return igBack(c, "error", `اتصال ناموفق بود: ${(e as Error).message.slice(0, 200)}`);
+  }
+  if (!me.accountId) return igBack(c, "error", "شناسه حساب اینستاگرام دریافت نشد.");
+  const taken = await db(c).prepare("SELECT 1 AS x FROM shops WHERE ig_account_id = ? AND id <> ?").bind(me.accountId, shop.id).first();
+  if (taken) return igBack(c, "error", "این حساب اینستاگرام به فروشگاه دیگری وصل است.");
+  await db(c)
+    .prepare("UPDATE shops SET ig_account_id = ?, ig_username = ?, ig_access_token = ?, ig_token_refreshed_at = ? WHERE id = ?")
+    .bind(me.accountId, me.username, token, now(), shop.id)
+    .run();
+  await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, `instagram connected @${me.username}`);
+  return igBack(c, "ok", `وصل شد: @${me.username}`);
 });
 
 // ---------- reels & posts linked to products (admins) ----------

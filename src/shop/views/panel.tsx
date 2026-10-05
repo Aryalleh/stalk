@@ -1175,6 +1175,12 @@ export function AdminSettingsPage(props: {
           <li>هر فروشگاه در «تنظیمات» پنل خودش توکن حسابش را وارد می‌کند (حساب باید در زبانه Roles نقش Instagram Tester داشته باشد تا App Review انجام نشده).</li>
         </ol>
         <p class="small">آدرس Callback: <b class="dt ltr">{`${props.webhookBase}/ig/webhook`}</b><br />Verify token: <b class="dt ltr">{props.igVerifyToken}</b></p>
+        <label>Instagram app ID (برای دکمه «اتصال با اینستاگرام» فروشگاه‌ها)</label>
+        <input name="ig_app_id" value={s.ig_app_id} class="ltr" inputmode="numeric" style="max-width:280px" />
+        <p class="small muted">
+          در Instagram API ← «Set up Instagram business login» ← Business login settings، این آدرس را در OAuth redirect URIs بگذارید:{" "}
+          <b class="dt ltr">{`${props.webhookBase}/panel/settings/instagram/callback`}</b>
+        </p>
         {s.meta_app_secret && <p class="small">کلید فعلی: <span class="dt">{mask(s.meta_app_secret)}</span></p>}
         <label>{s.meta_app_secret ? "Instagram app secret جدید (خالی = بدون تغییر)" : "Instagram app secret (برای بررسی امضای وب‌هوک)"}</label>
         <input name="meta_app_secret" class="ltr" autocomplete="off" />

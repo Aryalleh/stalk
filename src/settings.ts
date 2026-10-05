@@ -12,6 +12,7 @@ export const DEFAULTS = {
   bot_webhook_secret: "", // generated automatically
   safir_api_key: "", // Bale Safir (business panel) api-access-key: OTP and paid messages by phone
   safir_bot_id: "", // numeric id of the bot Safir sends as
+  ig_app_id: "", // Instagram app ID (Instagram API with Instagram Login): the "Connect Instagram" button
   meta_app_secret: "", // Meta app secret: verifies Instagram webhook deliveries (X-Hub-Signature-256)
   ig_verify_token: "", // shared with Meta when subscribing the webhook; generated automatically
   categories: "تولد\nدکوراسیون\nتکنولوژی\nاکسسوری\nکتاب\nپوشاک\nگل و گیاه", // product categories, one per line

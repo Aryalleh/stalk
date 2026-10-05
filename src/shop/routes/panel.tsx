@@ -555,6 +555,7 @@ const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, s
         shop={shop}
         webhookUrl={`${siteUrl(c)}/ig/webhook`}
         platformReady={!!c.get("settings").meta_app_secret}
+        oauthReady={!!(c.get("settings").meta_app_secret && c.get("settings").ig_app_id)}
         ok={c.req.query("ig_ok")?.slice(0, 300)}
         error={c.req.query("ig_error")?.slice(0, 300)}
       />
@@ -749,6 +750,11 @@ async function saveAdminSettings(c: C): Promise<string> {
     }
   }
   // Safir is the only way to log in, so it can be changed but never cleared.
+  if (f.ig_app_id !== undefined) {
+    const id = normalizeDigits(f.ig_app_id).trim();
+    if (id && !/^\d{6,25}$/.test(id)) return "Instagram app ID باید فقط عدد باشد.";
+    values.ig_app_id = id;
+  }
   if (f.meta_app_secret) {
     if (!/^[0-9a-f]{16,64}$/i.test(f.meta_app_secret)) return "App secret متا نامعتبر به نظر می‌رسد.";
     values.meta_app_secret = f.meta_app_secret;
