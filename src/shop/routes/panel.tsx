@@ -556,6 +556,7 @@ const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, s
         webhookUrl={`${siteUrl(c)}/ig/webhook`}
         platformReady={!!c.get("settings").meta_app_secret}
         oauthReady={!!(c.get("settings").meta_app_secret && c.get("settings").ig_app_id)}
+        redirectUri={`${siteUrl(c)}/panel/settings/instagram/callback`}
         ok={c.req.query("ig_ok")?.slice(0, 300)}
         error={c.req.query("ig_error")?.slice(0, 300)}
       />
@@ -703,7 +704,7 @@ async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, s
   const s = await loadSettings(c.env.DB);
   c.set("settings", s); // reflect just-saved values (e.g. site name) in the layout
   const linked = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM bale_links").first<{ n: number }>();
-  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} igVerifyToken={await igVerifyToken(c.env.DB, s)} {...extra} />, status);
+  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} igVerifyToken={await igVerifyToken(c.env.DB, s)} igRedirect={`${(s.site_url || new URL(c.req.url).origin).replace(/\/$/, "")}/panel/settings/instagram/callback`} {...extra} />, status);
 }
 
 admin.get("/admin/settings", (c) => settingsPage(c));

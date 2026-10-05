@@ -1067,6 +1067,7 @@ export function AdminSettingsPage(props: {
   webhookBase: string;
   linkedCount: number;
   igVerifyToken: string;
+  igRedirect: string;
   error?: string;
   ok?: string;
 }) {
@@ -1179,7 +1180,7 @@ export function AdminSettingsPage(props: {
         <input name="ig_app_id" value={s.ig_app_id} class="ltr" inputmode="numeric" style="max-width:280px" />
         <p class="small muted">
           در Instagram API ← «Set up Instagram business login» ← Business login settings، این آدرس را در OAuth redirect URIs بگذارید:{" "}
-          <b class="dt ltr">{`${props.webhookBase}/panel/settings/instagram/callback`}</b>
+          <b class="dt ltr">{props.igRedirect}</b> (دقیقاً همین، با https و بدون / در انتها)
         </p>
         {s.meta_app_secret && <p class="small">کلید فعلی: <span class="dt">{mask(s.meta_app_secret)}</span></p>}
         <label>{s.meta_app_secret ? "Instagram app secret جدید (خالی = بدون تغییر)" : "Instagram app secret (برای بررسی امضای وب‌هوک)"}</label>

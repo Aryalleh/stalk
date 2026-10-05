@@ -1319,7 +1319,7 @@ export function TeamPage(
 }
 
 /** Instagram connection on the shop settings page (admins only). */
-export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platformReady: boolean; oauthReady?: boolean; ok?: string; error?: string }) {
+export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platformReady: boolean; oauthReady?: boolean; redirectUri?: string; ok?: string; error?: string }) {
   const s = props.shop;
   const connected = !!s.ig_access_token;
   return (
@@ -1346,6 +1346,9 @@ export function InstagramSettings(props: { shop: Shop; webhookUrl: string; platf
         </div>
       ) : (
         <div class="warnbox small">دکمه «اتصال با اینستاگرام» وقتی فعال می‌شود که مدیر سایت Instagram app ID و App secret را در تنظیمات سایت وارد کند. تا آن موقع از روش دستی استفاده کنید.</div>
+      )}
+      {props.oauthReady && props.redirectUri && (
+        <p class="text-[11px] muted mt-2">آدرس بازگشتی که فرستاده می‌شود: <b class="dt ltr">{props.redirectUri}</b> — باید دقیقاً در اپ متا (Business login settings ← OAuth redirect URIs) ثبت شده باشد.</p>
       )}
       <p class="text-[11px] muted mt-2">حساب باید Business یا Creator باشد. تا وقتی App Review متا تأیید نشده، فقط حساب‌هایی که نقش Instagram Tester دارند می‌توانند وصل شوند.</p>
       <details class={props.oauthReady ? "mt-3" : "mt-3"} open={!props.oauthReady}>
