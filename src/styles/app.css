@@ -1,5 +1,7 @@
 /* Self-hosted icons and font (served by the Worker, see src/fonts.ts): no third-party CDN blocks the first paint. */
+@import "tailwindcss";
 @import "./fa.css";
+@config "../../tailwind.config.cjs";
 
 @font-face {
   font-family: "Vazirmatn";
@@ -9,9 +11,12 @@
   font-display: swap;
 }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 changed a few defaults; keep the v3 look the site was designed with. */
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--color-gray-200, currentColor); }
+  input::placeholder, textarea::placeholder { color: var(--color-gray-400); }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
 
 /* ---------- theme ---------- */
 /* Tailwind colors (space-separated RGB so opacity modifiers work). Dark navy palette (light one below), pink brand;
@@ -85,7 +90,7 @@
   .ui :where(a:not(.btn)) { color: var(--accent); }
   .ui label { @apply block text-xs mt-3 mb-1; color: var(--muted); }
   .ui :where(input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select) {
-    @apply w-full rounded-xl px-3 py-2.5 text-sm outline-none transition;
+    @apply w-full rounded-xl px-3 py-2.5 text-sm outline-hidden transition;
     background: var(--field); color: var(--fg); border: 1px solid var(--line);
   }
   .ui :where(input, textarea, select):focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(var(--c-brand) / 0.18); }

@@ -9,7 +9,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply app --remote",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "css": "node scripts/fa-subset.mjs && tailwindcss -c tailwind.config.cjs -i src/styles/app.css -o src/static/app.css --minify",
+    "css": "node scripts/fa-subset.mjs && tailwindcss -i src/styles/app.css -o src/static/app.css --minify",
     "demo:seed": "node scripts/demo.mjs seed --remote",
     "demo:clear": "node scripts/demo.mjs clear --remote"
   },
@@ -19,11 +19,15 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261001.1",
     "@fortawesome/fontawesome-free": "^6.4.0",
+    "@tailwindcss/cli": "^4.3.3",
     "@types/node": "^26.6.4",
-    "tailwindcss": "^3.4.19",
+    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vazirmatn": "^33.0.3",
     "vitest": "^5.0.3",
     "wrangler": "^4.146.0"
+  },
+  "overrides": {
+    "@parcel/watcher": "^2.6.0"
   }
 }

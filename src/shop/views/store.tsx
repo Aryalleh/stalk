@@ -184,7 +184,7 @@ export function HomePage(props: {
             value={props.q}
             autofocus={props.search}
             placeholder="جستجوی هدیه، فروشگاه یا برند..."
-            class="w-full bg-card border-none rounded-2xl py-3 pr-11 pl-4 text-sm text-fg placeholder:text-muted focus:ring-2 focus:ring-brand outline-none"
+            class="w-full bg-card border-none rounded-2xl py-3 pr-11 pl-4 text-sm text-fg placeholder:text-muted focus:ring-2 focus:ring-brand outline-hidden"
           />
         </form>
         {props.categories.length > 0 && (
@@ -319,7 +319,7 @@ function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
   );
 }
 
-const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-none focus:border-brand";
+const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-hidden focus:border-brand";
 
 export function ProductPage(props: {
   user: User | null;
@@ -775,7 +775,7 @@ export function CheckoutPage(props: {
     var sp=document.getElementById('show-on-profile');
     function vis(){var a=f.querySelector('input[name=visibility][value=anonymous]');if(!sp||!a)return;var cb=sp.querySelector('input');cb.disabled=a.checked;if(a.checked)cb.checked=false;sp.style.opacity=a.checked?'.4':'1';}
     f.addEventListener('change',vis);vis();})();`;
-  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-brand";
+  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-hidden focus:border-brand";
   const direct = !!props.wishlist.is_direct;
   const heading = direct ? "خرید برای خودم" : "خرید کادو";
   return (
@@ -1112,7 +1112,7 @@ export function DirectBuyPage(props: {
   const p = props.product;
   const v = props.values;
   const opts = variants(p).filter((x) => x.label);
-  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-brand";
+  const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-hidden focus:border-brand";
   const label = "block text-xs text-muted mb-1.5 px-1";
   return (
     <Layout title={`خرید ${p.title}`} user={props.user} nav="none" header={<TitleBar title="خرید مستقیم" back={`/p/${p.id}`} />} bare>

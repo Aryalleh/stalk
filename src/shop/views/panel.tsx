@@ -221,7 +221,7 @@ export type PanelOrder = Order & { image_key: string };
 function OrderCard(props: { o: PanelOrder }) {
   const o = props.o;
   return (
-    <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-sm">
+    <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-xs">
       <div class="flex items-start justify-between gap-3 mb-4">
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-12 h-12 rounded-lg bg-slate-50 overflow-hidden border border-slate-100 shrink-0 flex items-center justify-center">
@@ -257,7 +257,7 @@ function Chip(props: { href: string; on: boolean; children: Child }) {
   return (
     <a
       href={props.href}
-      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-sky-500 !text-white border-sky-500 shadow-sm shadow-sky-500/30" : "bg-white !text-slate-500 border-sky-100 hover:!text-sky-600"}`}
+      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-sky-500 !text-white border-sky-500 shadow-xs shadow-sky-500/30" : "bg-white !text-slate-500 border-sky-100 hover:!text-sky-600"}`}
     >
       {props.children}
     </a>
@@ -280,13 +280,13 @@ export function DashboardPage(props: {
   const fa = (n: number) => n.toLocaleString("fa-IR");
   const nowIso = new Date().toISOString();
   const kpi = (href: string, icon: string, label: string, value: string, alert = false) => (
-    <a href={href} class="bg-white p-3 rounded-2xl border border-sky-100 shadow-sm flex items-center gap-3 !text-sky-900">
+    <a href={href} class="bg-white p-3 rounded-2xl border border-sky-100 shadow-xs flex items-center gap-3 !text-sky-900">
       <span class={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${alert ? "bg-red-50 text-red-600" : "bg-sky-50 text-sky-600"}`}><i class={`fa-solid ${icon}`}></i></span>
       <span class="min-w-0"><span class="text-[11px] text-slate-500 block">{label}</span><b class="text-base">{value}</b></span>
     </a>
   );
   const stat = (label: string, value: string, note?: Child) => (
-    <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-sm">
+    <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-xs">
       <span class="text-[11px] text-slate-500 block mb-1">{label}</span>
       <span class="text-lg font-bold text-sky-900">{value}</span>
       {note}
@@ -532,7 +532,7 @@ function StockBadge(props: { p: Product & { stock_total: number } }) {
   return p.stock_total > 0 ? (
     <span class="text-[10px] text-slate-700">موجودی: <b>{p.stock_total.toLocaleString("fa-IR")}</b></span>
   ) : (
-    <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-bold">ناموجود</span>
+    <span class="text-[10px] px-1.5 py-0.5 rounded-sm bg-red-50 text-red-600 font-bold">ناموجود</span>
   );
 }
 
@@ -546,7 +546,7 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
       {props.products.length === 0 && <div class="card text-center text-sm muted py-10">هنوز محصولی ثبت نشده.</div>}
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         {props.products.map((p) => (
-          <div class="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
+          <div class="bg-white rounded-2xl border border-sky-100 shadow-xs overflow-hidden">
             <a href={`/panel/products/${p.id}`} class="block !text-sky-900">
               <div class="aspect-square bg-slate-50 flex items-center justify-center text-4xl">
                 {p.image_key ? <img src={`/img/${p.image_key}`} alt={p.title} loading="lazy" class="w-full h-full object-cover" /> : "🎁"}
@@ -555,7 +555,7 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
                 <h3 class="text-xs font-bold truncate">{p.title}</h3>
                 <div class="flex items-center justify-between mt-1">
                   <span class="text-[11px] font-bold text-sky-600">{toman(p.price)}</span>
-                  <span class={`text-[10px] px-1.5 py-0.5 rounded ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
+                  <span class={`text-[10px] px-1.5 py-0.5 rounded-sm ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
                 </div>
               </div>
             </a>

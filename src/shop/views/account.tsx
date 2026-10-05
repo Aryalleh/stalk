@@ -343,7 +343,7 @@ export function ProfilePage(props: {
           <div class="space-y-4">
             {props.items.map((it) => (
               <div class="bg-card p-3 rounded-2xl flex items-center gap-4">
-                <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink flex-shrink-0 flex items-center justify-center text-2xl">
+                <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-2xl">
                   {it.image_key ? <img class="w-full h-full object-cover" src={`/img/${it.image_key}`} alt={it.title} loading="lazy" /> : "🎁"}
                 </div>
                 <div class="flex-1 min-w-0">
@@ -670,7 +670,7 @@ export function ChangeRequestPage(props: { user: User; order: Order & { image_ke
             </section>
             <form method="post" class="space-y-4">
               <label class="block text-xs text-muted">توضیح شما برای فروشگاه (مثلاً رنگ انتخابی) — اختیاری</label>
-              <input name="reply" maxlength={200} class="w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-none focus:border-brand" />
+              <input name="reply" maxlength={200} class="w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-hidden focus:border-brand" />
               <button name="answer" value="accept" class="w-full py-4 bg-brand text-white rounded-2xl font-bold">✓ قبول می‌کنم</button>
               <button
                 name="answer"

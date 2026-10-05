@@ -112,6 +112,11 @@ const q = (v) => (v === null || v === undefined ? "NULL" : typeof v === "number"
 const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
 const clearSql = [
+  // Rows elsewhere that point at demo products, shops or users (CRM, stock, sessions) go first.
+  "DELETE FROM product_interests WHERE product_id >= 9001 AND product_id < 10000;",
+  "DELETE FROM product_stock WHERE product_id >= 9001 AND product_id < 10000;",
+  "DELETE FROM sessions WHERE user_id >= 9001 AND user_id < 10000;",
+  "DELETE FROM settings WHERE key = 'featured_shop_id' AND CAST(value AS INTEGER) >= 9001 AND CAST(value AS INTEGER) < 10000;",
   "DELETE FROM orders WHERE id >= 9001 AND id < 10000;",
   "DELETE FROM wishlist_items WHERE id >= 9001 AND id < 10000;",
   "DELETE FROM wishlists WHERE id >= 9001 AND id < 10000;",

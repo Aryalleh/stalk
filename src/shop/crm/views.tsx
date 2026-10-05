@@ -84,7 +84,7 @@ function Chip(props: { href: string; on: boolean; children: Child }) {
   return (
     <a
       href={props.href}
-      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-sky-500 !text-white border-sky-500 shadow-sm shadow-sky-500/30" : "bg-white !text-slate-500 border-sky-100 hover:!text-sky-600"}`}
+      class={`px-3 py-1.5 text-[11px] font-bold rounded-lg border whitespace-nowrap ${props.on ? "bg-sky-500 !text-white border-sky-500 shadow-xs shadow-sky-500/30" : "bg-white !text-slate-500 border-sky-100 hover:!text-sky-600"}`}
     >
       {props.children}
     </a>
@@ -254,7 +254,7 @@ function Thread(props: ThreadData & { back: string }) {
           {props.messages.map((m) => (
             <div class={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
               <div
-                class={`max-w-[78%] px-4 py-2.5 text-sm shadow-sm ${
+                class={`max-w-[78%] px-4 py-2.5 text-sm shadow-xs ${
                   m.direction === "out" ? "bg-sky-500 text-white rounded-2xl rounded-bl-md shadow-sky-500/20" : "bg-white border border-sky-100 text-sky-900 rounded-2xl rounded-br-md"
                 }`}
               >
@@ -840,7 +840,7 @@ export function LeadsPage(props: Ctx & { columns: Record<Stage, (Customer & { la
             <div class="space-y-3 min-h-[120px]">
               {props.columns[st].length === 0 && <div class="rounded-[1.5rem] border-2 border-dashed border-sky-100 p-6 text-center text-[11px] text-slate-400">خالی</div>}
               {props.columns[st].map((c) => (
-                <div class={`bg-white rounded-[1.5rem] border p-4 shadow-sm ${st === "purchased" ? "border-emerald-100" : "border-sky-100"}`}>
+                <div class={`bg-white rounded-[1.5rem] border p-4 shadow-xs ${st === "purchased" ? "border-emerald-100" : "border-sky-100"}`}>
                   <a href={`/panel/customers/${c.id}`} class="flex items-center gap-2.5 !text-sky-900">
                     <Initial name={displayName(c)} size="w-9 h-9 text-sm" />
                     <span class="min-w-0">
@@ -985,7 +985,7 @@ export function SalesPage(
                   </div>
                   <div class="text-left">
                     <div class="text-sm font-bold">{toman(o.total)}</div>
-                    <span class={`text-[10px] px-1.5 py-0.5 rounded ${ORDER_STYLE[o.status]}`}>{CRM_ORDER_STATUS[o.status]}</span>
+                    <span class={`text-[10px] px-1.5 py-0.5 rounded-sm ${ORDER_STYLE[o.status]}`}>{CRM_ORDER_STATUS[o.status]}</span>
                   </div>
                 </a>
               ))}
@@ -1073,7 +1073,7 @@ export function SalePage(props: Ctx & { o: CrmOrder; items: CrmOrderItem[]; cust
         <div class="row">
           <h1 class="!mb-0">سفارش #{fa(o.number)}</h1>
           <span class="tag">{CRM_ORDER_STATUS[o.status]}</span>
-          <span class={`text-[11px] px-2 py-0.5 rounded ${PAY_STYLE[o.payment_status]}`}>{PAYMENT_STATUS[o.payment_status]}</span>
+          <span class={`text-[11px] px-2 py-0.5 rounded-sm ${PAY_STYLE[o.payment_status]}`}>{PAYMENT_STATUS[o.payment_status]}</span>
         </div>
         <p class="small muted">
           <a href={`/panel/customers/${props.customer.id}`}>{displayName(props.customer)}</a> · <span class="dt">{date(o.created_at)}</span> ·{" "}
@@ -1156,7 +1156,7 @@ function RuleRow(props: { r: Rule & { tag_name: string | null }; soft?: boolean 
           aria-label={r.active ? "فعال (غیرفعال کردن)" : "غیرفعال (فعال کردن)"}
           class={`!w-11 !h-6 !p-0.5 !rounded-full !shadow-none !justify-start ${r.active ? "" : "!bg-slate-200"}`}
         >
-          <span class={`block w-5 h-5 rounded-full bg-white shadow transition ${r.active ? "" : "-translate-x-5"}`}></span>
+          <span class={`block w-5 h-5 rounded-full bg-white shadow-sm transition ${r.active ? "" : "-translate-x-5"}`}></span>
         </button>
         <button name="do" value="delete" class="!w-8 !h-8 !p-0 !bg-transparent !text-slate-400 !shadow-none" aria-label="حذف" onclick="return confirm('حذف شود؟')"><i class="fa-solid fa-trash"></i></button>
       </form>

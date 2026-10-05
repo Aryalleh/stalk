@@ -39,7 +39,7 @@ function Badge(props: { tone: string; children: Child }) {
 
 function Card(props: { id?: string; icon: string; title: string; note?: Child; children?: Child; flush?: boolean }) {
   return (
-    <section id={props.id} class="bg-white rounded-[28px] border border-sky-100 shadow-sm overflow-hidden mb-6">
+    <section id={props.id} class="bg-white rounded-[28px] border border-sky-100 shadow-xs overflow-hidden mb-6">
       <div class="px-6 md:px-8 py-4 border-b border-sky-50 bg-sky-50/30 flex items-center justify-between gap-3">
         <h2 class="!mb-0 !text-sm font-black text-sky-900 flex items-center gap-2"><i class={`fa-solid ${props.icon} text-sky-500`}></i> {props.title}</h2>
         {props.note && <span class="text-[10px] font-bold text-slate-400">{props.note}</span>}
@@ -102,7 +102,7 @@ export function ListPage(props: { user: User; q: string; page: number; rows: Con
         <Stat icon="fa-id-card" tone="bg-violet-50 text-violet-500" label="دارای حساب در سایت" value={`${fa(st.accounts)} نفر`} />
         <Stat icon="fa-gift" tone="bg-amber-50 text-amber-500" label="خریدار کادو" value={`${fa(st.buyers)} نفر`} />
       </div>
-      <div class="bg-white rounded-[28px] border border-sky-100 shadow-sm overflow-hidden">
+      <div class="bg-white rounded-[28px] border border-sky-100 shadow-xs overflow-hidden">
         <form method="get" action="/crm" class="p-4 md:p-6 border-b border-sky-50 flex gap-2">
           <input name="q" value={props.q} placeholder="جستجو بر اساس نام، موبایل، کد ملی، آیدی یا هر فیلد…" class="flex-1" />
           <button><i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">جستجو</span></button>
@@ -325,7 +325,7 @@ function ClientHeader(props: { c: ContactRow; d?: Dossier }) {
   const name = contactName(c);
   const vip = (props.d?.totals.spent ?? 0) > 0 && (props.d?.bought.length ?? 0) >= 3;
   return (
-    <div class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-6 md:p-8 mb-6 flex flex-wrap items-center gap-5">
+    <div class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-6 md:p-8 mb-6 flex flex-wrap items-center gap-5">
       <div class="relative">
         <Initial name={name} size="w-20 h-20 text-3xl !rounded-[24px] border-4 border-sky-50" />
         {a && <span class="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-2 border-white rounded-full" title="حساب سایت دارد"></span>}
@@ -544,7 +544,7 @@ function MessagingCard(props: { contactId: number; m: Messaging; notice?: { ok: 
   const anyLinked = m.phones.some((p) => p.link);
   const canSend = (m.botReady && anyLinked) || m.safirReady;
   return (
-    <section id="messages" class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-6">
+    <section id="messages" class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-6">
       <h2 class="!text-sm font-black text-sky-900 flex items-center gap-2"><i class="fa-solid fa-comment-dots text-sky-500"></i> ارتباط با مشتری</h2>
       {props.notice && <div class={props.notice.ok ? "okbox" : "errbox"}>{props.notice.text}</div>}
       {m.phones.length === 0 ? (
@@ -601,7 +601,7 @@ function MessagingCard(props: { contactId: number; m: Messaging; notice?: { ok: 
 function HistoryTimeline(props: { contactId: number; logs: LogRow[] }) {
   const rows = props.logs.slice(0, 12);
   return (
-    <section class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-6">
+    <section class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-6">
       <div class="flex items-center justify-between mb-5">
         <h2 class="!mb-0 !text-sm font-black text-sky-900 flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-sky-500"></i> تاریخچه تغییرات و اسنپ‌شات‌ها</h2>
         <a href={`/crm/contacts/${props.contactId}/history`} class="text-[10px] font-black">مشاهده همه</a>
@@ -682,7 +682,7 @@ export function LogTable(props: { logs: LogRow[]; showContact: boolean }) {
 export function FieldHistoryPage(props: { user: User; contactId: number; name: string; label: string; logs: LogRow[] }) {
   return (
     <Layout title={`تاریخچه «${props.label}»`} sub={<a href={`/crm/contacts/${props.contactId}`}>{props.name}</a>} user={props.user} on="clients">
-      <div class="bg-white rounded-[28px] border border-sky-100 shadow-sm overflow-hidden"><LogTable logs={props.logs} showContact={false} /></div>
+      <div class="bg-white rounded-[28px] border border-sky-100 shadow-xs overflow-hidden"><LogTable logs={props.logs} showContact={false} /></div>
     </Layout>
   );
 }
@@ -691,14 +691,14 @@ export function SnapshotPage(props: { user: User; contactId: number; name: strin
   const s = props.snap;
   return (
     <Layout title="اسنپ‌شات پرونده" sub={<a href={`/crm/contacts/${props.contactId}`}>{props.name}</a>} user={props.user} on="clients">
-      <form method="get" class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-5 mb-6 flex flex-wrap items-center gap-3">
+      <form method="get" class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-5 mb-6 flex flex-wrap items-center gap-3">
         <label class="!m-0">تاریخ و ساعت شمسی</label>
         <input name="at" value={props.atText} class="ltr" placeholder="1405/07/09 14:30" style="max-width:220px" />
         <button class="small"><i class="fa-solid fa-camera"></i> نمایش</button>
       </form>
       <Errors errors={props.error ? [props.error] : []} />
       {s && (
-        <div class="bg-white rounded-[28px] border border-sky-100 shadow-sm overflow-hidden">
+        <div class="bg-white rounded-[28px] border border-sky-100 shadow-xs overflow-hidden">
           <div class="px-8 py-4 border-b border-sky-50 bg-sky-50/30 text-sm font-black text-sky-900">وضعیت پرونده در {props.atText}</div>
           {!s.exists && !s.deleted ? (
             <p class="muted small p-8">در این تاریخ هنوز این مشتری ثبت نشده بود.</p>
@@ -756,12 +756,12 @@ export function HistoryPage(props: { user: User; logs: LogRow[]; page: number; h
       actions={
         <div class="flex p-1 rounded-xl bg-sky-50 border border-sky-100">
           {[["", "همه لاگ‌ها"], ["update", "تغییرات داده"], ["create", "ثبت"], ["delete", "حذف"]].map(([k, l]) => (
-            <a href={qs({ type: k })} class={`px-3 py-1.5 rounded-lg text-xs font-bold ${f.type === k ? "bg-white shadow-sm !text-sky-600" : "!text-slate-500"}`}>{l}</a>
+            <a href={qs({ type: k })} class={`px-3 py-1.5 rounded-lg text-xs font-bold ${f.type === k ? "bg-white shadow-xs !text-sky-600" : "!text-slate-500"}`}>{l}</a>
           ))}
         </div>
       }
     >
-      <form method="get" class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-5 mb-6 flex flex-wrap gap-3">
+      <form method="get" class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-5 mb-6 flex flex-wrap gap-3">
         <input name="q" value={f.q} placeholder="جستجو در لاگ‌ها (نام مشتری، فیلد، مقدار…)" class="flex-1 min-w-[200px]" />
         <select name="user" style="max-width:200px" aria-label="کاربر">
           <option value="">همه کاربران</option>
@@ -782,7 +782,7 @@ export function HistoryPage(props: { user: User; logs: LogRow[]; page: number; h
             {logs.map((l) => {
               const [ic, tone] = icon(l);
               return (
-                <div class={`bg-white rounded-2xl border p-4 flex items-center gap-4 shadow-sm ${l.action === "delete" ? "border-red-100 bg-red-50/20" : "border-sky-100"}`}>
+                <div class={`bg-white rounded-2xl border p-4 flex items-center gap-4 shadow-xs ${l.action === "delete" ? "border-red-100 bg-red-50/20" : "border-sky-100"}`}>
                   <span class={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${tone}`}><i class={`fa-solid ${ic}`}></i></span>
                   <div class="flex-1 min-w-0 text-sm leading-7">
                     <b class="text-sky-600">{l.username || "سیستم"}</b>{" "}
@@ -831,7 +831,7 @@ export function FieldsPage(props: { user: User; defs: (FieldDef & { used?: numbe
           <h2 class="!text-sm font-black text-sky-900 px-2"><i class="fa-solid fa-folder text-sky-500 ml-1"></i> فیلدهای تعریف‌شده ({fa(props.defs.length)})</h2>
           {props.defs.length === 0 && <p class="muted small">هنوز فیلدی تعریف نشده است.</p>}
           {props.defs.map((d) => (
-            <div class="bg-white rounded-2xl border border-sky-100 p-4 flex flex-wrap items-center gap-4 shadow-sm">
+            <div class="bg-white rounded-2xl border border-sky-100 p-4 flex flex-wrap items-center gap-4 shadow-xs">
               <span class="w-12 h-12 rounded-2xl bg-sky-50 text-sky-500 flex items-center justify-center shrink-0 text-lg"><i class="fa-solid fa-font"></i></span>
               <div class="flex-1 min-w-[140px]">
                 <b class="text-sm text-sky-900">{d.name}</b>
@@ -847,7 +847,7 @@ export function FieldsPage(props: { user: User; defs: (FieldDef & { used?: numbe
           ))}
         </div>
         <div class="space-y-6">
-          <div class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-6">
+          <div class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-6">
             <h3 class="!text-sm font-black text-sky-900 mb-4"><i class="fa-solid fa-gear text-sky-500 ml-1"></i> تنظیمات فیلد جدید</h3>
             {admin ? (
               <form method="post" action="/crm/fields">
@@ -901,7 +901,7 @@ export function UsersPage(props: {
         <Stat icon="fa-pen-to-square" tone="bg-amber-50 text-amber-500" label="تغییرات امروز" value={fa(today)} />
       </div>
       <div class="grid lg:grid-cols-4 gap-6">
-        <div class="lg:col-span-3 bg-white rounded-[28px] border border-sky-100 shadow-sm overflow-hidden">
+        <div class="lg:col-span-3 bg-white rounded-[28px] border border-sky-100 shadow-xs overflow-hidden">
           <div class="px-6 py-4 border-b border-sky-50"><h3 class="!mb-0 !text-sm font-black text-sky-900">لیست اعضای تیم</h3></div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -940,7 +940,7 @@ export function UsersPage(props: {
           </div>
         </div>
         <div class="space-y-6">
-          <div class="bg-white rounded-[28px] border border-sky-100 shadow-sm p-6">
+          <div class="bg-white rounded-[28px] border border-sky-100 shadow-xs p-6">
             <h3 class="!text-sm font-black text-sky-900 mb-4"><i class="fa-solid fa-shield-halved text-sky-500 ml-1"></i> سطوح دسترسی</h3>
             <div class="space-y-2 text-xs">
               <div class="flex items-center justify-between p-3 rounded-2xl bg-sky-50 border border-sky-100"><span><span class="inline-block w-2 h-2 rounded-full bg-emerald-500 ml-2"></span><b>مدیر پلتفرم</b></span><span class="text-slate-400">{fa(admins)} عضو</span></div>
