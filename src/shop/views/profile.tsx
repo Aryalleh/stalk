@@ -78,7 +78,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
         </div>
         {props.isMe && (
           <p class="text-xs text-muted mt-5">
-            این پروفایل عمومی شماست. <a href="/me?tab=settings" class="text-brand">تنظیم نمایش کادوها و تولد</a>
+            این پروفایل عمومی شماست. <a href="/me" class="text-brand">تنظیم نمایش کادوها و تولد</a>
           </p>
         )}
       </section>

@@ -17,7 +17,7 @@ import { activeBots, botLink, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, profileValues, MyOrdersPage, MyWishlistsPage, ProfilePage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange } from "../orders";
 
@@ -215,54 +215,42 @@ account.post("/setup/verify", async (c) => {
 
 // ---------- profile (html/profile.html) ----------
 
-account.get("/me", (c) => meView(c, { tab: c.req.query("tab") === "settings" ? "settings" : "profile", saved: c.req.query("saved") === "1" }));
+account.get("/me", (c) => meView(c, { saved: c.req.query("saved") === "1" }));
 
-/** /me: the profile tab (stats, actions, active wishes) and the settings tab, on one page. */
-async function meView(
-  c: C,
-  extra: { tab: "profile" | "settings"; error?: string; saved?: boolean; values?: Record<string, string> },
-  status: 200 | 400 = 200,
-) {
+/** Wishlist and gift counts for the account sidebar. */
+export async function accountStats(db: D1Database, userId: number) {
+  const SOLD = "('paid', 'shipped', 'delivered')";
+  const row = await db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE w.user_id = ?1 AND w.is_direct = 0) AS wishes,
+              (SELECT COUNT(*) FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD}) AS gifts`,
+    )
+    .bind(userId)
+    .first<{ wishes: number; gifts: number }>();
+  return row ?? { wishes: 0, gifts: 0 };
+}
+
+/** /me: the account page (profile fields, look, bots, privacy). */
+async function meView(c: C, extra: { error?: string; saved?: boolean; values?: Record<string, string> }, status: 200 | 400 = 200) {
   const user = (await sessionUserById(c.env.DB, currentUser(c).id))!;
   const db = c.env.DB;
-  const SOLD = "('paid', 'shipped', 'delivered')";
-  const [items, stats, latest] = await Promise.all([
-    db
-      .prepare(
-        `SELECT i.id, i.wishlist_id, i.quantity, p.title, p.image_key,
-                (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
-                (SELECT COUNT(DISTINCT o.giver_phone) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS givers
-         FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id JOIN products p ON p.id = i.product_id
-         WHERE w.user_id = ? AND w.is_open = 1 AND w.is_direct = 0 ORDER BY i.created_at DESC LIMIT 30`,
-      )
-      .bind(user.id)
-      .all<ProfileItem>(),
-    db
-      .prepare(
-        `SELECT (SELECT COUNT(*) FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE w.user_id = ?1 AND w.is_direct = 0) AS wishes,
-                (SELECT COUNT(*) FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD}) AS gifts`,
-      )
-      .bind(user.id)
-      .first<{ wishes: number; gifts: number }>(),
+  const [stats, latest, changes] = await Promise.all([
+    accountStats(db, user.id),
     db.prepare("SELECT slug FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY created_at DESC LIMIT 1").bind(user.id).first<{ slug: string }>(),
+    db
+      .prepare("SELECT o.id, o.product_title FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ? AND o.change_status = 'pending'")
+      .bind(user.id)
+      .all<{ id: number; product_title: string }>(),
   ]);
   const s = c.get("settings");
   const token = await connectToken(c.env.DB, user.id);
-  const bots = activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id) }));
-  const { results: changes } = await db
-    .prepare("SELECT o.id, o.product_title FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ? AND o.change_status = 'pending'")
-    .bind(user.id)
-    .all<{ id: number; product_title: string }>();
   return render(
     c,
-    <ProfilePage
-      changes={changes}
+    <AccountPage
+      changes={changes.results}
       user={user}
-      stats={stats ?? { wishes: 0, gifts: 0 }}
-      items={items.results}
+      stats={stats}
       shareUrl={user.username ? `${siteUrl(c)}/u/${user.username}` : latest ? `${siteUrl(c)}/w/${latest.slug}` : ""}
-      bots={bots}
-      tab={extra.tab}
       settings={{
         bots: activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id), link: botLink(s, k, token) })),
         origin: siteUrl(c),
@@ -275,11 +263,10 @@ async function meView(
   );
 }
 
-const settingsView = (c: C, extra: { error?: string; values?: Record<string, string> } = {}, status: 200 | 400 = 200) =>
-  meView(c, { tab: "settings", ...extra }, status);
+const settingsView = (c: C, extra: { error?: string; values?: Record<string, string> } = {}, status: 200 | 400 = 200) => meView(c, extra, status);
 
 // Settings live in a tab of /me now; old links keep working.
-account.get("/me/settings", (c) => c.redirect(`/me?tab=settings${c.req.query("saved") === "1" ? "&saved=1" : ""}`));
+account.get("/me/settings", (c) => c.redirect(`/me${c.req.query("saved") === "1" ? "?saved=1" : ""}`));
 
 account.post("/me/settings", async (c) => {
   const user = currentUser(c);
@@ -302,7 +289,7 @@ account.post("/me/settings", async (c) => {
   else if (f.remove_avatar === "1") avatar = "";
   await c.env.DB.prepare("UPDATE users SET avatar_key = ? WHERE id = ?").bind(avatar, user.id).run();
   if (user.avatar_key && user.avatar_key !== avatar) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.avatar_key));
-  return c.redirect("/me?tab=settings&saved=1");
+  return c.redirect("/me?saved=1");
 });
 
 // Unlink Bale or Telegram (only while the other one stays connected: every account needs one).
@@ -312,7 +299,7 @@ account.post("/me/bot/:kind{bale|telegram}/disconnect", async (c) => {
   const other = kind === "bale" ? user.telegram_chat_id : user.bale_chat_id;
   if (!other) return settingsView(c, { error: "حساب باید دست‌کم به یک ربات وصل بماند؛ اول ربات دیگر را وصل کنید." }, 400);
   await c.env.DB.prepare(`UPDATE users SET ${kind === "bale" ? "bale_chat_id" : "telegram_chat_id"} = '' WHERE id = ?`).bind(user.id).run();
-  return c.redirect("/me?tab=settings&saved=1#bot");
+  return c.redirect("/me?saved=1#bot");
 });
 
 account.get("/me/wishlists", async (c) => {

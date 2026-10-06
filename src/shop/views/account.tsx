@@ -255,69 +255,38 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
   );
 }
 
-export interface ProfileItem {
-  id: number;
-  wishlist_id: number;
-  title: string;
-  image_key: string;
-  quantity: number;
-  bought: number;
-  givers: number;
-}
-
-const pct = (a: number, b: number) => (b ? Math.min(100, Math.round((a / b) * 100)) : 0);
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
-/** html/profile.html + UX Pilot "حساب من" (mobile drawer, desktop sidebar). */
-/** /me tabs (profile / settings) switch in place; the URL keeps ?tab= so reloads and links land right. */
-const ME_TABS_SCRIPT = `
+/** Mobile account drawer (/me): open, close, Escape. */
+const DRAWER_SCRIPT = `
 (function () {
   var drawer = document.getElementById('me-drawer'), shade = document.getElementById('me-shade');
   function setDrawer(open) {
-    if (!drawer) return;
     drawer.classList.toggle('translate-x-full', !open);
     shade.classList.toggle('hidden', !open);
     document.documentElement.classList.toggle('overflow-hidden', open);
   }
   document.addEventListener('click', function (e) {
-    if (e.target.closest('[data-drawer-open]')) { e.preventDefault(); setDrawer(true); return; }
-    if (e.target.closest('[data-drawer-close]')) { e.preventDefault(); setDrawer(false); return; }
-    var t = e.target.closest('[data-tab]'); if (!t) return;
-    e.preventDefault(); setDrawer(false);
-    var key = t.getAttribute('data-tab');
-    document.querySelectorAll('[data-panel]').forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== key); });
-    document.querySelectorAll('.me-tab').forEach(function (b) {
-      var on = b.getAttribute('data-tab') === key;
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-      ['bg-brand', '!text-white', 'shadow-lg', 'shadow-brand/20'].forEach(function (c) { b.classList.toggle(c, on); });
-      b.classList.toggle('text-muted', !on);
-    });
-    document.querySelectorAll('.me-side[data-tab]').forEach(function (b) {
-      var on = b.getAttribute('data-tab') === key;
-      ['bg-brand/10', 'text-brand', 'font-black'].forEach(function (c) { b.classList.toggle(c, on); });
-      b.classList.toggle('text-muted', !on);
-    });
-    var href = t.getAttribute('href') || '';
-    history.replaceState(null, '', key === 'settings' ? '/me?tab=settings' + (href.indexOf('#') > -1 ? href.slice(href.indexOf('#')) : '') : '/me');
-    var hash = href.indexOf('#') > -1 ? document.querySelector(href.slice(href.indexOf('#'))) : null;
-    (hash || document.body).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (e.target.closest('[data-drawer-open]')) { e.preventDefault(); setDrawer(true); }
+    else if (e.target.closest('[data-drawer-close]')) { e.preventDefault(); setDrawer(false); }
+    else if (e.target.closest('#me-drawer a')) setDrawer(false);
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
 })();
 `;
 
-type MeTab = "profile" | "settings";
+type AccountSection = "account" | "wishes" | "orders";
 
 /** The account menu: the desktop sidebar and the mobile drawer show the same profile card and links. */
-function AccountMenu(props: { user: User; tab: MeTab; stats: { wishes: number; gifts: number }; drawer?: boolean }) {
+function AccountMenu(props: { user: User; active?: AccountSection; stats?: { wishes: number; gifts: number }; drawer?: boolean }) {
   const u = props.user;
-  const item = (href: string, icon: string, label: string, tab?: MeTab) => {
-    const on = tab === props.tab;
+  const item = (href: string, icon: string, label: string, key?: AccountSection) => {
+    const on = !!key && key === props.active;
     return (
       <a
         href={href}
-        data-tab={tab}
-        class={`me-side flex items-center gap-3 px-4 py-3 rounded-2xl text-sm transition-colors hover:bg-brand/10 hover:text-brand ${on ? "bg-brand/10 text-brand font-black" : "text-muted font-bold"}`}
+        aria-current={on ? "page" : undefined}
+        class={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm transition-colors hover:bg-brand/10 hover:text-brand ${on ? "bg-brand/10 text-brand font-black" : "text-muted font-bold"}`}
       >
         <i class={`fa-solid ${icon} w-5 text-center text-base`}></i>
         {label}
@@ -327,7 +296,7 @@ function AccountMenu(props: { user: User; tab: MeTab; stats: { wishes: number; g
   return (
     <>
       <div class="px-6 pt-2 pb-6 flex flex-col items-center text-center border-b border-fg/5">
-        <a href="/me?tab=settings" data-tab="settings" class="relative mb-3" aria-label="تغییر عکس پروفایل">
+        <a href="/me" class="relative mb-3" aria-label="حساب من">
           <Avatar user={u} size={props.drawer ? "w-20 h-20" : "w-24 h-24"} ring />
           <span class="absolute -bottom-1 -left-1 w-8 h-8 bg-card border border-fg/10 rounded-xl flex items-center justify-center text-brand text-xs shadow-lg">
             <i class="fa-solid fa-pen"></i>
@@ -335,7 +304,7 @@ function AccountMenu(props: { user: User; tab: MeTab; stats: { wishes: number; g
         </a>
         <h2 class="text-base font-black text-fg">{publicName(u)}</h2>
         {u.username && <p class="text-xs font-bold text-muted ltr">@{u.username}</p>}
-        {!props.drawer && (
+        {props.stats && (
           <div class="mt-5 flex gap-2 w-full">
             <div class="flex-1 bg-ink p-2.5 rounded-2xl">
               <p class="text-[9px] font-black text-muted mb-0.5">آرزوها</p>
@@ -349,15 +318,12 @@ function AccountMenu(props: { user: User; tab: MeTab; stats: { wishes: number; g
         )}
       </div>
       <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
-        {item("/me", "fa-user", "پروفایل من", "profile")}
-        {item("/me?tab=settings", "fa-user-gear", "حساب من", "settings")}
-        {item("/me/wishlists", "fa-gift", "لیست آرزوها")}
-        {item("/me/orders", "fa-bag-shopping", "سفارشات من")}
-        {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : item("/shops", "fa-store", "فروشگاه‌ها")}
+        {item("/me", "fa-user-gear", "حساب من", "account")}
+        {item("/me/wishlists", "fa-gift", "لیست آرزوها", "wishes")}
+        {item("/me/orders", "fa-bag-shopping", "سفارشات من", "orders")}
+        {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : null}
         <div class="pt-4 pb-1 px-4"><span class="text-[10px] font-black text-muted/70">ارتباطات</span></div>
-        <a href="/me?tab=settings#bot" data-tab="settings" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold text-muted hover:bg-brand/10 hover:text-brand">
-          <i class="fa-solid fa-robot w-5 text-center text-base"></i>ربات‌ها
-        </a>
+        {item("/me#bot", "fa-robot", "ربات‌ها")}
         {item("/faq", "fa-life-ring", "راهنما و پشتیبانی")}
         {!props.drawer && item("/", "fa-house", "بازگشت به خانه")}
       </nav>
@@ -372,29 +338,30 @@ function AccountMenu(props: { user: User; tab: MeTab; stats: { wishes: number; g
   );
 }
 
-export function ProfilePage(props: {
+/** Fixed account sidebar for desktop, on every account page (Layout's `sidebar`). */
+export function AccountSidebar(props: { user: User; active?: AccountSection; stats?: { wishes: number; gifts: number } }) {
+  const site = useSite();
+  return (
+    <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 bg-card border-l border-fg/5 flex-col">
+      <div class="px-6 pt-6 pb-4">
+        <a href="/" class="text-2xl font-black text-brand">{site.site_name}</a>
+      </div>
+      <AccountMenu {...props} />
+    </aside>
+  );
+}
+
+/** /me: the whole account on one page (UX Pilot "حساب من"): drawer on mobile, sidebar on desktop. */
+export function AccountPage(props: {
   changes?: { id: number; product_title: string }[];
-  tab: MeTab;
   settings: SettingsProps;
   user: User;
   stats: { wishes: number; gifts: number };
-  items: ProfileItem[];
   shareUrl: string;
-  bots: { kind: string; connected: boolean }[];
 }) {
   const u = props.user;
   const site = useSite();
-  const first = publicName(u);
-  const action = (href: string, icon: string, label: string, accent = false, attrs: Record<string, string> = {}) => (
-    <a href={href} class="flex flex-col items-center gap-2 min-w-[80px]" {...attrs}>
-      <div class={`w-14 h-14 rounded-2xl ${accent ? "bg-brand/10 text-brand" : "bg-card text-muted"} flex items-center justify-center text-xl`}>
-        <i class={`fa-solid ${icon}`}></i>
-      </div>
-      <span class="text-[10px] text-muted">{label}</span>
-    </a>
-  );
-  const connected = props.bots.filter((b) => b.connected);
-  const publicUrl = u.username ? `${props.settings.origin}/u/${u.username}` : props.shareUrl;
+  const publicUrl = props.shareUrl;
   return (
     <Layout
       title="حساب من"
@@ -402,14 +369,7 @@ export function ProfilePage(props: {
       nav="profile"
       bare
       wide
-      sidebar={
-        <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 bg-card border-l border-fg/5 flex-col">
-          <div class="px-6 pt-6 pb-4">
-            <a href="/" class="text-2xl font-black text-brand">{site.site_name}</a>
-          </div>
-          <AccountMenu user={u} tab={props.tab} stats={props.stats} />
-        </aside>
-      }
+      sidebar={<AccountSidebar user={u} active="account" stats={props.stats} />}
       header={
         <>
           <header class="md:hidden sticky top-0 z-40 bg-ink/80 backdrop-blur-xl border-b border-card px-4 py-3 flex items-center justify-between">
@@ -437,7 +397,7 @@ export function ProfilePage(props: {
                 <i class="fa-solid fa-xmark text-lg"></i>
               </button>
             </div>
-            <AccountMenu user={u} tab={props.tab} stats={props.stats} drawer />
+            <AccountMenu user={u} active="account" stats={props.stats} drawer />
           </aside>
         </>
       }
@@ -445,8 +405,8 @@ export function ProfilePage(props: {
       <div class="px-4 md:px-10 pt-5 md:pt-10">
         <div class="hidden md:flex items-center justify-between gap-4 mb-2">
           <div>
-            <h1 class="text-3xl font-black text-fg mb-1">{props.tab === "settings" ? "حساب من" : `سلام ${first} 👋`}</h1>
-            <p class="text-sm font-bold text-muted">مدیریت اطلاعات کاربری، حریم خصوصی و لیست‌های آرزو</p>
+            <h1 class="text-3xl font-black text-fg mb-1">حساب من</h1>
+            <p class="text-sm font-bold text-muted">مدیریت اطلاعات کاربری، حریم خصوصی و تنظیمات شخصی</p>
           </div>
           {publicUrl && (
             <button type="button" data-share={publicUrl} class="px-6 py-3.5 bg-brand text-white rounded-2xl font-black text-sm shadow-xl shadow-brand/30 flex items-center gap-2">
@@ -454,117 +414,12 @@ export function ProfilePage(props: {
             </button>
           )}
         </div>
-        <div class="md:hidden grid grid-cols-2 gap-1 p-1 bg-card rounded-2xl border border-fg/5" role="tablist">
-          {(
-            [
-              ["profile", "fa-user", "پروفایل من", "/me"],
-              ["settings", "fa-user-gear", "حساب من", "/me?tab=settings"],
-            ] as const
-          ).map(([key, icon, label, href]) => (
-            <a
-              href={href}
-              data-tab={key}
-              role="tab"
-              aria-selected={props.tab === key ? "true" : "false"}
-              class={`me-tab py-2.5 rounded-xl text-xs font-bold text-center ${props.tab === key ? "bg-brand !text-white shadow-lg shadow-brand/20" : "text-muted"}`}
-            >
-              <i class={`fa-solid ${icon} ml-1`}></i>{label}
-            </a>
-          ))}
-        </div>
+        <PendingChanges items={props.changes ?? []} />
       </div>
-      <div data-panel="settings" class={`px-4 md:px-10 py-6 ${props.tab === "settings" ? "" : "hidden"}`}>
+      <div class="px-4 md:px-10 py-6">
         <SettingsBody user={u} {...props.settings} />
       </div>
-      <div data-panel="profile" class={`px-6 md:px-10 py-6 ${props.tab === "profile" ? "" : "hidden"}`}>
-        <div class="md:hidden flex items-center gap-3 mb-6">
-          <Avatar user={u} />
-          <div>
-            <h1 class="text-sm font-bold text-fg">سلام {first} 👋</h1>
-            <p class="text-[10px] text-muted">مدیریت لیست آرزوهای من</p>
-          </div>
-        </div>
-        <PendingChanges items={props.changes ?? []} />
-        <section class="grid grid-cols-2 gap-4 mb-8">
-          <div class="bg-card p-4 rounded-2xl border border-muted/5">
-            <span class="text-[10px] text-muted block mb-1">کل آرزوها</span>
-            <span class="text-xl font-bold text-fg">{fa(props.stats.wishes)}</span>
-          </div>
-          <div class="bg-card p-4 rounded-2xl border border-muted/5">
-            <span class="text-[10px] text-muted block mb-1">کادوهای دریافتی</span>
-            <span class="text-xl font-bold text-brand">{fa(props.stats.gifts)}</span>
-          </div>
-        </section>
-
-        <section class="flex gap-4 mb-10 overflow-x-auto no-scrollbar">
-          {action("/me/wishlists/new", "fa-plus", "لیست جدید", true)}
-          {props.shareUrl ? action("#", "fa-share-nodes", "اشتراک‌گذاری", false, { "data-share": props.shareUrl }) : null}
-          {u.username && action(`/u/${u.username}`, "fa-id-card", "پروفایل عمومی")}
-          {action("/me/wishlists", "fa-list", "لیست‌ها")}
-          {action("/me/orders", "fa-bag-shopping", "خریدهای من")}
-          {action("/me?tab=settings#bot", "fa-robot", "اتصال ربات", false, { "data-tab": "settings" })}
-          {action("#", "fa-download", "نصب اپ", false, { "data-install": "", class: "hidden flex flex-col items-center gap-2 min-w-[80px]" })}
-          {action("/panel", "fa-store", "فروشگاه من")}
-        </section>
-
-        <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-sm font-bold text-fg">آرزوهای فعال</h2>
-            <a href="/me/wishlists" class="text-[10px] text-brand font-bold">مشاهده همه</a>
-          </div>
-          {props.items.length === 0 && (
-            <div class="bg-card rounded-2xl p-6 text-center text-sm text-muted">
-              هنوز آرزویی ندارید. از <a href="/" class="text-brand">فروشگاه</a> محصولی را به لیستتان اضافه کنید.
-            </div>
-          )}
-          <div class="grid gap-4 lg:grid-cols-2">
-            {props.items.map((it) => (
-              <div class="bg-card p-3 rounded-2xl flex items-center gap-4">
-                <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-2xl">
-                  {it.image_key ? <img class="w-full h-full object-cover" src={`/img/${it.image_key}`} alt={it.title} loading="lazy" /> : "🎁"}
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h3 class="text-xs font-bold text-fg truncate mb-1">{it.title}</h3>
-                  <div class="flex items-center gap-2 mb-2">
-                    <div class="flex-1 h-1.5 bg-ink rounded-full overflow-hidden">
-                      <div class="h-full bg-brand rounded-full" style={`width:${pct(it.bought, it.quantity)}%`}></div>
-                    </div>
-                    <span class="text-[9px] text-muted">{fa(pct(it.bought, it.quantity))}٪</span>
-                  </div>
-                  <span class="text-[9px] text-muted bg-ink px-2 py-0.5 rounded-md">
-                    {it.givers ? `${fa(it.givers)} نفر کادو داده‌اند` : "هنوز خریداری نشده"}
-                  </span>
-                </div>
-                <a href={`/me/wishlists/${it.wishlist_id}`} aria-label="مدیریت" class="w-8 h-8 rounded-full bg-ink text-muted flex items-center justify-center">
-                  <i class="fa-solid fa-ellipsis-vertical"></i>
-                </a>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section class="mt-10 p-5 bg-brand/5 border border-brand/20 rounded-[24px]">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-brand flex items-center justify-center text-white"><i class="fa-solid fa-robot text-lg"></i></div>
-              <div>
-                <h3 class="text-sm font-bold text-brand">ربات اطلاع‌رسانی</h3>
-                <p class="text-[10px] text-muted">
-                  وضعیت: {connected.length ? `متصل (${connected.map((b) => BOT_STYLE[b.kind].name).join("، ")})` : "متصل نیست"}
-                </p>
-              </div>
-            </div>
-            <div class={`w-12 h-6 ${connected.length ? "bg-ok" : "bg-plum"} rounded-full relative flex items-center px-1`}>
-              <div class={`w-4 h-4 bg-white rounded-full ${connected.length ? "mr-auto" : "ml-auto"}`}></div>
-            </div>
-          </div>
-          <p class="text-[10px] text-muted leading-relaxed">
-            اعلان هر کادو، فیش‌های واریز و پیام‌های سفارش از طریق ربات برایتان ارسال می‌شود.
-          </p>
-          <a href="/me?tab=settings#bot" data-tab="settings" class="text-[11px] text-brand font-bold mt-3 inline-block">مدیریت اتصال ربات‌ها ←</a>
-        </section>
-      </div>
-      <script dangerouslySetInnerHTML={{ __html: ME_TABS_SCRIPT }} />
+      <script dangerouslySetInnerHTML={{ __html: DRAWER_SCRIPT }} />
     </Layout>
   );
 }
@@ -846,11 +701,18 @@ function SettingsBody(props: SettingsProps & { user: User }) {
       {props.bots
         .filter((b) => b.connected && props.bots.some((o) => o.kind !== b.kind && o.connected))
         .map((b) => <form id={`bot-off-${b.kind}`} method="post" action={`/me/bot/${b.kind}/disconnect`} class="hidden"></form>)}
-      <form method="post" action="/logout" class="md:hidden mt-6">
-        <button class="w-full flex items-center justify-center gap-2 p-3.5 text-red-500 font-black text-sm bg-red-500/10 rounded-2xl">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i>خروج از حساب
-        </button>
-      </form>
+      <div class="mt-6 grid gap-3 sm:grid-cols-2">
+        {!u.shop_id && (
+          <a href="/panel/register" class="flex items-center justify-center gap-2 p-3.5 bg-brand/10 text-brand font-black text-sm rounded-2xl hover:bg-brand/15">
+            <i class="fa-solid fa-store"></i>ساخت فروشگاه
+          </a>
+        )}
+        <form method="post" action="/logout" class={`m-0 ${u.shop_id ? "sm:col-span-2" : ""}`}>
+          <button class="w-full flex items-center justify-center gap-2 p-3.5 text-red-500 font-black text-sm bg-red-500/10 hover:bg-red-500/15 rounded-2xl">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>خروج از حساب
+          </button>
+        </form>
+      </div>
       <script
         dangerouslySetInnerHTML={{
           __html: `(function(){var input=document.getElementById('avatar-input'),box=document.querySelector('#avatar-preview > div'),orig=box.innerHTML;
@@ -866,7 +728,7 @@ function SettingsBody(props: SettingsProps & { user: User }) {
 
 export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items: number; cover: string })[]; siteUrl: string }) {
   return (
-    <Layout title="لیست‌های آرزوی من" user={props.user} nav="wishes">
+    <Layout title="لیست‌های آرزوی من" user={props.user} nav="wishes" sidebar={<AccountSidebar user={props.user} active="wishes" />}>
       <div class="row" style="margin-bottom:16px">
         <h1 style="margin:0">لیست‌های آرزوی من</h1>
         <span class="sp" />
@@ -905,7 +767,7 @@ export function WishlistFormPage(props: {
   const v = props.values;
   const action = w ? `/me/wishlists/${w.id}` : "/me/wishlists/new";
   return (
-    <Layout title={w ? w.title : "لیست جدید"} user={props.user} nav="wishes">
+    <Layout title={w ? w.title : "لیست جدید"} user={props.user} nav="wishes" sidebar={<AccountSidebar user={props.user} active="wishes" />}>
       <h1>{w ? `ویرایش «${w.title}»` : "ساخت لیست آرزو"}</h1>
       {props.saved && <div class="okbox">ذخیره شد.</div>}
       {w && (
@@ -1015,7 +877,7 @@ export interface MyOrder {
 /** Everything the signed-in person has bought: gifts for others and direct purchases for themselves. */
 export function MyOrdersPage(props: { user: User; orders: MyOrder[] }) {
   return (
-    <Layout title="خریدهای من" user={props.user} nav="profile" header={<TitleBar title="خریدهای من" back="/me" />} bare>
+    <Layout title="خریدهای من" user={props.user} nav="profile" sidebar={<AccountSidebar user={props.user} active="orders" />} header={<TitleBar title="خریدهای من" back="/me" />} bare>
       <div class="px-6 pb-10 space-y-4">
         {props.orders.length === 0 && (
           <div class="bg-card rounded-2xl p-6 text-center text-sm text-muted">
@@ -1045,7 +907,7 @@ export function ChangeRequestPage(props: { user: User; order: Order & { image_ke
   const o = props.order;
   const pending = o.change_status === "pending";
   return (
-    <Layout title="پیشنهاد تغییر" user={props.user} nav="profile" header={<TitleBar title="پیشنهاد تغییر کادو" back="/me" />} bare>
+    <Layout title="پیشنهاد تغییر" user={props.user} nav="profile" sidebar={<AccountSidebar user={props.user} active="orders" />} header={<TitleBar title="پیشنهاد تغییر کادو" back="/me" />} bare>
       <div class="px-6 pb-12 space-y-6">
         <section class="p-4 bg-card rounded-2xl flex items-center gap-4">
           <div class="w-20 h-20 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-3xl">
