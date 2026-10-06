@@ -49,8 +49,10 @@ async function callBot(s: Settings, kind: BotKind, method: string, body: object 
 
 export type InlineKeyboard = { inline_keyboard: { text: string; callback_data?: string; url?: string }[][] };
 
+export type SentMessage = { message_id: number };
+
 export async function sendBotMessage(s: Settings, kind: BotKind, chatId: string, text: string, replyMarkup?: object) {
-  await callBot(s, kind, "sendMessage", { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+  return (await callBot(s, kind, "sendMessage", { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) })) as SentMessage;
 }
 
 export async function sendBotPhoto(
@@ -66,7 +68,7 @@ export async function sendBotPhoto(
   form.set("caption", caption.slice(0, 1024));
   form.set("photo", new Blob([photo.data], { type: photo.type }), photo.name);
   if (replyMarkup) form.set("reply_markup", JSON.stringify(replyMarkup));
-  await callBot(s, kind, "sendPhoto", form);
+  return (await callBot(s, kind, "sendPhoto", form)) as SentMessage;
 }
 
 export async function answerCallback(s: Settings, kind: BotKind, callbackId: string, text: string) {

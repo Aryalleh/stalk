@@ -8,12 +8,12 @@ import { availableByVariant, getPublicProduct, normCity, now, productImages, ran
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant } from "../variants";
 import type { C, Env } from "../../env";
-import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile } from "../../session";
+import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile, publicNameSql } from "../../session";
 import { birthDate, fullName } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
-import { activeBots, botLink } from "../../bale/botapi";
+import { activeBots, botLink, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
@@ -83,11 +83,18 @@ account.get("/login/verify", async (c) => {
 function readProfile(f: Record<string, string>) {
   const first = (f.first_name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
   const last = (f.last_name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const nickname = (f.nickname ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
   const birth = birthDate(f.birth_year, f.birth_month, f.birth_day);
-  const error = !first || !last ? "نام و نام خانوادگی را وارد کنید." : !birth ? "تاریخ تولد را درست انتخاب کنید." : "";
+  const error = !first || !last
+    ? "نام و نام خانوادگی را وارد کنید."
+    : !nickname
+      ? "یک نام مستعار برای نمایش عمومی وارد کنید."
+      : !birth
+        ? "تاریخ تولد را درست انتخاب کنید."
+        : "";
   const accent = f.accent === "blue" ? "blue" : "pink";
   const theme = f.theme === "dark" ? "dark" : "light";
-  return { first, last, birth: birth ?? "", accent, theme, error };
+  return { first, last, nickname, birth: birth ?? "", accent, theme, error };
 }
 
 account.post("/login/verify", async (c) => {
@@ -104,10 +111,10 @@ account.post("/login/verify", async (c) => {
   if (existing) return startSession(c, existing.id, next);
   const name = fullName(profile.first, profile.last);
   const row = await c.env.DB.prepare(
-    `INSERT INTO users (phone, name, first_name, last_name, birth_date, accent, theme, password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, '!', ?)
+    `INSERT INTO users (phone, name, first_name, last_name, nickname, birth_date, accent, theme, password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '!', ?)
      ON CONFLICT (phone) DO NOTHING RETURNING id`,
   )
-    .bind(phone, name, profile.first, profile.last, profile.birth, profile.accent, profile.theme, now())
+    .bind(phone, name, profile.first, profile.last, profile.nickname, profile.birth, profile.accent, profile.theme, now())
     .first<{ id: number }>();
   const id = row?.id ?? (await userByPhone(c, phone))!.id;
   await assignUsername(c.env.DB, id);
@@ -139,9 +146,9 @@ async function saveProfile(c: C, userId: number, f: Record<string, string>, extr
   if (p.error) return p.error;
   const cols = Object.keys(extra);
   await c.env.DB.prepare(
-    `UPDATE users SET first_name = ?, last_name = ?, name = ?, birth_date = ?, accent = ?, theme = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
+    `UPDATE users SET first_name = ?, last_name = ?, nickname = ?, name = ?, birth_date = ?, accent = ?, theme = ?${cols.map((k) => `, ${k} = ?`).join("")} WHERE id = ?`,
   )
-    .bind(p.first, p.last, fullName(p.first, p.last), p.birth, p.accent, p.theme, ...Object.values(extra), userId)
+    .bind(p.first, p.last, p.nickname, fullName(p.first, p.last), p.birth, p.accent, p.theme, ...Object.values(extra), userId)
     .run();
   return "";
 }
@@ -280,6 +287,16 @@ account.post("/me/settings", async (c) => {
   await c.env.DB.prepare("UPDATE users SET avatar_key = ? WHERE id = ?").bind(avatar, user.id).run();
   if (user.avatar_key && user.avatar_key !== avatar) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.avatar_key));
   return c.redirect("/me/settings?saved=1");
+});
+
+// Unlink Bale or Telegram (only while the other one stays connected: every account needs one).
+account.post("/me/bot/:kind{bale|telegram}/disconnect", async (c) => {
+  const user = currentUser(c);
+  const kind = c.req.param("kind") as BotKind;
+  const other = kind === "bale" ? user.telegram_chat_id : user.bale_chat_id;
+  if (!other) return settingsView(c, { error: "حساب باید دست‌کم به یک ربات وصل بماند؛ اول ربات دیگر را وصل کنید." }, 400);
+  await c.env.DB.prepare(`UPDATE users SET ${kind === "bale" ? "bale_chat_id" : "telegram_chat_id"} = '' WHERE id = ?`).bind(user.id).run();
+  return c.redirect("/me/settings?saved=1#bot");
 });
 
 account.get("/me/wishlists", async (c) => {
@@ -477,7 +494,7 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
 account.get("/me/orders", async (c) => {
   const user = currentUser(c);
   const { results } = await c.env.DB.prepare(
-    `SELECT o.token, o.id, o.product_title, o.amount, o.status, o.cancel_kind, o.created_at, w.is_direct, u.name AS owner_name,
+    `SELECT o.token, o.id, o.product_title, o.amount, o.status, o.cancel_kind, o.created_at, w.is_direct, ${publicNameSql("u")} AS owner_name,
             COALESCE(p.image_key, '') AS image_key
      FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id LEFT JOIN products p ON p.id = o.product_id
      WHERE o.giver_phone = ? ORDER BY o.created_at DESC LIMIT 100`,

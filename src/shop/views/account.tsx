@@ -42,6 +42,9 @@ export function ProfileFields(props: { values: Record<string, string> }) {
           <input name="last_name" value={v.last_name ?? ""} required maxlength={40} autocomplete="family-name" />
         </div>
       </div>
+      <label>نام مستعار (نمایش عمومی)</label>
+      <input name="nickname" value={v.nickname ?? ""} required maxlength={30} placeholder="مثلاً سارا، سارینا یا مینو" />
+      <p class="small muted" style="margin-top:4px">در پروفایل عمومی و لیست‌های آرزو فقط همین نام نمایش داده می‌شود، نه نام و نام خانوادگی شما.</p>
       <label>تاریخ تولد</label>
       <div class="grid grid-cols-3 gap-2">
         <select name="birth_day" required aria-label="روز تولد">
@@ -90,11 +93,12 @@ export function LookFields(props: { values: Record<string, string> }) {
 }
 
 /** Form values of a user's profile fields. */
-export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_date" | "username" | "accent" | "theme">): Record<string, string> {
+export function profileValues(u: Pick<User, "first_name" | "last_name" | "nickname" | "birth_date" | "username" | "accent" | "theme">): Record<string, string> {
   const [y, m, d] = (u.birth_date || "").split("-");
   return {
     first_name: u.first_name,
     last_name: u.last_name,
+    nickname: u.nickname,
     birth_year: y ?? "",
     birth_month: m ? String(Number(m)) : "",
     birth_day: d ? String(Number(d)) : "",
@@ -107,7 +111,7 @@ export function profileValues(u: Pick<User, "first_name" | "last_name" | "birth_
 /** Accounts made before names and birth date were required finish their profile here. */
 export function CompleteProfilePage(props: { user: User; next: string; values: Record<string, string>; origin: string; error?: string }) {
   return (
-    <AuthShell title="تکمیل پروفایل" icon="fa-user-pen" subtitle="برای ادامه، نام، نام خانوادگی و تاریخ تولدتان را وارد کنید.">
+    <AuthShell title="تکمیل پروفایل" icon="fa-user-pen" subtitle="برای ادامه، نام، نام خانوادگی، نام مستعار و تاریخ تولدتان را وارد کنید.">
       <Errors errors={[props.error]} />
       <form method="post" action="/me/complete" class="space-y-2">
         <input type="hidden" name="next" value={props.next} />
@@ -443,14 +447,33 @@ export function ProfileSettingsPage(props: {
       </form>
       <div class="card" id="bot">
         <h2>اتصال ربات</h2>
-        {props.bots.map((b) => (
-          <div class="row" style="margin-bottom:8px">
-            <span>{BOT_STYLE[b.kind].name}</span>
-            {b.connected ? <span class="tag ok">متصل ✓</span> : <span class="tag">متصل نیست</span>}
-            <span class="sp" />
-            {!b.connected && b.link && <a class="btn small secondary" href={b.link} target="_blank" rel="noopener">اتصال</a>}
-          </div>
-        ))}
+        <p class="muted small" style="margin-top:0">
+          پیام‌های سایت (کد ورود، کادوها، سفارش‌ها) به ربات‌های وصل‌شده می‌رسد. برای وصل کردن حساب دیگری از بله یا تلگرام، «تغییر حساب» را بزنید و
+          ربات را با همان حساب جدید باز کنید.
+        </p>
+        {props.bots.map((b) => {
+          const others = props.bots.some((o) => o.kind !== b.kind && o.connected);
+          return (
+            <div class="row" style="margin-bottom:8px;flex-wrap:wrap">
+              <span>{BOT_STYLE[b.kind].name}</span>
+              {b.connected ? <span class="tag ok">متصل ✓</span> : <span class="tag">متصل نیست</span>}
+              <span class="sp" />
+              {b.link && (
+                <a class="btn small secondary" href={b.link} target="_blank" rel="noopener">
+                  {b.connected ? "تغییر حساب" : "اتصال"}
+                </a>
+              )}
+              {b.connected && others && (
+                <form method="post" action={`/me/bot/${b.kind}/disconnect`} class="m-0">
+                  <button class="small secondary" onclick={`return confirm('اتصال ${BOT_STYLE[b.kind].name} قطع شود؟')`}>قطع اتصال</button>
+                </form>
+              )}
+            </div>
+          );
+        })}
+        {props.bots.filter((b) => b.connected).length === 1 && props.bots.length > 1 && (
+          <p class="muted small">برای قطع اتصال، اول ربات دیگر را وصل کنید؛ حساب باید دست‌کم به یکی وصل بماند.</p>
+        )}
         {!props.bots.length && <p class="muted small">ربات سایت هنوز راه‌اندازی نشده است.</p>}
       </div>
       <form method="post" action="/logout">

@@ -42,6 +42,7 @@ import {
   type Stage,
 } from "./db";
 import { newLinkCode } from "../telegram/channel";
+import { postShopToChannel, shareError } from "../telegram/share";
 import { authorizeUrl, exchangeCode, fetchAccount, listMedia, sendDm, type IgMedia } from "./instagram";
 import type { MediaLink } from "./comments";
 import {
@@ -885,6 +886,15 @@ crmPanel.post("/panel/settings/telegram", async (c) => {
   if (f.do === "code") {
     await db(c).prepare("UPDATE shops SET tg_link_code = ? WHERE id = ?").bind(newLinkCode(), shop.id).run();
     return back("ok", "کد ساخته شد؛ آن را در کانال پست کنید.");
+  }
+  if (f.do === "post_shop") {
+    if (!shop.tg_channel_id) return back("error", "اول کانال را وصل کنید.");
+    try {
+      await postShopToChannel({ db: db(c), images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, shop);
+    } catch (e) {
+      return back("error", shareError(e));
+    }
+    return back("ok", "ویترین فروشگاه در کانال پست شد.");
   }
   if (f.do === "disconnect") {
     await db(c).prepare("UPDATE shops SET tg_channel_id = '', tg_channel_title = '', tg_channel_username = '', tg_last_error = '' WHERE id = ?").bind(shop.id).run();

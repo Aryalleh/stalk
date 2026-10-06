@@ -1,3 +1,4 @@
+import { publicNameSql } from "../../session";
 import { Hono } from "hono";
 import { normalizePhone } from "../../../lib/normalize";
 import { upsertCustomer } from "../../crm/sync";
@@ -126,7 +127,7 @@ store.get("/s/:slug", async (c) => {
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {
   return db
-    .prepare(`SELECT w.*, u.name AS owner_name, u.avatar_key AS owner_avatar, u.username AS owner_username FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
+    .prepare(`SELECT w.*, ${publicNameSql("u")} AS owner_name, u.avatar_key AS owner_avatar, u.username AS owner_username FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
     .bind(value)
     .first<Wishlist & { owner_name: string; owner_avatar: string; owner_username: string | null }>();
 }
@@ -153,7 +154,7 @@ store.get("/w/:slug", async (c) => {
 store.get("/u/:username", async (c) => {
   const db = c.env.DB;
   const person = await db
-    .prepare("SELECT id, name, username, avatar_key, birth_date, show_received, show_givers, show_birthday FROM users WHERE username = ?")
+    .prepare(`SELECT id, ${publicNameSql("users")} AS name, username, avatar_key, birth_date, show_received, show_givers, show_birthday FROM users WHERE username = ?`)
     .bind(c.req.param("username").toLowerCase())
     .first<PublicPerson>();
   if (!person) return c.notFound();
@@ -174,8 +175,9 @@ store.get("/u/:username", async (c) => {
       .prepare(
         // A giver's name appears only if they chose to be named on the profile and the owner shows givers.
         `SELECT o.product_id, o.product_title, COALESCE(p.image_key, '') AS image_key,
-                CASE WHEN ?2 = 1 AND o.show_on_profile = 1 AND o.is_anonymous = 0 THEN o.giver_name ELSE '' END AS giver
+                CASE WHEN ?2 = 1 AND o.show_on_profile = 1 AND o.is_anonymous = 0 THEN COALESCE(NULLIF(gu.nickname, ''), o.giver_name) ELSE '' END AS giver
          FROM orders o JOIN wishlists w ON w.id = o.wishlist_id LEFT JOIN products p ON p.id = o.product_id
+         LEFT JOIN users gu ON gu.phone = o.giver_phone AND o.giver_phone <> ''
          WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD} ORDER BY o.paid_at DESC LIMIT 60`,
       )
       .bind(person.id, person.show_givers),
@@ -265,7 +267,7 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
 
 async function orderByToken(c: C) {
   return c.env.DB.prepare(
-    `SELECT o.*, w.slug AS wishlist_slug, w.is_direct, u.name AS owner_name, s.card_holder, s.name AS shop_name,
+    `SELECT o.*, w.slug AS wishlist_slug, w.is_direct, ${publicNameSql("u")} AS owner_name, s.card_holder, s.name AS shop_name,
             COALESCE(p.image_key, '') AS image_key
      FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id JOIN shops s ON s.id = o.shop_id
      LEFT JOIN products p ON p.id = o.product_id

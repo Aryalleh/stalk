@@ -15,6 +15,7 @@ import { parseSizeGuide } from "../sizes";
 import { AdminContentPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
+import { postProductToChannel, shareError } from "../telegram/share";
 import { InstagramSettings, TelegramSettings } from "../crm/views";
 import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
@@ -290,7 +291,7 @@ panel.get("/panel/products", async (c) => {
   )
     .bind(shopOf(c).id)
     .all<Product & { stock_total: number; has_sizes: number }>();
-  return render(c, <ProductsPage user={currentUser(c)} shop={shopOf(c)} products={results} />);
+  return render(c, <ProductsPage user={currentUser(c)} shop={shopOf(c)} products={results} tgOk={c.req.query("tg_ok")} tgError={c.req.query("tg_error")} />);
 });
 
 // Quick +/- from the products list (products without sizes).
@@ -303,6 +304,21 @@ panel.post("/panel/products/:id{[0-9]+}/stock", async (c) => {
     await adjustStock(c.env.DB, p.id, "", "", delta);
   }
   return c.redirect("/panel/products");
+});
+
+// Post a product to the shop's connected Telegram channel (photo, price, buy / wishlist buttons).
+panel.post("/panel/products/:id{[0-9]+}/telegram", async (c) => {
+  const p = await ownProduct(c);
+  if (!p) return c.notFound();
+  const back = (await form(c)).back === "form" ? `/panel/products/${p.id}` : "/panel/products";
+  const shop = shopOf(c);
+  if (!shop.tg_channel_id) return c.redirect(`${back}?tg_error=${encodeURIComponent("اول کانال تلگرام را در تنظیمات وصل کنید.")}`);
+  try {
+    await postProductToChannel({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, shop, p);
+  } catch (e) {
+    return c.redirect(`${back}?tg_error=${encodeURIComponent(shareError(e))}`);
+  }
+  return c.redirect(`${back}?tg_ok=${encodeURIComponent(`«${p.title}» در کانال پست شد.`)}`);
 });
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -491,6 +507,7 @@ panel.get("/panel/products/:id{[0-9]+}", async (c) => {
     title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, size_guide: p.size_guide,
     category: p.category, features: p.features, colors: p.colors, track_stock: String(p.track_stock),
     is_active: String(p.is_active), saved: c.req.query("saved") ?? "",
+    tg_ok: c.req.query("tg_ok") ?? "", tg_error: c.req.query("tg_error") ?? "",
   };
   return productFormPage(c, p, values);
 });

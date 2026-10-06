@@ -1542,6 +1542,15 @@ export function TelegramSettings(props: {
                 {" · "}{props.imported.toLocaleString("fa-IR")} محصول از کانال
               </p>
               {s.tg_last_error && <div class="warnbox small">آخرین مشکل: {s.tg_last_error}</div>}
+              <form method="post" action="/panel/settings/telegram" class="row" style="justify-content:space-between;margin:10px 0">
+                <input type="hidden" name="do" value="post_shop" />
+                <span class="small">
+                  پستی با عکس کاور فروشگاه، معرفی و دکمه «ورود به ویترین» در کانال بگذارید (مناسب برای پین کردن).
+                  {s.tg_shop_post_at && <span class="muted"> آخرین ارسال: <span class="dt">{formatJalali(s.tg_shop_post_at)}</span></span>}
+                </span>
+                <button class="small"><i class="fa-brands fa-telegram ml-1"></i> ارسال ویترین به کانال</button>
+              </form>
+              <p class="muted small">هر محصول را هم می‌توانید از صفحه «محصولات» با دکمه «ارسال به کانال» پست کنید.</p>
               <form method="post" action="/panel/settings/telegram">
                 <input type="hidden" name="do" value="save" />
                 <div class="two">

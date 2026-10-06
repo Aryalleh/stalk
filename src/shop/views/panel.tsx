@@ -536,13 +536,16 @@ function StockBadge(props: { p: Product & { stock_total: number } }) {
   );
 }
 
-export function ProductsPage(props: { user: User; shop: Shop; products: (Product & { stock_total: number; has_sizes: number })[] }) {
+export function ProductsPage(props: { user: User; shop: Shop; products: (Product & { stock_total: number; has_sizes: number })[]; tgOk?: string; tgError?: string }) {
+  const channel = !!props.shop.tg_channel_id;
   return (
     <PanelShell title="محصولات" user={props.user} shop={props.shop} on="products">
       <div class="flex items-center justify-between mb-4">
         <h1 class="!mb-0">محصولات</h1>
         <a class="btn small" href="/panel/products/new"><i class="fa-solid fa-plus"></i> محصول جدید</a>
       </div>
+      {props.tgOk && <div class="okbox">{props.tgOk}</div>}
+      <Errors errors={[props.tgError]} />
       {props.products.length === 0 && <div class="card text-center text-sm muted py-10">هنوز محصولی ثبت نشده.</div>}
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         {props.products.map((p) => (
@@ -570,6 +573,13 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
                 </form>
               )}
             </div>
+            {channel && p.is_active ? (
+              <form method="post" action={`/panel/products/${p.id}/telegram`} class="px-3 pb-3 -mt-1">
+                <button class="w-full !py-1.5 !text-[11px] !rounded-lg secondary" title={p.tg_shared_at ? `آخرین ارسال: ${formatJalali(p.tg_shared_at)}` : "ارسال به کانال تلگرام"}>
+                  <i class="fa-brands fa-telegram ml-1"></i>{p.tg_shared_at ? "ارسال دوباره به کانال" : "ارسال به کانال"}
+                </button>
+              </form>
+            ) : null}
           </div>
         ))}
       </div>
@@ -640,7 +650,19 @@ export function ProductFormPage(props: {
     <PanelShell title={p ? p.title : "محصول جدید"} user={props.user} shop={props.shop} on="products">
       <p class="mb-3"><a href="/panel/products" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>محصولات</a></p>
       {v.saved && <div class="okbox">ذخیره شد.</div>}
-      <Errors errors={props.errors} />
+      {v.tg_ok && <div class="okbox">{v.tg_ok}</div>}
+      <Errors errors={[...(props.errors ?? []), v.tg_error]} />
+      {p && props.shop.tg_channel_id && p.is_active ? (
+        <form method="post" action={`/panel/products/${p.id}/telegram`} class="card row" style="justify-content:space-between">
+          <input type="hidden" name="back" value="form" />
+          <span class="small">
+            <i class="fa-brands fa-telegram ml-1 text-sky-500"></i>
+            ارسال این محصول به کانال «{props.shop.tg_channel_title || "تلگرام"}» با عکس، قیمت و دکمه خرید
+            {p.tg_shared_at && <span class="muted"> · آخرین ارسال: <span class="dt">{formatJalali(p.tg_shared_at)}</span></span>}
+          </span>
+          <button class="small">{p.tg_shared_at ? "ارسال دوباره" : "ارسال به کانال"}</button>
+        </form>
+      ) : null}
       <form method="post" action={p ? `/panel/products/${p.id}` : "/panel/products/new"} enctype="multipart/form-data">
         <div class="card two">
           <div>

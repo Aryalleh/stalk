@@ -56,6 +56,7 @@ export interface Shop {
   tg_tag: string;
   tg_buttons: number;
   tg_last_error: string;
+  tg_shop_post_at: string | null;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;
@@ -76,6 +77,9 @@ export interface Product {
   colors: string; // one per line
   track_stock: number; // 1 = sell only what product_stock holds
   is_active: number;
+  tg_shared_chat: string; // the channel this product was posted to from the panel
+  tg_shared_message: number | null;
+  tg_shared_at: string | null;
   created_at: string;
 }
 export type ProductWithShop = Product & { shop_name: string; shop_slug: string };
