@@ -46,8 +46,8 @@ function ProductCard(props: { p: ProductWithShop }) {
   return (
     <a href={`/p/${p.id}`} class="group relative block bg-card rounded-3xl overflow-hidden shadow-lg transition-transform active:scale-95">
       <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-500" />
-      <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent"></div>
-      <div class="absolute inset-x-0 bottom-0 p-4">
+      <div class="absolute inset-0 photo-scrim"></div>
+      <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
         <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{p.title}</h3>
         <div class="text-[11px] text-brand font-bold">{toman(p.price)}</div>
         <div class="text-[10px] text-muted truncate">{p.shop_name}</div>
@@ -222,12 +222,12 @@ export function HomePage(props: {
         {f && !props.q && !props.category && props.page === 1 && (
           <a href={`/s/${f.slug}`} class="block mb-8 overflow-hidden rounded-3xl bg-card relative h-48 group">
             {f.cover_key ? (
-              <img class="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" src={`/img/${f.cover_key}`} alt={f.name} />
+              <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src={`/img/${f.cover_key}`} alt={f.name} />
             ) : (
               <div class="w-full h-full bg-gradient-to-br from-brand/40 to-plum"></div>
             )}
-            <div class="absolute inset-0 bg-gradient-to-t from-ink to-transparent"></div>
-            <div class="absolute bottom-4 right-5 left-5">
+            <div class="absolute inset-0 photo-scrim"></div>
+            <div class="absolute bottom-4 right-5 left-5 on-photo">
               <span class="text-[10px] bg-brand text-white px-2 py-0.5 rounded-full mb-2 inline-block">فروشگاه هفته</span>
               <h2 class="text-xl font-bold text-fg mb-1">{f.name}</h2>
               {f.description && <p class="text-xs text-muted line-clamp-1">{f.description}</p>}
@@ -283,8 +283,8 @@ function Gallery(props: { images: ProductImage[]; title: string; overlay: Child 
       ) : (
         <div class="w-full h-full flex items-center justify-center text-7xl">🎁</div>
       )}
-      <div class="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-transparent pointer-events-none"></div>
-      <div class="absolute bottom-10 inset-x-6 pointer-events-none">{props.overlay}</div>
+      <div class="absolute inset-0 photo-scrim pointer-events-none"></div>
+      <div class="absolute bottom-10 inset-x-6 pointer-events-none on-photo">{props.overlay}</div>
       {imgs.length > 1 && (
         <div id="gallery-dots" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
           {imgs.map((_, i) => <span class={`w-2 h-2 rounded-full ${i ? "bg-fg/30" : "bg-brand"}`}></span>)}
@@ -585,8 +585,9 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
         </div>
       )}
       <section class="relative">
-        <div class="h-40 md:h-56 bg-card overflow-hidden">
-          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover opacity-70" /> : <div class="w-full h-full bg-gradient-to-br from-brand/30 to-plum"></div>}
+        <div class="h-40 md:h-56 bg-card overflow-hidden relative">
+          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover" /> : <div class="w-full h-full bg-gradient-to-br from-brand/30 to-plum"></div>}
+          <div class="absolute inset-0 photo-scrim"></div>
         </div>
         <div class="px-6 -mt-10 relative flex items-end gap-4">
           <div class="w-20 h-20 rounded-2xl bg-card border-4 border-ink overflow-hidden flex items-center justify-center text-3xl font-bold text-brand shrink-0">
@@ -695,7 +696,7 @@ export function WishlistPublicPage(props: {
                 <a href={`/p/${it.product_id}`}>
                   <ImageOrGift imageKey={it.image_key} alt={it.title} class={`w-full h-auto block min-h-[160px] object-cover ${fulfilled ? "opacity-60" : ""}`} />
                 </a>
-                <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent pointer-events-none"></div>
+                <div class="absolute inset-0 photo-scrim pointer-events-none"></div>
                 {fulfilled ? (
                   <div class="absolute top-3 right-3 bg-ok px-2 py-1 rounded-lg text-[10px] text-white">✓ برآورده شد</div>
                 ) : it.quantity > 1 && it.bought > 0 ? (
@@ -705,7 +706,7 @@ export function WishlistPublicPage(props: {
                 ) : it.quantity > 1 ? (
                   <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-fg">{fa(it.quantity)} عدد</div>
                 ) : null}
-                <div class="absolute inset-x-0 bottom-0 p-4">
+                <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
                   <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{it.title}</h3>
                   <div class={`text-[11px] font-bold ${fulfilled ? "text-muted" : "text-brand"}`}>{toman(it.price)}</div>
                   {variantLabel(it.size, it.color) && <div class="text-[10px] text-fg/80">{variantLabel(it.size, it.color)}</div>}

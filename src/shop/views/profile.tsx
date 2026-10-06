@@ -96,8 +96,8 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
                 ) : (
                   <div class="w-full h-full flex items-center justify-center text-5xl bg-plum">🎁</div>
                 )}
-                <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent"></div>
-                <div class="absolute inset-x-0 bottom-0 p-4">
+                <div class="absolute inset-0 photo-scrim"></div>
+                <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
                   <h3 class="text-sm font-bold text-fg truncate">{l.title}</h3>
                   <p class="text-[10px] text-muted">
                     {fa(l.items)} آرزو{l.fulfilled ? ` · ${fa(l.fulfilled)} برآورده شده` : ""}{l.occasion_date ? ` · ${l.occasion_date}` : ""}
@@ -120,8 +120,8 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
                 ) : (
                   <div class="w-full aspect-square flex items-center justify-center text-5xl bg-plum">🎁</div>
                 )}
-                <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent"></div>
-                <div class="absolute inset-x-0 bottom-0 p-4">
+                <div class="absolute inset-0 photo-scrim"></div>
+                <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
                   <h3 class="text-xs font-bold text-fg truncate">{g.product_title}</h3>
                   {g.giver && <p class="text-[10px] text-brand truncate">🎁 از طرف {g.giver}</p>}
                 </div>
