@@ -25,6 +25,50 @@ window.updateFilePick = function (input) {
   box.classList.toggle('has-file', n > 0);
 };
 document.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('.file-pick input[type=file]')) window.updateFilePick(e.target); });
+// Photos are shrunk in the browser before any upload (max 1600px, ~0.8 quality): phone photos drop
+// from several MB to a few hundred KB, so forms send quickly even over slow or proxied links.
+// A file is replaced only when the smaller version really is smaller; failures keep the original.
+(function () {
+  var MAX_SIDE = 1600, QUALITY = 0.82;
+  function load(file) {
+    if (window.createImageBitmap) return createImageBitmap(file, { imageOrientation: 'from-image' });
+    return new Promise(function (ok, fail) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = fail; i.src = URL.createObjectURL(file); });
+  }
+  function shrink(file) {
+    if (!/^image[/](jpeg|png|webp)$/.test(file.type) || file.size < 250 * 1024) return Promise.resolve(file);
+    return load(file).then(function (img) {
+      var w = img.width, h = img.height, k = Math.min(1, MAX_SIDE / Math.max(w, h));
+      var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      var type = file.type === 'image/png' ? 'image/webp' : 'image/jpeg';
+      return new Promise(function (ok) { c.toBlob(ok, type, QUALITY); }).then(function (blob) {
+        if (!blob || blob.size >= file.size || !/^image[/](jpeg|webp|png)$/.test(blob.type)) return file;
+        var ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1];
+        return new File([blob], file.name.replace(/[.][^.]+$/, '') + '.' + ext, { type: blob.type });
+      });
+    }).catch(function () { return file; });
+  }
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (form.enctype !== 'multipart/form-data' || form.dataset.shrunk || !window.DataTransfer) return;
+    var big = function (f) { return /^image[/](jpeg|png|webp)$/.test(f.type) && f.size >= 250 * 1024; };
+    var inputs = Array.prototype.filter.call(form.querySelectorAll('input[type=file]'), function (i) { return i.files && Array.prototype.some.call(i.files, big); });
+    if (!inputs.length) return; // nothing to shrink: submit as usual
+    e.preventDefault();
+    var submitter = e.submitter;
+    var buttons = form.querySelectorAll('button[type=submit],button:not([type])');
+    buttons.forEach(function (b) { b.disabled = true; });
+    Promise.all(inputs.map(function (input) {
+      return Promise.all(Array.prototype.map.call(input.files, shrink)).then(function (files) {
+        var dt = new DataTransfer(); files.forEach(function (f) { dt.items.add(f); }); input.files = dt.files;
+      });
+    })).then(function () {
+      form.dataset.shrunk = '1';
+      buttons.forEach(function (b) { b.disabled = false; });
+      if (form.requestSubmit) form.requestSubmit(submitter && submitter.form === form ? submitter : undefined); else form.submit();
+    });
+  }, true);
+})();
 var installPrompt = null;
 window.addEventListener('beforeinstallprompt', function (e) {
   e.preventDefault(); installPrompt = e;

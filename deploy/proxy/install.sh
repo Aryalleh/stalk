@@ -39,6 +39,7 @@ if command -v nginx >/dev/null; then
   KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
   PROXY="
     client_max_body_size 40m;
+    client_body_timeout 300s;
     location / {
         proxy_pass https://$WORKER;
         proxy_http_version 1.1;
@@ -50,7 +51,11 @@ if command -v nginx >/dev/null; then
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Proxy-Secret $SECRET;
         proxy_redirect off;
-        proxy_read_timeout 120s;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        proxy_next_upstream error timeout;
+        proxy_next_upstream_tries 2;
     }"
   CONF=/etc/nginx/sites-available/gift-shop-proxy
   if [ -f "$CERT" ]; then
