@@ -121,11 +121,11 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
       {item("shops", "/shops", "fa-store", "فروشگاه‌ها")}
       <div class="relative -top-6">
         <a
-          href="/search"
-          aria-label="جستجو و کاوش محصولات"
+          href="/"
+          aria-label="خانه"
           class={`w-14 h-14 bg-brand text-white rounded-full shadow-lg shadow-brand/40 flex items-center justify-center text-xl ${props.active === "search" || props.active === "home" ? "ring-4 ring-brand/25" : ""}`}
         >
-          <i class="fa-solid fa-magnifying-glass"></i>
+          <i class="fa-solid fa-house"></i>
         </a>
       </div>
       {item("wishes", "/me/wishlists", "fa-gift", "آرزوها")}

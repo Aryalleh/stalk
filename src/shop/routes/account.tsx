@@ -17,7 +17,7 @@ import { activeBots, botLink, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, profileValues, MyOrdersPage, MyWishlistsPage, ProfilePage, ProfileSettingsPage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, profileValues, MyOrdersPage, MyWishlistsPage, ProfilePage, WishlistFormPage, type MyOrder, type ProfileItem } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange } from "../orders";
 
@@ -215,8 +215,15 @@ account.post("/setup/verify", async (c) => {
 
 // ---------- profile (html/profile.html) ----------
 
-account.get("/me", async (c) => {
-  const user = currentUser(c);
+account.get("/me", (c) => meView(c, { tab: c.req.query("tab") === "settings" ? "settings" : "profile", saved: c.req.query("saved") === "1" }));
+
+/** /me: the profile tab (stats, actions, active wishes) and the settings tab, on one page. */
+async function meView(
+  c: C,
+  extra: { tab: "profile" | "settings"; error?: string; saved?: boolean; values?: Record<string, string> },
+  status: 200 | 400 = 200,
+) {
+  const user = (await sessionUserById(c.env.DB, currentUser(c).id))!;
   const db = c.env.DB;
   const SOLD = "('paid', 'shipped', 'delivered')";
   const [items, stats, latest] = await Promise.all([
@@ -240,6 +247,7 @@ account.get("/me", async (c) => {
     db.prepare("SELECT slug FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY created_at DESC LIMIT 1").bind(user.id).first<{ slug: string }>(),
   ]);
   const s = c.get("settings");
+  const token = await connectToken(c.env.DB, user.id);
   const bots = activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id) }));
   const { results: changes } = await db
     .prepare("SELECT o.id, o.product_title FROM orders o JOIN wishlists w ON w.id = o.wishlist_id WHERE w.user_id = ? AND o.change_status = 'pending'")
@@ -247,23 +255,31 @@ account.get("/me", async (c) => {
     .all<{ id: number; product_title: string }>();
   return render(
     c,
-    <ProfilePage changes={changes} user={user} stats={stats ?? { wishes: 0, gifts: 0 }} items={items.results} shareUrl={user.username ? `${siteUrl(c)}/u/${user.username}` : latest ? `${siteUrl(c)}/w/${latest.slug}` : ""} bots={bots} />,
+    <ProfilePage
+      changes={changes}
+      user={user}
+      stats={stats ?? { wishes: 0, gifts: 0 }}
+      items={items.results}
+      shareUrl={user.username ? `${siteUrl(c)}/u/${user.username}` : latest ? `${siteUrl(c)}/w/${latest.slug}` : ""}
+      bots={bots}
+      tab={extra.tab}
+      settings={{
+        bots: activeBots(s).map((k) => ({ kind: k, connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id), link: botLink(s, k, token) })),
+        origin: siteUrl(c),
+        values: extra.values,
+        error: extra.error,
+        saved: extra.saved,
+      }}
+    />,
+    status,
   );
-});
-
-async function settingsView(c: C, extra: { error?: string; saved?: boolean; values?: Record<string, string> } = {}, status: 200 | 400 = 200) {
-  const user = (await sessionUserById(c.env.DB, currentUser(c).id))!;
-  const s = c.get("settings");
-  const token = await connectToken(c.env.DB, user.id);
-  const bots = activeBots(s).map((k) => ({
-    kind: k,
-    connected: !!(k === "bale" ? user.bale_chat_id : user.telegram_chat_id),
-    link: botLink(s, k, token),
-  }));
-  return render(c, <ProfileSettingsPage user={user} bots={bots} origin={siteUrl(c)} {...extra} />, status);
 }
 
-account.get("/me/settings", (c) => settingsView(c, { saved: c.req.query("saved") === "1" }));
+const settingsView = (c: C, extra: { error?: string; values?: Record<string, string> } = {}, status: 200 | 400 = 200) =>
+  meView(c, { tab: "settings", ...extra }, status);
+
+// Settings live in a tab of /me now; old links keep working.
+account.get("/me/settings", (c) => c.redirect(`/me?tab=settings${c.req.query("saved") === "1" ? "&saved=1" : ""}`));
 
 account.post("/me/settings", async (c) => {
   const user = currentUser(c);
@@ -286,7 +302,7 @@ account.post("/me/settings", async (c) => {
   else if (f.remove_avatar === "1") avatar = "";
   await c.env.DB.prepare("UPDATE users SET avatar_key = ? WHERE id = ?").bind(avatar, user.id).run();
   if (user.avatar_key && user.avatar_key !== avatar) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.avatar_key));
-  return c.redirect("/me/settings?saved=1");
+  return c.redirect("/me?tab=settings&saved=1");
 });
 
 // Unlink Bale or Telegram (only while the other one stays connected: every account needs one).
@@ -296,7 +312,7 @@ account.post("/me/bot/:kind{bale|telegram}/disconnect", async (c) => {
   const other = kind === "bale" ? user.telegram_chat_id : user.bale_chat_id;
   if (!other) return settingsView(c, { error: "حساب باید دست‌کم به یک ربات وصل بماند؛ اول ربات دیگر را وصل کنید." }, 400);
   await c.env.DB.prepare(`UPDATE users SET ${kind === "bale" ? "bale_chat_id" : "telegram_chat_id"} = '' WHERE id = ?`).bind(user.id).run();
-  return c.redirect("/me/settings?saved=1#bot");
+  return c.redirect("/me?tab=settings&saved=1#bot");
 });
 
 account.get("/me/wishlists", async (c) => {

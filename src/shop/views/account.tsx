@@ -268,8 +268,30 @@ const pct = (a: number, b: number) => (b ? Math.min(100, Math.round((a / b) * 10
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
 /** html/profile.html */
+/** /me tabs (profile / settings) switch in place; the URL keeps ?tab= so reloads and links land right. */
+const ME_TABS_SCRIPT = `
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-tab]'); if (!t) return;
+  e.preventDefault();
+  var key = t.getAttribute('data-tab');
+  document.querySelectorAll('[data-panel]').forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== key); });
+  document.querySelectorAll('.me-tab').forEach(function (b) {
+    var on = b.getAttribute('data-tab') === key;
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+    ['bg-brand', '!text-white', 'shadow-lg', 'shadow-brand/20'].forEach(function (c) { b.classList.toggle(c, on); });
+    b.classList.toggle('text-muted', !on);
+  });
+  var href = t.getAttribute('href') || '';
+  history.replaceState(null, '', key === 'settings' ? '/me?tab=settings' + (href.indexOf('#') > -1 ? href.slice(href.indexOf('#')) : '') : '/me');
+  var hash = href.indexOf('#') > -1 ? document.querySelector(href.slice(href.indexOf('#'))) : null;
+  (hash || document.body).scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+`;
+
 export function ProfilePage(props: {
   changes?: { id: number; product_title: string }[];
+  tab: "profile" | "settings";
+  settings: SettingsProps;
   user: User;
   stats: { wishes: number; gifts: number };
   items: ProfileItem[];
@@ -303,14 +325,37 @@ export function ProfilePage(props: {
                 <p class="text-[10px] text-muted">مدیریت لیست آرزوهای من</p>
               </div>
             </div>
-            <a href="/me/settings" aria-label="تنظیمات حساب" class="w-10 h-10 flex items-center justify-center rounded-full bg-card text-muted">
+            <a href="/me?tab=settings" data-tab="settings" aria-label="تنظیمات حساب" class="w-10 h-10 flex items-center justify-center rounded-full bg-card text-muted">
               <i class="fa-solid fa-gear"></i>
             </a>
           </div>
         </header>
       }
     >
-      <div class="px-6 py-6">
+      <div class="px-6 pt-5">
+        <div class="grid grid-cols-2 gap-1 p-1 bg-card rounded-2xl border border-fg/5" role="tablist">
+          {(
+            [
+              ["profile", "fa-user", "پروفایل من", "/me"],
+              ["settings", "fa-gear", "تنظیمات", "/me?tab=settings"],
+            ] as const
+          ).map(([key, icon, label, href]) => (
+            <a
+              href={href}
+              data-tab={key}
+              role="tab"
+              aria-selected={props.tab === key ? "true" : "false"}
+              class={`me-tab py-2.5 rounded-xl text-xs font-bold text-center ${props.tab === key ? "bg-brand !text-white shadow-lg shadow-brand/20" : "text-muted"}`}
+            >
+              <i class={`fa-solid ${icon} ml-1`}></i>{label}
+            </a>
+          ))}
+        </div>
+      </div>
+      <div data-panel="settings" class={`px-4 py-6 ${props.tab === "settings" ? "" : "hidden"}`}>
+        <SettingsBody user={u} {...props.settings} />
+      </div>
+      <div data-panel="profile" class={`px-6 py-6 ${props.tab === "profile" ? "" : "hidden"}`}>
         <PendingChanges items={props.changes ?? []} />
         <section class="grid grid-cols-2 gap-4 mb-8">
           <div class="bg-card p-4 rounded-2xl border border-muted/5">
@@ -329,7 +374,7 @@ export function ProfilePage(props: {
           {u.username && action(`/u/${u.username}`, "fa-id-card", "پروفایل عمومی")}
           {action("/me/wishlists", "fa-list", "لیست‌ها")}
           {action("/me/orders", "fa-bag-shopping", "خریدهای من")}
-          {action("/me/settings", "fa-robot", "اتصال ربات")}
+          {action("/me?tab=settings#bot", "fa-robot", "اتصال ربات", false, { "data-tab": "settings" })}
           {action("#", "fa-download", "نصب اپ", false, { "data-install": "", class: "hidden flex flex-col items-center gap-2 min-w-[80px]" })}
           {action("/panel", "fa-store", "فروشگاه من")}
         </section>
@@ -388,20 +433,24 @@ export function ProfilePage(props: {
           <p class="text-[10px] text-muted leading-relaxed">
             اعلان هر کادو، فیش‌های واریز و پیام‌های سفارش از طریق ربات برایتان ارسال می‌شود.
           </p>
+          <a href="/me?tab=settings#bot" data-tab="settings" class="text-[11px] text-brand font-bold mt-3 inline-block">مدیریت اتصال ربات‌ها ←</a>
         </section>
       </div>
+      <script dangerouslySetInnerHTML={{ __html: ME_TABS_SCRIPT }} />
     </Layout>
   );
 }
 
-export function ProfileSettingsPage(props: {
-  user: User;
+export interface SettingsProps {
   bots: { kind: string; connected: boolean; link: string }[];
   origin: string;
   values?: Record<string, string>;
   error?: string;
   saved?: boolean;
-}) {
+}
+
+/** The settings tab of /me: profile fields, look, public profile, bot connections, logout. */
+function SettingsBody(props: SettingsProps & { user: User }) {
   const u = props.user;
   const check = (name: string, on: number, label: string) => (
     <label class="row" style="color:var(--fg);margin-top:8px">
@@ -409,8 +458,7 @@ export function ProfileSettingsPage(props: {
     </label>
   );
   return (
-    <Layout title="تنظیمات حساب" user={u} nav="profile">
-      <h1>تنظیمات حساب</h1>
+    <div class="ui">
       {props.saved && <div class="okbox">ذخیره شد.</div>}
       <Errors errors={[props.error]} />
       <form method="post" action="/me/settings" enctype="multipart/form-data" class="card">
@@ -486,9 +534,10 @@ export function ProfileSettingsPage(props: {
             img.className='w-full h-full rounded-full object-cover';img.alt='';img.src=URL.createObjectURL(f);box.appendChild(img);});`,
         }}
       />
-    </Layout>
+    </div>
   );
 }
+
 
 export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items: number; cover: string })[]; siteUrl: string }) {
   return (
