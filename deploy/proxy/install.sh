@@ -37,11 +37,18 @@ if command -v nginx >/dev/null; then
   echo "==> nginx"
   CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
   KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+  # Resolve the Worker's host to IPv4 only: on servers without IPv6, nginx would otherwise try
+  # Cloudflare's IPv6 addresses first and answer 502 when both attempts land on them.
+  RESOLVER="$(awk '/^nameserver/ && $2 !~ /:/ {print $2; exit}' /etc/resolv.conf)"
+  RESOLVER="${RESOLVER:-127.0.0.53}"
   PROXY="
+    resolver $RESOLVER ipv6=off valid=300s;
+    resolver_timeout 10s;
+    set \$worker_host $WORKER;
     client_max_body_size 40m;
     client_body_timeout 300s;
     location / {
-        proxy_pass https://$WORKER;
+        proxy_pass https://\$worker_host;
         proxy_http_version 1.1;
         proxy_ssl_server_name on;
         proxy_ssl_name $WORKER;
