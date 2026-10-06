@@ -151,3 +151,12 @@
 .on-photo { color: #fff; }
 .on-photo .text-fg { color: #fff; }
 .on-photo .text-muted, .on-photo [class*="text-fg/"] { color: rgb(255 255 255 / 0.78); }
+
+/* On/off switch for a real checkbox (account privacy): the knob is a radial background that slides. */
+.switch {
+  appearance: none; flex-shrink: 0; width: 2.9rem; height: 1.6rem; border-radius: 999px; cursor: pointer;
+  background: rgb(255 255 255 / 0.15) radial-gradient(circle, #fff 0.55rem, transparent 0.6rem) no-repeat right center / 1.6rem 1.6rem;
+  transition: background-position 0.2s, background-color 0.2s;
+}
+.switch:checked { background-color: rgb(var(--c-brand)); background-position: left center; }
+.switch:focus-visible { outline: 3px solid rgb(var(--c-brand) / 0.4); outline-offset: 2px; }

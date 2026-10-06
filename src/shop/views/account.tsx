@@ -1,7 +1,8 @@
 import { formatJalali } from "../../../lib/jalali";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
-import type { User } from "../../session";
+import { publicName, type User } from "../../session";
+import { useSite } from "../../render";
 import { Avatar, Errors, FilePicker, Layout, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
@@ -267,30 +268,113 @@ export interface ProfileItem {
 const pct = (a: number, b: number) => (b ? Math.min(100, Math.round((a / b) * 100)) : 0);
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
-/** html/profile.html */
+/** html/profile.html + UX Pilot "حساب من" (mobile drawer, desktop sidebar). */
 /** /me tabs (profile / settings) switch in place; the URL keeps ?tab= so reloads and links land right. */
 const ME_TABS_SCRIPT = `
-document.addEventListener('click', function (e) {
-  var t = e.target.closest('[data-tab]'); if (!t) return;
-  e.preventDefault();
-  var key = t.getAttribute('data-tab');
-  document.querySelectorAll('[data-panel]').forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== key); });
-  document.querySelectorAll('.me-tab').forEach(function (b) {
-    var on = b.getAttribute('data-tab') === key;
-    b.setAttribute('aria-selected', on ? 'true' : 'false');
-    ['bg-brand', '!text-white', 'shadow-lg', 'shadow-brand/20'].forEach(function (c) { b.classList.toggle(c, on); });
-    b.classList.toggle('text-muted', !on);
+(function () {
+  var drawer = document.getElementById('me-drawer'), shade = document.getElementById('me-shade');
+  function setDrawer(open) {
+    if (!drawer) return;
+    drawer.classList.toggle('translate-x-full', !open);
+    shade.classList.toggle('hidden', !open);
+    document.documentElement.classList.toggle('overflow-hidden', open);
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-drawer-open]')) { e.preventDefault(); setDrawer(true); return; }
+    if (e.target.closest('[data-drawer-close]')) { e.preventDefault(); setDrawer(false); return; }
+    var t = e.target.closest('[data-tab]'); if (!t) return;
+    e.preventDefault(); setDrawer(false);
+    var key = t.getAttribute('data-tab');
+    document.querySelectorAll('[data-panel]').forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== key); });
+    document.querySelectorAll('.me-tab').forEach(function (b) {
+      var on = b.getAttribute('data-tab') === key;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      ['bg-brand', '!text-white', 'shadow-lg', 'shadow-brand/20'].forEach(function (c) { b.classList.toggle(c, on); });
+      b.classList.toggle('text-muted', !on);
+    });
+    document.querySelectorAll('.me-side[data-tab]').forEach(function (b) {
+      var on = b.getAttribute('data-tab') === key;
+      ['bg-brand/10', 'text-brand', 'font-black'].forEach(function (c) { b.classList.toggle(c, on); });
+      b.classList.toggle('text-muted', !on);
+    });
+    var href = t.getAttribute('href') || '';
+    history.replaceState(null, '', key === 'settings' ? '/me?tab=settings' + (href.indexOf('#') > -1 ? href.slice(href.indexOf('#')) : '') : '/me');
+    var hash = href.indexOf('#') > -1 ? document.querySelector(href.slice(href.indexOf('#'))) : null;
+    (hash || document.body).scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
-  var href = t.getAttribute('href') || '';
-  history.replaceState(null, '', key === 'settings' ? '/me?tab=settings' + (href.indexOf('#') > -1 ? href.slice(href.indexOf('#')) : '') : '/me');
-  var hash = href.indexOf('#') > -1 ? document.querySelector(href.slice(href.indexOf('#'))) : null;
-  (hash || document.body).scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
+})();
 `;
+
+type MeTab = "profile" | "settings";
+
+/** The account menu: the desktop sidebar and the mobile drawer show the same profile card and links. */
+function AccountMenu(props: { user: User; tab: MeTab; stats: { wishes: number; gifts: number }; drawer?: boolean }) {
+  const u = props.user;
+  const item = (href: string, icon: string, label: string, tab?: MeTab) => {
+    const on = tab === props.tab;
+    return (
+      <a
+        href={href}
+        data-tab={tab}
+        class={`me-side flex items-center gap-3 px-4 py-3 rounded-2xl text-sm transition-colors hover:bg-brand/10 hover:text-brand ${on ? "bg-brand/10 text-brand font-black" : "text-muted font-bold"}`}
+      >
+        <i class={`fa-solid ${icon} w-5 text-center text-base`}></i>
+        {label}
+      </a>
+    );
+  };
+  return (
+    <>
+      <div class="px-6 pt-2 pb-6 flex flex-col items-center text-center border-b border-fg/5">
+        <a href="/me?tab=settings" data-tab="settings" class="relative mb-3" aria-label="تغییر عکس پروفایل">
+          <Avatar user={u} size={props.drawer ? "w-20 h-20" : "w-24 h-24"} ring />
+          <span class="absolute -bottom-1 -left-1 w-8 h-8 bg-card border border-fg/10 rounded-xl flex items-center justify-center text-brand text-xs shadow-lg">
+            <i class="fa-solid fa-pen"></i>
+          </span>
+        </a>
+        <h2 class="text-base font-black text-fg">{publicName(u)}</h2>
+        {u.username && <p class="text-xs font-bold text-muted ltr">@{u.username}</p>}
+        {!props.drawer && (
+          <div class="mt-5 flex gap-2 w-full">
+            <div class="flex-1 bg-ink p-2.5 rounded-2xl">
+              <p class="text-[9px] font-black text-muted mb-0.5">آرزوها</p>
+              <p class="text-sm font-black text-fg">{fa(props.stats.wishes)}</p>
+            </div>
+            <div class="flex-1 bg-ink p-2.5 rounded-2xl">
+              <p class="text-[9px] font-black text-muted mb-0.5">دریافتی</p>
+              <p class="text-sm font-black text-brand">{fa(props.stats.gifts)}</p>
+            </div>
+          </div>
+        )}
+      </div>
+      <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+        {item("/me", "fa-user", "پروفایل من", "profile")}
+        {item("/me?tab=settings", "fa-user-gear", "حساب من", "settings")}
+        {item("/me/wishlists", "fa-gift", "لیست آرزوها")}
+        {item("/me/orders", "fa-bag-shopping", "سفارشات من")}
+        {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : item("/shops", "fa-store", "فروشگاه‌ها")}
+        <div class="pt-4 pb-1 px-4"><span class="text-[10px] font-black text-muted/70">ارتباطات</span></div>
+        <a href="/me?tab=settings#bot" data-tab="settings" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold text-muted hover:bg-brand/10 hover:text-brand">
+          <i class="fa-solid fa-robot w-5 text-center text-base"></i>ربات‌ها
+        </a>
+        {item("/faq", "fa-life-ring", "راهنما و پشتیبانی")}
+        {!props.drawer && item("/", "fa-house", "بازگشت به خانه")}
+      </nav>
+      <div class="p-4 border-t border-fg/5">
+        <form method="post" action="/logout" class="m-0">
+          <button class="w-full flex items-center justify-center gap-2 p-3 text-red-500 font-black text-sm bg-red-500/10 hover:bg-red-500/15 rounded-2xl">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>خروج از حساب
+          </button>
+        </form>
+      </div>
+    </>
+  );
+}
 
 export function ProfilePage(props: {
   changes?: { id: number; product_title: string }[];
-  tab: "profile" | "settings";
+  tab: MeTab;
   settings: SettingsProps;
   user: User;
   stats: { wishes: number; gifts: number };
@@ -299,7 +383,8 @@ export function ProfilePage(props: {
   bots: { kind: string; connected: boolean }[];
 }) {
   const u = props.user;
-  const first = u.name.trim().split(/\s+/)[0] ?? u.name;
+  const site = useSite();
+  const first = publicName(u);
   const action = (href: string, icon: string, label: string, accent = false, attrs: Record<string, string> = {}) => (
     <a href={href} class="flex flex-col items-center gap-2 min-w-[80px]" {...attrs}>
       <div class={`w-14 h-14 rounded-2xl ${accent ? "bg-brand/10 text-brand" : "bg-card text-muted"} flex items-center justify-center text-xl`}>
@@ -309,35 +394,71 @@ export function ProfilePage(props: {
     </a>
   );
   const connected = props.bots.filter((b) => b.connected);
+  const publicUrl = u.username ? `${props.settings.origin}/u/${u.username}` : props.shareUrl;
   return (
     <Layout
-      title="پروفایل"
+      title="حساب من"
       user={u}
       nav="profile"
       bare
-      header={
-        <header class="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-card">
-          <div class="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <Avatar user={u} />
-              <div>
-                <h1 class="text-sm font-bold text-fg">سلام {first} 👋</h1>
-                <p class="text-[10px] text-muted">مدیریت لیست آرزوهای من</p>
-              </div>
-            </div>
-            <a href="/me?tab=settings" data-tab="settings" aria-label="تنظیمات حساب" class="w-10 h-10 flex items-center justify-center rounded-full bg-card text-muted">
-              <i class="fa-solid fa-gear"></i>
-            </a>
+      wide
+      sidebar={
+        <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 bg-card border-l border-fg/5 flex-col">
+          <div class="px-6 pt-6 pb-4">
+            <a href="/" class="text-2xl font-black text-brand">{site.site_name}</a>
           </div>
-        </header>
+          <AccountMenu user={u} tab={props.tab} stats={props.stats} />
+        </aside>
+      }
+      header={
+        <>
+          <header class="md:hidden sticky top-0 z-40 bg-ink/80 backdrop-blur-xl border-b border-card px-4 py-3 flex items-center justify-between">
+            <button type="button" data-drawer-open aria-label="منو" class="w-11 h-11 flex items-center justify-center bg-card rounded-xl text-fg">
+              <i class="fa-solid fa-bars text-lg"></i>
+            </button>
+            <a href="/" class="text-xl font-black text-brand">{site.site_name}</a>
+            {publicUrl ? (
+              <button type="button" data-share={publicUrl} aria-label="اشتراک‌گذاری پروفایل" class="w-11 h-11 flex items-center justify-center bg-brand text-white rounded-xl shadow-lg shadow-brand/20">
+                <i class="fa-solid fa-share-nodes"></i>
+              </button>
+            ) : (
+              <span class="w-11"></span>
+            )}
+          </header>
+          <div id="me-shade" data-drawer-close class="md:hidden hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"></div>
+          <aside
+            id="me-drawer"
+            class="md:hidden fixed top-0 right-0 bottom-0 z-[70] w-[85%] max-w-[320px] bg-card flex flex-col translate-x-full transition-transform duration-300"
+            aria-label="منوی حساب"
+          >
+            <div class="p-5 flex items-center justify-between">
+              <span class="text-xl font-black text-brand">{site.site_name}</span>
+              <button type="button" data-drawer-close aria-label="بستن" class="w-9 h-9 flex items-center justify-center rounded-xl text-muted">
+                <i class="fa-solid fa-xmark text-lg"></i>
+              </button>
+            </div>
+            <AccountMenu user={u} tab={props.tab} stats={props.stats} drawer />
+          </aside>
+        </>
       }
     >
-      <div class="px-6 pt-5">
-        <div class="grid grid-cols-2 gap-1 p-1 bg-card rounded-2xl border border-fg/5" role="tablist">
+      <div class="px-4 md:px-10 pt-5 md:pt-10">
+        <div class="hidden md:flex items-center justify-between gap-4 mb-2">
+          <div>
+            <h1 class="text-3xl font-black text-fg mb-1">{props.tab === "settings" ? "حساب من" : `سلام ${first} 👋`}</h1>
+            <p class="text-sm font-bold text-muted">مدیریت اطلاعات کاربری، حریم خصوصی و لیست‌های آرزو</p>
+          </div>
+          {publicUrl && (
+            <button type="button" data-share={publicUrl} class="px-6 py-3.5 bg-brand text-white rounded-2xl font-black text-sm shadow-xl shadow-brand/30 flex items-center gap-2">
+              <i class="fa-solid fa-share-nodes"></i>لینک عمومی من
+            </button>
+          )}
+        </div>
+        <div class="md:hidden grid grid-cols-2 gap-1 p-1 bg-card rounded-2xl border border-fg/5" role="tablist">
           {(
             [
               ["profile", "fa-user", "پروفایل من", "/me"],
-              ["settings", "fa-gear", "تنظیمات", "/me?tab=settings"],
+              ["settings", "fa-user-gear", "حساب من", "/me?tab=settings"],
             ] as const
           ).map(([key, icon, label, href]) => (
             <a
@@ -352,10 +473,17 @@ export function ProfilePage(props: {
           ))}
         </div>
       </div>
-      <div data-panel="settings" class={`px-4 py-6 ${props.tab === "settings" ? "" : "hidden"}`}>
+      <div data-panel="settings" class={`px-4 md:px-10 py-6 ${props.tab === "settings" ? "" : "hidden"}`}>
         <SettingsBody user={u} {...props.settings} />
       </div>
-      <div data-panel="profile" class={`px-6 py-6 ${props.tab === "profile" ? "" : "hidden"}`}>
+      <div data-panel="profile" class={`px-6 md:px-10 py-6 ${props.tab === "profile" ? "" : "hidden"}`}>
+        <div class="md:hidden flex items-center gap-3 mb-6">
+          <Avatar user={u} />
+          <div>
+            <h1 class="text-sm font-bold text-fg">سلام {first} 👋</h1>
+            <p class="text-[10px] text-muted">مدیریت لیست آرزوهای من</p>
+          </div>
+        </div>
         <PendingChanges items={props.changes ?? []} />
         <section class="grid grid-cols-2 gap-4 mb-8">
           <div class="bg-card p-4 rounded-2xl border border-muted/5">
@@ -389,7 +517,7 @@ export function ProfilePage(props: {
               هنوز آرزویی ندارید. از <a href="/" class="text-brand">فروشگاه</a> محصولی را به لیستتان اضافه کنید.
             </div>
           )}
-          <div class="space-y-4">
+          <div class="grid gap-4 lg:grid-cols-2">
             {props.items.map((it) => (
               <div class="bg-card p-3 rounded-2xl flex items-center gap-4">
                 <div class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-2xl">
@@ -449,89 +577,286 @@ export interface SettingsProps {
   saved?: boolean;
 }
 
-/** The settings tab of /me: profile fields, look, public profile, bot connections, logout. */
+const FIELD =
+  "w-full bg-ink border border-fg/10 rounded-2xl py-3.5 px-4 md:py-4 md:px-5 text-sm font-bold text-fg outline-none transition-all focus:border-brand focus:ring-4 focus:ring-brand/15";
+const LABEL = "block text-xs font-black text-fg/70 px-1 mb-2";
+
+function AccountCard(props: { icon: string; tint: string; title: string; id?: string; children?: unknown }) {
+  return (
+    <section id={props.id} class="bg-card rounded-[28px] md:rounded-[40px] border border-fg/5 p-5 md:p-8 space-y-5 scroll-mt-24">
+      <div class="flex items-center gap-3 border-b border-fg/5 pb-4">
+        <div class={`w-10 h-10 md:w-12 md:h-12 ${props.tint} rounded-xl md:rounded-2xl flex items-center justify-center text-lg md:text-xl`}>
+          <i class={`fa-solid ${props.icon}`}></i>
+        </div>
+        <h3 class="text-base md:text-xl font-black text-fg">{props.title}</h3>
+      </div>
+      {props.children as never}
+    </section>
+  );
+}
+
+/** A select in the account design: custom chevron instead of the browser's arrow. */
+function Pick(props: { name: string; label: string; children?: unknown }) {
+  return (
+    <div class="relative">
+      <select name={props.name} required aria-label={props.label} class={`${FIELD} appearance-none !px-4 !text-xs md:!text-sm`}>
+        {props.children as never}
+      </select>
+      <i class="fa-solid fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-muted text-[10px] pointer-events-none"></i>
+    </div>
+  );
+}
+
+/** The "حساب من" tab of /me (UX Pilot design): avatar, user info, look, bots, privacy, sticky save bar. */
 function SettingsBody(props: SettingsProps & { user: User }) {
   const u = props.user;
-  const check = (name: string, on: number, label: string) => (
-    <label class="row" style="color:var(--fg);margin-top:8px">
-      <input type="checkbox" name={name} value="1" checked={!!on} /> {label}
+  const v = props.values ?? profileValues(u);
+  const accent = v.accent === "blue" ? "blue" : "pink";
+  const theme = v.theme === "dark" ? "dark" : "light";
+  const thisYear = currentJalaliYear();
+  const years = Array.from({ length: 96 }, (_, i) => thisYear - 5 - i);
+  const num = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
+  const publicUrl = u.username ? `${props.origin}/u/${u.username}` : "";
+  const connectedCount = props.bots.filter((b) => b.connected).length;
+  const toggle = (name: string, on: number, label: string, hint: string) => (
+    <label class="flex items-center justify-between gap-4 p-4 md:p-5 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 cursor-pointer transition-colors">
+      <span>
+        <span class="block text-xs md:text-sm font-bold text-white/90">{label}</span>
+        <span class="block text-[10px] md:text-[11px] text-white/45 mt-1">{hint}</span>
+      </span>
+      <input type="checkbox" name={name} value="1" checked={!!on} class="switch" />
+    </label>
+  );
+  const accentOption = (value: string, color: string, label: string) => (
+    <label class="flex-1 cursor-pointer">
+      <input type="radio" name="accent" value={value} checked={accent === value} class="sr-only peer" />
+      <span class="flex items-center justify-center gap-2 py-3 md:py-4 border-2 border-fg/10 rounded-2xl peer-checked:border-brand peer-checked:bg-brand/5 peer-focus-visible:ring-4 peer-focus-visible:ring-brand/20 transition-all">
+        <span class="w-5 h-5 rounded-full shadow-md" style={`background:${color}`}></span>
+        <span class="text-xs font-black text-fg">{label}</span>
+      </span>
+    </label>
+  );
+  const themeOption = (value: string, icon: string, label: string) => (
+    <label class="flex-1 cursor-pointer">
+      <input type="radio" name="theme" value={value} checked={theme === value} class="sr-only peer" />
+      <span class="py-2.5 md:py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 text-muted peer-checked:bg-card peer-checked:text-brand peer-checked:shadow-md peer-focus-visible:ring-4 peer-focus-visible:ring-brand/20 transition-all">
+        <i class={`fa-solid ${icon}`}></i> {label}
+      </span>
     </label>
   );
   return (
-    <div class="ui">
-      {props.saved && <div class="okbox">ذخیره شد.</div>}
-      <Errors errors={[props.error]} />
-      <form method="post" action="/me/settings" enctype="multipart/form-data" class="card">
-        <div class="flex items-center gap-4">
-          <div id="avatar-preview"><Avatar user={u} size="w-20 h-20" ring /></div>
-          <div class="flex-1">
-            <label style="margin-top:0">عکس پروفایل (JPG، PNG یا WebP، حداکثر ۲ مگابایت)</label>
-            <FilePicker name="avatar" id="avatar-input" label="انتخاب عکس پروفایل" icon="fa-camera" />
+    <div class="pb-28 md:pb-32">
+      {props.saved && (
+        <div class="mb-5 flex items-center gap-2 rounded-2xl bg-ok/15 text-ok px-4 py-3 text-sm font-bold" role="status">
+          <i class="fa-solid fa-circle-check"></i>ذخیره شد.
+        </div>
+      )}
+      {props.error && (
+        <div class="mb-5 flex items-center gap-2 rounded-2xl bg-red-500/10 text-red-500 px-4 py-3 text-sm font-bold" role="alert">
+          <i class="fa-solid fa-circle-exclamation"></i>{props.error}
+        </div>
+      )}
+      <form id="me-form" method="post" action="/me/settings" enctype="multipart/form-data" class="space-y-6 md:space-y-8">
+        <header class="flex flex-col items-center text-center md:flex-row md:text-right md:items-center md:gap-6 md:bg-card md:rounded-[40px] md:border md:border-fg/5 md:p-8">
+          <div class="relative mb-4 md:mb-0">
+            <div id="avatar-preview"><Avatar user={u} size="w-28 h-28" ring /></div>
+            <label
+              for="avatar-input"
+              aria-label="انتخاب عکس پروفایل"
+              class="absolute -bottom-1 -left-1 w-11 h-11 bg-card border border-fg/10 rounded-xl flex items-center justify-center text-brand text-lg shadow-lg cursor-pointer active:scale-95 transition-transform"
+            >
+              <i class="fa-solid fa-camera"></i>
+            </label>
+          </div>
+          <div class="md:flex-1">
+            <h1 class="md:hidden text-2xl font-black text-fg mb-1">حساب من</h1>
+            <p class="md:hidden text-xs font-bold text-muted mb-3">مدیریت اطلاعات کاربری و حریم خصوصی</p>
+            <p class="hidden md:block text-lg font-black text-fg mb-1">عکس پروفایل</p>
+            <p class="hidden md:block text-xs text-muted mb-3">JPG، PNG یا WebP، حداکثر ۲ مگابایت. با دکمه دوربین عوض کنید.</p>
+            <label class="file-pick !border-0 !p-0 !bg-transparent justify-center md:justify-start gap-2">
+              <input type="file" name="avatar" id="avatar-input" accept="image/jpeg,image/png,image/webp" class="sr-only" />
+              <span class="file-pick-name" data-empty="عکس جدیدی انتخاب نشده">عکس جدیدی انتخاب نشده</span>
+            </label>
             {u.avatar_key && (
-              <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_avatar" value="1" /> حذف عکس</label>
+              <label class="inline-flex items-center gap-2 mt-2 text-xs font-bold text-red-500 cursor-pointer">
+                <input type="checkbox" name="remove_avatar" value="1" class="accent-red-500" /> حذف عکس فعلی
+              </label>
             )}
           </div>
+        </header>
+
+        <AccountCard icon="fa-id-card" tint="bg-brand/10 text-brand" title="اطلاعات کاربری">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+            <div>
+              <label class={LABEL} for="f-first">نام</label>
+              <input id="f-first" name="first_name" value={v.first_name ?? ""} required maxlength={40} autocomplete="given-name" class={FIELD} />
+            </div>
+            <div>
+              <label class={LABEL} for="f-last">نام خانوادگی</label>
+              <input id="f-last" name="last_name" value={v.last_name ?? ""} required maxlength={40} autocomplete="family-name" class={FIELD} />
+            </div>
+            <div class="sm:col-span-2">
+              <label class={LABEL} for="f-nick">نام مستعار (نمایش عمومی)</label>
+              <input id="f-nick" name="nickname" value={v.nickname ?? ""} required maxlength={30} placeholder="مثلاً سارا، سارینا یا مینو" class={FIELD} />
+              <p class="text-[11px] text-muted font-bold px-2 mt-2">
+                در پروفایل عمومی و لیست‌های آرزو فقط همین نام نمایش داده می‌شود، نه نام و نام خانوادگی شما.
+              </p>
+            </div>
+          </div>
+          <div>
+            <span class={LABEL}>تاریخ تولد</span>
+            <div class="grid grid-cols-3 gap-2 md:gap-4">
+              <Pick name="birth_day" label="روز تولد">
+                <option value="">روز</option>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option value={String(d)} selected={v.birth_day === String(d)}>{num(d)}</option>)}
+              </Pick>
+              <Pick name="birth_month" label="ماه تولد">
+                <option value="">ماه</option>
+                {JALALI_MONTHS.map((m, i) => <option value={String(i + 1)} selected={v.birth_month === String(i + 1)}>{m}</option>)}
+              </Pick>
+              <Pick name="birth_year" label="سال تولد">
+                <option value="">سال</option>
+                {years.map((y) => <option value={String(y)} selected={v.birth_year === String(y)}>{num(y)}</option>)}
+              </Pick>
+            </div>
+          </div>
+          <div>
+            <label class={LABEL} for="f-phone">شماره موبایل (ورود با کد ربات)</label>
+            <div class="relative">
+              <input id="f-phone" value={u.phone} disabled class={`${FIELD} ltr text-left !text-muted cursor-not-allowed opacity-80`} />
+              <i class="fa-solid fa-lock absolute right-5 top-1/2 -translate-y-1/2 text-muted/50"></i>
+            </div>
+          </div>
+        </AccountCard>
+
+        <div class="grid gap-6 md:gap-8 lg:grid-cols-2">
+          <AccountCard icon="fa-palette" tint="bg-amber-500/10 text-amber-500" title="ظاهر کادوچی">
+            <div>
+              <span class={LABEL}>رنگ دلخواه</span>
+              <div class="flex gap-3">
+                {accentOption("pink", "#ff5c93", "صورتی")}
+                {accentOption("blue", "#3b82f6", "آبی")}
+              </div>
+            </div>
+            <div>
+              <span class={LABEL}>تم محیط</span>
+              <div class="flex p-1 bg-ink rounded-2xl border border-fg/10">
+                {themeOption("light", "fa-sun", "روشن")}
+                {themeOption("dark", "fa-moon", "تیره")}
+              </div>
+            </div>
+          </AccountCard>
+
+          <AccountCard id="bot" icon="fa-robot" tint="bg-emerald-500/10 text-emerald-500" title="ربات‌های متصل">
+            <p class="text-[11px] text-muted leading-relaxed -mt-1">
+              کد ورود، کادوها و سفارش‌ها به ربات‌های وصل‌شده می‌رسد. برای وصل کردن حساب دیگری «تغییر حساب» را بزنید و ربات را با همان حساب باز کنید.
+            </p>
+            <div class="space-y-3">
+              {props.bots.map((b) => {
+                const style = BOT_STYLE[b.kind];
+                const canDrop = b.connected && props.bots.some((o) => o.kind !== b.kind && o.connected);
+                return (
+                  <div class="p-3 md:p-4 bg-ink rounded-2xl border border-fg/5 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class={`w-10 h-10 bg-card rounded-xl flex items-center justify-center ${style.text} text-xl shadow-sm shrink-0`}>
+                        <i class={style.icon}></i>
+                      </div>
+                      <div class="min-w-0">
+                        <p class="text-xs font-black text-fg">{style.name}</p>
+                        <p class={`text-[10px] font-bold ${b.connected ? "text-emerald-500" : "text-muted"}`}>{b.connected ? "متصل شده" : "متصل نیست"}</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      {b.link && (
+                        <a
+                          href={b.link}
+                          target="_blank"
+                          rel="noopener"
+                          class={`px-3 h-9 rounded-xl text-[11px] font-black flex items-center gap-1.5 ${b.connected ? "bg-card text-fg border border-fg/10" : `${style.bg} text-white`}`}
+                        >
+                          {b.connected ? <><i class="fa-solid fa-arrows-rotate"></i>تغییر حساب</> : <><i class="fa-solid fa-link"></i>اتصال</>}
+                        </a>
+                      )}
+                      {canDrop && (
+                        <button
+                          type="submit"
+                          form={`bot-off-${b.kind}`}
+                          aria-label={`قطع اتصال ${style.name}`}
+                          title="قطع اتصال"
+                          onclick={`return confirm('اتصال ${style.name} قطع شود؟')`}
+                          class="w-9 h-9 bg-card text-red-500 border border-red-500/20 rounded-xl flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
+                        >
+                          <i class="fa-solid fa-link-slash"></i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {connectedCount === 1 && props.bots.length > 1 && (
+              <p class="text-[11px] text-muted">برای قطع اتصال، اول ربات دیگر را وصل کنید؛ حساب باید دست‌کم به یکی وصل بماند.</p>
+            )}
+            {!props.bots.length && <p class="text-[11px] text-muted">ربات سایت هنوز راه‌اندازی نشده است.</p>}
+          </AccountCard>
         </div>
-        <ProfileFields values={props.values ?? profileValues(u)} />
-        <h2 style="margin-top:20px">ظاهر سایت برای شما</h2>
-        <LookFields values={props.values ?? profileValues(u)} />
-        <label>شماره موبایل (ورود با کد بله)</label>
-        <input value={u.phone} class="ltr" disabled />
-        <h2 style="margin-top:20px">پروفایل عمومی</h2>
-        {u.username && (
-          <>
-            <p class="small muted" style="margin-top:0">لینک ثابت و اختصاصی شما (قابل تغییر نیست) — همه لیست‌های آرزوی باز شما اینجا دیده می‌شوند:</p>
-            <div class="flex items-center gap-2">
-              <input readonly value={`${props.origin}/u/${u.username}`} class="ltr flex-1 min-w-0" onclick="this.select()" aria-label="لینک پروفایل عمومی" />
-              <button type="button" class="small secondary" data-copy={`${props.origin}/u/${u.username}`} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی</button>
-              <a class="btn small secondary" href={`/u/${u.username}`}><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
-            </div>
-          </>
-        )}
-        {check("show_received", u.show_received, "کادوهایی که گرفته‌ام در پروفایلم نمایش داده شود")}
-        {check("show_givers", u.show_givers, "نام کادودهنده‌ها زیر کادو نمایش داده شود (فقط کسانی که خودشان اجازه داده‌اند)")}
-        {check("show_birthday", u.show_birthday, "روز و ماه تولدم نمایش داده شود (سال هرگز نمایش داده نمی‌شود)")}
-        <p><button>ذخیره</button></p>
-      </form>
-      <div class="card" id="bot">
-        <h2>اتصال ربات</h2>
-        <p class="muted small" style="margin-top:0">
-          پیام‌های سایت (کد ورود، کادوها، سفارش‌ها) به ربات‌های وصل‌شده می‌رسد. برای وصل کردن حساب دیگری از بله یا تلگرام، «تغییر حساب» را بزنید و
-          ربات را با همان حساب جدید باز کنید.
-        </p>
-        {props.bots.map((b) => {
-          const others = props.bots.some((o) => o.kind !== b.kind && o.connected);
-          return (
-            <div class="row" style="margin-bottom:8px;flex-wrap:wrap">
-              <span>{BOT_STYLE[b.kind].name}</span>
-              {b.connected ? <span class="tag ok">متصل ✓</span> : <span class="tag">متصل نیست</span>}
-              <span class="sp" />
-              {b.link && (
-                <a class="btn small secondary" href={b.link} target="_blank" rel="noopener">
-                  {b.connected ? "تغییر حساب" : "اتصال"}
+
+        <section class="bg-slate-900 text-white rounded-[28px] md:rounded-[40px] p-5 md:p-8 space-y-5 relative overflow-hidden shadow-xl shadow-slate-900/30">
+          <div class="absolute top-0 right-0 w-48 h-48 bg-brand/25 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+          <div class="flex items-center gap-3 relative">
+            <i class="fa-solid fa-shield-halved text-2xl text-brand"></i>
+            <h3 class="text-base md:text-xl font-black">حریم خصوصی و نمایش</h3>
+          </div>
+          {publicUrl && (
+            <div class="relative p-4 bg-white/5 rounded-2xl border border-white/10">
+              <p class="text-[11px] text-white/60 mb-2">لینک ثابت پروفایل عمومی شما (قابل تغییر نیست) — همه لیست‌های آرزوی باز شما اینجا دیده می‌شوند:</p>
+              <div class="flex items-center gap-2">
+                <input
+                  readonly
+                  value={publicUrl}
+                  onclick="this.select()"
+                  aria-label="لینک پروفایل عمومی"
+                  class="ltr flex-1 min-w-0 bg-white/10 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none"
+                />
+                <button type="button" data-copy={publicUrl} data-copied="کپی شد ✓" class="h-10 px-3 rounded-xl bg-brand text-white text-xs font-black shrink-0">
+                  <i class="fa-regular fa-copy"></i> کپی
+                </button>
+                <a href={`/u/${u.username}`} aria-label="مشاهده پروفایل عمومی" class="w-10 h-10 rounded-xl bg-white/10 text-white flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
                 </a>
-              )}
-              {b.connected && others && (
-                <form method="post" action={`/me/bot/${b.kind}/disconnect`} class="m-0">
-                  <button class="small secondary" onclick={`return confirm('اتصال ${BOT_STYLE[b.kind].name} قطع شود؟')`}>قطع اتصال</button>
-                </form>
-              )}
+              </div>
             </div>
-          );
-        })}
-        {props.bots.filter((b) => b.connected).length === 1 && props.bots.length > 1 && (
-          <p class="muted small">برای قطع اتصال، اول ربات دیگر را وصل کنید؛ حساب باید دست‌کم به یکی وصل بماند.</p>
-        )}
-        {!props.bots.length && <p class="muted small">ربات سایت هنوز راه‌اندازی نشده است.</p>}
-      </div>
-      <form method="post" action="/logout">
-        <button class="secondary">خروج از حساب</button>
+          )}
+          <div class="space-y-3 relative">
+            {toggle("show_received", u.show_received, "نمایش کادوهای دریافتی در پروفایل عمومی", "کادوهایی که گرفته‌اید زیر پروفایلتان دیده می‌شوند.")}
+            {toggle("show_givers", u.show_givers, "نمایش نام هدیه‌دهندگان", "فقط کسانی که خودشان اجازه داده‌اند، با نام مستعارشان.")}
+            {toggle("show_birthday", u.show_birthday, "نمایش روز تولد در پروفایل", "فقط روز و ماه؛ سال تولد هرگز نمایش داده نمی‌شود.")}
+          </div>
+        </section>
+
+        <div class="fixed inset-x-0 bottom-[4.75rem] md:bottom-6 z-40 px-4 md:pr-[17rem] md:pl-10 pointer-events-none">
+          <div class="max-w-md md:max-w-5xl mx-auto flex gap-3 md:justify-end p-3 md:p-4 bg-card/90 backdrop-blur-2xl rounded-2xl md:rounded-[28px] border border-fg/10 shadow-2xl pointer-events-auto">
+            <button type="reset" class="flex-1 md:flex-none md:px-8 py-3.5 bg-ink text-fg font-black rounded-xl md:rounded-2xl text-sm">انصراف</button>
+            <button type="submit" class="flex-[2.5] md:flex-none md:px-12 py-3.5 bg-brand text-white font-black rounded-xl md:rounded-2xl text-sm shadow-lg shadow-brand/25 flex items-center justify-center gap-2">
+              <i class="fa-solid fa-floppy-disk"></i>ذخیره تغییرات
+            </button>
+          </div>
+        </div>
+      </form>
+      {props.bots
+        .filter((b) => b.connected && props.bots.some((o) => o.kind !== b.kind && o.connected))
+        .map((b) => <form id={`bot-off-${b.kind}`} method="post" action={`/me/bot/${b.kind}/disconnect`} class="hidden"></form>)}
+      <form method="post" action="/logout" class="md:hidden mt-6">
+        <button class="w-full flex items-center justify-center gap-2 p-3.5 text-red-500 font-black text-sm bg-red-500/10 rounded-2xl">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i>خروج از حساب
+        </button>
       </form>
       <script
         dangerouslySetInnerHTML={{
-          __html: `document.getElementById('avatar-input').addEventListener('change',function(){var f=this.files[0];if(!f)return;
-            var box=document.querySelector('#avatar-preview > div');box.innerHTML='';var img=document.createElement('img');
-            img.className='w-full h-full rounded-full object-cover';img.alt='';img.src=URL.createObjectURL(f);box.appendChild(img);});`,
+          __html: `(function(){var input=document.getElementById('avatar-input'),box=document.querySelector('#avatar-preview > div'),orig=box.innerHTML;
+            input.addEventListener('change',function(){var f=this.files[0];if(!f)return;box.innerHTML='';var img=document.createElement('img');
+            img.className='w-full h-full rounded-full object-cover';img.alt='';img.src=URL.createObjectURL(f);box.appendChild(img);});
+            document.getElementById('me-form').addEventListener('reset',function(){box.innerHTML=orig;setTimeout(function(){window.updateFilePick&&window.updateFilePick(input);});});})();`,
         }}
       />
     </div>
