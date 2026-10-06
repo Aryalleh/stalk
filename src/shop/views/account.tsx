@@ -1,16 +1,16 @@
 import { formatJalali } from "../../../lib/jalali";
 import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
-import { publicName, type User } from "../../session";
+import type { User } from "../../session";
 import { useSite } from "../../render";
-import { Avatar, Errors, FilePicker, Layout, Thumb, TitleBar } from "./layout";
+import { Avatar, Errors, FilePicker, Layout, MenuButton, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
 /** Centered dark card for the account flows (login, setup). */
 function AuthShell(props: { title: string; icon: string; subtitle: string; children?: unknown }) {
   return (
-    <Layout title={props.title} user={null} nav="none" bare header={<div></div>}>
+    <Layout title={props.title} user={null} nav="none" bare header={<div class="md:hidden px-4 pt-4"><MenuButton /></div>}>
       <div class="min-h-screen flex flex-col justify-center px-6 py-12 max-w-sm mx-auto">
         <div class="text-center mb-10">
           <div class="w-20 h-20 bg-brand rounded-[24px] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-brand/20 text-white text-3xl">
@@ -198,7 +198,7 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
     ["دریافت اعلان‌ها", "تمام! این صفحه خودکار ادامه می‌دهد و از این به بعد سفارش‌ها و اعلان‌ها را در ربات می‌گیرید."],
   ];
   return (
-    <Layout title="اتصال به ربات" user={props.user} nav="none" bare header={<div></div>}>
+    <Layout title="اتصال به ربات" user={props.user} nav="none" bare header={<div class="md:hidden px-4 pt-4 flex justify-end"><MenuButton /></div>}>
       <div class="min-h-screen flex flex-col px-8 py-12 max-w-md mx-auto">
         <header class="mb-12 text-center relative">
           <form method="post" action="/logout" class="absolute -top-4 right-0">
@@ -257,100 +257,6 @@ export function ConnectPage(props: { user: User; next: string; links: { kind: st
 
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
-/** Mobile account drawer (/me): open, close, Escape. */
-const DRAWER_SCRIPT = `
-(function () {
-  var drawer = document.getElementById('me-drawer'), shade = document.getElementById('me-shade');
-  function setDrawer(open) {
-    drawer.classList.toggle('translate-x-full', !open);
-    shade.classList.toggle('hidden', !open);
-    document.documentElement.classList.toggle('overflow-hidden', open);
-  }
-  document.addEventListener('click', function (e) {
-    if (e.target.closest('[data-drawer-open]')) { e.preventDefault(); setDrawer(true); }
-    else if (e.target.closest('[data-drawer-close]')) { e.preventDefault(); setDrawer(false); }
-    else if (e.target.closest('#me-drawer a')) setDrawer(false);
-  });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
-})();
-`;
-
-type AccountSection = "account" | "wishes" | "orders";
-
-/** The account menu: the desktop sidebar and the mobile drawer show the same profile card and links. */
-function AccountMenu(props: { user: User; active?: AccountSection; stats?: { wishes: number; gifts: number }; drawer?: boolean }) {
-  const u = props.user;
-  const item = (href: string, icon: string, label: string, key?: AccountSection) => {
-    const on = !!key && key === props.active;
-    return (
-      <a
-        href={href}
-        aria-current={on ? "page" : undefined}
-        class={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm transition-colors hover:bg-brand/10 hover:text-brand ${on ? "bg-brand/10 text-brand font-black" : "text-muted font-bold"}`}
-      >
-        <i class={`fa-solid ${icon} w-5 text-center text-base`}></i>
-        {label}
-      </a>
-    );
-  };
-  return (
-    <>
-      <div class="px-6 pt-2 pb-6 flex flex-col items-center text-center border-b border-fg/5">
-        <a href="/me" class="relative mb-3" aria-label="حساب من">
-          <Avatar user={u} size={props.drawer ? "w-20 h-20" : "w-24 h-24"} ring />
-          <span class="absolute -bottom-1 -left-1 w-8 h-8 bg-card border border-fg/10 rounded-xl flex items-center justify-center text-brand text-xs shadow-lg">
-            <i class="fa-solid fa-pen"></i>
-          </span>
-        </a>
-        <h2 class="text-base font-black text-fg">{publicName(u)}</h2>
-        {u.username && <p class="text-xs font-bold text-muted ltr">@{u.username}</p>}
-        {props.stats && (
-          <div class="mt-5 flex gap-2 w-full">
-            <div class="flex-1 bg-ink p-2.5 rounded-2xl">
-              <p class="text-[9px] font-black text-muted mb-0.5">آرزوها</p>
-              <p class="text-sm font-black text-fg">{fa(props.stats.wishes)}</p>
-            </div>
-            <div class="flex-1 bg-ink p-2.5 rounded-2xl">
-              <p class="text-[9px] font-black text-muted mb-0.5">دریافتی</p>
-              <p class="text-sm font-black text-brand">{fa(props.stats.gifts)}</p>
-            </div>
-          </div>
-        )}
-      </div>
-      <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
-        {item("/me", "fa-user-gear", "حساب من", "account")}
-        {item("/me/wishlists", "fa-gift", "لیست آرزوها", "wishes")}
-        {item("/me/orders", "fa-bag-shopping", "سفارشات من", "orders")}
-        {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : null}
-        <div class="pt-4 pb-1 px-4"><span class="text-[10px] font-black text-muted/70">ارتباطات</span></div>
-        {item("/me#bot", "fa-robot", "ربات‌ها")}
-        {item("/faq", "fa-life-ring", "راهنما و پشتیبانی")}
-        {!props.drawer && item("/", "fa-house", "بازگشت به خانه")}
-      </nav>
-      <div class="p-4 border-t border-fg/5">
-        <form method="post" action="/logout" class="m-0">
-          <button class="w-full flex items-center justify-center gap-2 p-3 text-red-500 font-black text-sm bg-red-500/10 hover:bg-red-500/15 rounded-2xl">
-            <i class="fa-solid fa-arrow-right-from-bracket"></i>خروج از حساب
-          </button>
-        </form>
-      </div>
-    </>
-  );
-}
-
-/** Fixed account sidebar for desktop, on every account page (Layout's `sidebar`). */
-export function AccountSidebar(props: { user: User; active?: AccountSection; stats?: { wishes: number; gifts: number } }) {
-  const site = useSite();
-  return (
-    <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 bg-card border-l border-fg/5 flex-col">
-      <div class="px-6 pt-6 pb-4">
-        <a href="/" class="text-2xl font-black text-brand">{site.site_name}</a>
-      </div>
-      <AccountMenu {...props} />
-    </aside>
-  );
-}
-
 /** /me: the whole account on one page (UX Pilot "حساب من"): drawer on mobile, sidebar on desktop. */
 export function AccountPage(props: {
   changes?: { id: number; product_title: string }[];
@@ -369,36 +275,20 @@ export function AccountPage(props: {
       nav="profile"
       bare
       wide
-      sidebar={<AccountSidebar user={u} active="account" stats={props.stats} />}
+      stats={props.stats}
       header={
         <>
           <header class="md:hidden sticky top-0 z-40 bg-ink/80 backdrop-blur-xl border-b border-card px-4 py-3 flex items-center justify-between">
-            <button type="button" data-drawer-open aria-label="منو" class="w-11 h-11 flex items-center justify-center bg-card rounded-xl text-fg">
-              <i class="fa-solid fa-bars text-lg"></i>
-            </button>
+            <MenuButton />
             <a href="/" class="text-xl font-black text-brand">{site.site_name}</a>
             {publicUrl ? (
-              <button type="button" data-share={publicUrl} aria-label="اشتراک‌گذاری پروفایل" class="w-11 h-11 flex items-center justify-center bg-brand text-white rounded-xl shadow-lg shadow-brand/20">
+              <button type="button" data-share={publicUrl} aria-label="اشتراک‌گذاری پروفایل" class="w-10 h-10 flex items-center justify-center bg-brand text-white rounded-full shadow-lg shadow-brand/20">
                 <i class="fa-solid fa-share-nodes"></i>
               </button>
             ) : (
-              <span class="w-11"></span>
+              <span class="w-10"></span>
             )}
           </header>
-          <div id="me-shade" data-drawer-close class="md:hidden hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"></div>
-          <aside
-            id="me-drawer"
-            class="md:hidden fixed top-0 right-0 bottom-0 z-[70] w-[85%] max-w-[320px] bg-card flex flex-col translate-x-full transition-transform duration-300"
-            aria-label="منوی حساب"
-          >
-            <div class="p-5 flex items-center justify-between">
-              <span class="text-xl font-black text-brand">{site.site_name}</span>
-              <button type="button" data-drawer-close aria-label="بستن" class="w-9 h-9 flex items-center justify-center rounded-xl text-muted">
-                <i class="fa-solid fa-xmark text-lg"></i>
-              </button>
-            </div>
-            <AccountMenu user={u} active="account" stats={props.stats} drawer />
-          </aside>
         </>
       }
     >
@@ -419,7 +309,6 @@ export function AccountPage(props: {
       <div class="px-4 md:px-10 py-6">
         <SettingsBody user={u} {...props.settings} />
       </div>
-      <script dangerouslySetInnerHTML={{ __html: DRAWER_SCRIPT }} />
     </Layout>
   );
 }
@@ -728,7 +617,7 @@ function SettingsBody(props: SettingsProps & { user: User }) {
 
 export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items: number; cover: string })[]; siteUrl: string }) {
   return (
-    <Layout title="لیست‌های آرزوی من" user={props.user} nav="wishes" sidebar={<AccountSidebar user={props.user} active="wishes" />}>
+    <Layout title="لیست‌های آرزوی من" user={props.user} nav="wishes">
       <div class="row" style="margin-bottom:16px">
         <h1 style="margin:0">لیست‌های آرزوی من</h1>
         <span class="sp" />
@@ -767,7 +656,7 @@ export function WishlistFormPage(props: {
   const v = props.values;
   const action = w ? `/me/wishlists/${w.id}` : "/me/wishlists/new";
   return (
-    <Layout title={w ? w.title : "لیست جدید"} user={props.user} nav="wishes" sidebar={<AccountSidebar user={props.user} active="wishes" />}>
+    <Layout title={w ? w.title : "لیست جدید"} user={props.user} nav="wishes">
       <h1>{w ? `ویرایش «${w.title}»` : "ساخت لیست آرزو"}</h1>
       {props.saved && <div class="okbox">ذخیره شد.</div>}
       {w && (
@@ -877,7 +766,7 @@ export interface MyOrder {
 /** Everything the signed-in person has bought: gifts for others and direct purchases for themselves. */
 export function MyOrdersPage(props: { user: User; orders: MyOrder[] }) {
   return (
-    <Layout title="خریدهای من" user={props.user} nav="profile" sidebar={<AccountSidebar user={props.user} active="orders" />} header={<TitleBar title="خریدهای من" back="/me" />} bare>
+    <Layout title="خریدهای من" user={props.user} nav="profile" header={<TitleBar title="خریدهای من" back="/me" />} bare>
       <div class="px-6 pb-10 space-y-4">
         {props.orders.length === 0 && (
           <div class="bg-card rounded-2xl p-6 text-center text-sm text-muted">
@@ -907,7 +796,7 @@ export function ChangeRequestPage(props: { user: User; order: Order & { image_ke
   const o = props.order;
   const pending = o.change_status === "pending";
   return (
-    <Layout title="پیشنهاد تغییر" user={props.user} nav="profile" sidebar={<AccountSidebar user={props.user} active="orders" />} header={<TitleBar title="پیشنهاد تغییر کادو" back="/me" />} bare>
+    <Layout title="پیشنهاد تغییر" user={props.user} nav="profile" header={<TitleBar title="پیشنهاد تغییر کادو" back="/me" />} bare>
       <div class="px-6 pb-12 space-y-6">
         <section class="p-4 bg-card rounded-2xl flex items-center gap-4">
           <div class="w-20 h-20 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-3xl">

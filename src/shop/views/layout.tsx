@@ -4,7 +4,7 @@ import { useSite } from "../../render";
 import { brandRgb, socialLinks } from "../../settings";
 import { summary } from "../../schema";
 import { developerHref } from "../../content";
-import { ACCENTS, canUseCrm, type Accent, type User } from "../../session";
+import { ACCENTS, canUseCrm, publicName, type Accent, type User } from "../../session";
 
 // Visual language from the designs in html/: dark ink background, cards #221c26, pink accent,
 // sticky blurred header, bottom tab bar with a raised "+" button on phones.
@@ -133,27 +133,150 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
   );
 }
 
-function DesktopNav(props: { user: User | null }) {
+/** The site menu (desktop sidebar and mobile drawer) shows the same profile card and links on every page. */
+function SiteMenu(props: { user: User | null; stats?: { wishes: number; gifts: number }; drawer?: boolean }) {
+  const site = useSite();
   const u = props.user;
+  const path = site.path;
+  const item = (href: string, icon: string, label: string, on = path === href) => (
+    <a
+      href={href}
+      aria-current={on ? "page" : undefined}
+      rel={!u && href.startsWith("/me") ? "nofollow" : undefined}
+      class={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm transition-colors hover:bg-brand/10 hover:text-brand ${on ? "bg-brand/10 text-brand font-black" : "text-muted font-bold"}`}
+    >
+      <i class={`fa-solid ${icon} w-5 text-center text-base`}></i>
+      {label}
+    </a>
+  );
+  const heading = (t: string) => <div class="pt-4 pb-1 px-4"><span class="text-[10px] font-black text-muted/70">{t}</span></div>;
   return (
-    <div class="hidden md:flex items-center gap-5 text-sm text-muted">
-      <a href="/shops" class="hover:text-fg">فروشگاه‌ها</a>
-      <a href="/search" class="hover:text-fg">جستجو و کاوش</a>
+    <>
       {u ? (
-        <>
-          <a href="/me/wishlists" class="hover:text-fg">آرزوهای من</a>
-          <a href="/panel" class="hover:text-fg">پنل فروشگاه</a>
-          {u.is_admin ? <a href="/admin" class="hover:text-fg">مدیریت</a> : null}
-          {canUseCrm(u) ? <a href="/crm" class="hover:text-fg">CRM</a> : null}
-          <a href="/me/wishlists/new" class="px-4 py-2 rounded-xl bg-brand text-white font-bold">+ لیست جدید</a>
-          <a href="/me" aria-label="پروفایل"><Avatar user={u} size="w-9 h-9" /></a>
-        </>
+        <div class="px-6 pt-1 pb-5 flex flex-col items-center text-center border-b border-fg/5">
+          <a href="/me" class="relative mb-3" aria-label="حساب من">
+            <Avatar user={u} size={props.drawer ? "w-20 h-20" : "w-24 h-24"} ring />
+            <span class="absolute -bottom-1 -left-1 w-8 h-8 bg-card border border-fg/10 rounded-xl flex items-center justify-center text-brand text-xs shadow-lg">
+              <i class="fa-solid fa-pen"></i>
+            </span>
+          </a>
+          <h2 class="text-base font-black text-fg">{publicName(u)}</h2>
+          {u.username && <p class="text-xs font-bold text-muted ltr">@{u.username}</p>}
+          {props.stats && (
+            <div class="mt-4 flex gap-2 w-full">
+              <div class="flex-1 bg-ink p-2.5 rounded-2xl">
+                <p class="text-[9px] font-black text-muted mb-0.5">آرزوها</p>
+                <p class="text-sm font-black text-fg">{props.stats.wishes.toLocaleString("fa-IR")}</p>
+              </div>
+              <div class="flex-1 bg-ink p-2.5 rounded-2xl">
+                <p class="text-[9px] font-black text-muted mb-0.5">دریافتی</p>
+                <p class="text-sm font-black text-brand">{props.stats.gifts.toLocaleString("fa-IR")}</p>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
-        <a href="/login" rel="nofollow" class="px-4 py-2 rounded-xl bg-brand text-white font-bold">ورود / ثبت‌نام</a>
+        <div class="px-6 pt-1 pb-5 border-b border-fg/5 text-center">
+          <p class="text-xs text-muted mb-3">برای ساخت لیست آرزو و خرید کادو وارد شوید.</p>
+          <a href="/login" rel="nofollow" class="block w-full py-3 rounded-2xl bg-brand text-white text-sm font-black shadow-lg shadow-brand/20">ورود / ثبت‌نام</a>
+        </div>
       )}
-    </div>
+      <nav class="flex-1 p-4 space-y-0.5 overflow-y-auto">
+        {item("/", "fa-house", "خانه")}
+        {item("/search", "fa-magnifying-glass", "جستجو و کاوش")}
+        {item("/shops", "fa-shop", "فروشگاه‌ها", path === "/shops" || path.startsWith("/s/"))}
+        {u && (
+          <>
+            {heading("حساب کاربری")}
+            {item("/me", "fa-user-gear", "حساب من")}
+            {item("/me/wishlists", "fa-gift", "لیست آرزوها", path.startsWith("/me/wishlists"))}
+            {item("/me/orders", "fa-bag-shopping", "سفارشات من", path.startsWith("/me/orders"))}
+            {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : null}
+            {u.is_admin ? item("/admin", "fa-shield-halved", "مدیریت سایت") : null}
+            {canUseCrm(u) ? item("/crm", "fa-address-book", "CRM") : null}
+          </>
+        )}
+        {heading("ارتباطات")}
+        {u && item("/me#bot", "fa-robot", "ربات‌ها", false)}
+        {item("/faq", "fa-life-ring", "راهنما و پشتیبانی")}
+        {item("/about", "fa-circle-info", "درباره ما")}
+      </nav>
+      {u && (
+        <div class="p-4 border-t border-fg/5 space-y-2">
+          <a href="/me/wishlists/new" class="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-brand text-white text-sm font-black shadow-lg shadow-brand/20">
+            <i class="fa-solid fa-plus"></i>لیست آرزوی جدید
+          </a>
+          <form method="post" action="/logout" class="m-0">
+            <button class="w-full flex items-center justify-center gap-2 p-3 text-red-500 font-black text-sm bg-red-500/10 hover:bg-red-500/15 rounded-2xl">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>خروج از حساب
+            </button>
+          </form>
+        </div>
+      )}
+    </>
   );
 }
+
+/** Desktop sidebar + mobile drawer with the site menu (every page outside the shop panel). */
+function SiteNav(props: { user: User | null; stats?: { wishes: number; gifts: number } }) {
+  const site = useSite();
+  return (
+    <>
+      <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 bg-card border-l border-fg/5 flex-col" aria-label="منوی سایت">
+        <div class="px-6 pt-6 pb-4">
+          <a href="/" class="text-2xl font-black text-brand">{site.site_name}</a>
+        </div>
+        <SiteMenu user={props.user} stats={props.stats} />
+      </aside>
+      <div id="site-shade" data-drawer-close class="md:hidden hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"></div>
+      <aside
+        id="site-drawer"
+        class="md:hidden fixed top-0 right-0 bottom-0 z-[70] w-[85%] max-w-[320px] bg-card flex flex-col translate-x-full transition-transform duration-300"
+        aria-label="منوی سایت"
+      >
+        <div class="p-5 flex items-center justify-between">
+          <span class="text-xl font-black text-brand">{site.site_name}</span>
+          <button type="button" data-drawer-close aria-label="بستن منو" class="w-9 h-9 flex items-center justify-center rounded-xl text-muted">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <SiteMenu user={props.user} stats={props.stats} drawer />
+      </aside>
+    </>
+  );
+}
+
+/** Opens the site menu drawer on phones (hidden on desktop, where the sidebar is always shown). */
+export function MenuButton(props: { glass?: boolean; class?: string }) {
+  return (
+    <button
+      type="button"
+      data-drawer-open
+      aria-label="منو"
+      class={`md:hidden w-10 h-10 shrink-0 flex items-center justify-center rounded-full ${props.glass ? "bg-black/35 backdrop-blur-md text-white" : "bg-card text-fg"} ${props.class ?? ""}`}
+    >
+      <i class="fa-solid fa-bars"></i>
+    </button>
+  );
+}
+
+const DRAWER_SCRIPT = `
+(function () {
+  var drawer = document.getElementById('site-drawer'), shade = document.getElementById('site-shade');
+  if (!drawer) return;
+  function setDrawer(open) {
+    drawer.classList.toggle('translate-x-full', !open);
+    shade.classList.toggle('hidden', !open);
+    document.documentElement.classList.toggle('overflow-hidden', open);
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-drawer-open]')) { e.preventDefault(); setDrawer(true); }
+    else if (e.target.closest('[data-drawer-close]')) { e.preventDefault(); setDrawer(false); }
+    else if (e.target.closest('#site-drawer a')) setDrawer(false);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
+})();
+`;
 
 /** Per-page search engine / AI answer / link preview data. Pages are noindex unless `index` is set. */
 export interface Seo {
@@ -312,8 +435,10 @@ export function Layout(props: {
   wide?: boolean;
   /** Use the whole width (panel inbox). */
   full?: boolean;
-  /** Fixed side navigation for desktop (panel): the page moves aside for it. */
+  /** Fixed side navigation for desktop (panel): the page moves aside for it. Other pages get the site menu. */
   sidebar?: Child;
+  /** Wishlist / gift counts shown in the site menu's profile card. */
+  stats?: { wishes: number; gifts: number };
   seo?: Seo;
   /** Use the title as is, without " · site name". */
   fullTitle?: boolean;
@@ -321,6 +446,7 @@ export function Layout(props: {
   const site = useSite();
   const nav = props.nav ?? "home";
   const showNav = nav !== "none" && !props.panel;
+  const siteNav = !props.panel && !props.sidebar;
   const title = props.fullTitle ? props.title : `${props.title} · ${site.site_name}`;
   // The signed-in person's own look wins over the site's brand color.
   const light = props.user?.theme !== "dark" && !props.panel; // light unless the person chose dark
@@ -345,15 +471,16 @@ export function Layout(props: {
         {accent && accent !== "255 92 147" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${accent}}` }} />}
         {!props.panel && <Analytics />}
       </head>
-      <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar ? "md:pr-64" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
+      <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar || siteNav ? "md:pr-64" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
         <ActingAsBar />
         {props.sidebar}
+        {siteNav && <SiteNav user={props.user} stats={props.stats} />}
         {props.header ?? (
-          <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
-            <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <header class="md:hidden sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
+            <div class="px-4 py-3 flex items-center justify-between gap-3">
+              <MenuButton />
               <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
-              <DesktopNav user={props.user} />
-              <a href={props.user ? "/me" : "/login"} rel={props.user ? undefined : "nofollow"} class="md:hidden" aria-label="پروفایل">
+              <a href={props.user ? "/me" : "/login"} rel={props.user ? undefined : "nofollow"} aria-label="پروفایل">
                 {props.user ? <Avatar user={props.user} size="w-9 h-9" /> : <span class="text-sm text-muted">ورود</span>}
               </a>
             </div>
@@ -363,6 +490,7 @@ export function Layout(props: {
         {showNav && <Footer />}
         {showNav && <BottomNav active={nav} user={props.user} />}
         <script dangerouslySetInnerHTML={{ __html: HELPERS }} />
+        {siteNav && <script dangerouslySetInnerHTML={{ __html: DRAWER_SCRIPT }} />}
       </body>
     </html>
   );
@@ -419,7 +547,11 @@ export function TitleBar(props: { title: string; back?: string; end?: Child }) {
       <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
         <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": props.back ?? "/" }} />
         <h1 class="text-lg font-bold text-fg">{props.title}</h1>
-        {props.end ?? <div class="w-10"></div>}
+        <div class="flex items-center gap-2">
+          {props.end}
+          <MenuButton />
+          {!props.end && <div class="hidden md:block w-10"></div>}
+        </div>
       </div>
     </header>
   );

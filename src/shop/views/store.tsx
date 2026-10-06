@@ -25,7 +25,7 @@ import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
 import { STEPS, faqs } from "../../content";
-import { Avatar, Errors, IconButton, Layout, TitleBar } from "./layout";
+import { Avatar, Errors, IconButton, Layout, MenuButton, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
 // a Pinterest-like masonry feed of image cards with the title and price over a dark gradient.
@@ -161,7 +161,10 @@ export function HomePage(props: {
     <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
       <div class="max-w-5xl mx-auto px-4 py-4 space-y-4">
         <div class="flex items-center justify-between gap-3">
-          <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
+          <div class="flex items-center gap-3">
+            <MenuButton />
+            <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
+          </div>
           <div class="flex items-center gap-3">
             {props.user ? (
               <>
@@ -388,11 +391,12 @@ export function ProductPage(props: {
     ],
   };
   const header = (
-    <header class="fixed top-0 inset-x-0 z-50 px-4 py-4 flex items-center justify-between pointer-events-none">
+    <header class="fixed top-0 inset-x-0 md:right-64 z-50 px-4 py-4 flex items-center justify-between pointer-events-none">
       <div class="pointer-events-auto"><IconButton icon="fa-chevron-right" label="بازگشت" glass attrs={{ "data-back": "/" }} /></div>
       <div class="flex gap-2 pointer-events-auto">
         <IconButton icon="fa-heart" label="افزودن به آرزوها" glass href={wishHref} attrs={nofollow ? { rel: nofollow } : undefined} />
         <IconButton icon="fa-share-nodes" label="اشتراک" glass attrs={{ "data-share": "" }} />
+        <MenuButton glass />
       </div>
     </header>
   );
@@ -524,7 +528,7 @@ export function ProductPage(props: {
         </div>
       )}
 
-      <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+      <div class="fixed bottom-0 inset-x-0 md:right-64 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom flex gap-3">
           <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-brand text-white text-center rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
@@ -824,7 +828,10 @@ export function WishlistPublicPage(props: {
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": "/" }} />
         <a href="/" class="text-lg font-medium text-brand">{site.site_name}</a>
-        <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": props.shareUrl }} />
+        <div class="flex items-center gap-2">
+          <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": props.shareUrl }} />
+          <MenuButton />
+        </div>
       </div>
     </header>
   );
@@ -1056,7 +1063,7 @@ export function CheckoutPage(props: {
           {direct ? " آدرس شما فقط بعد از تأیید واریز به فروشگاه نشان داده می‌شود." : " آدرس گیرنده محرمانه است و به شما نمایش داده نمی‌شود."}
         </p>
       </form>
-      <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+      <div class="fixed bottom-0 inset-x-0 md:right-64 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom">
           <button form="checkout" disabled={props.delivery.length === 0 || !it.in_stock} class="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40">
             ادامه و دریافت شماره کارت <i class="fa-solid fa-arrow-left"></i>
@@ -1206,7 +1213,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           </section>
           <p class="text-[11px] text-muted px-1">این صفحه مخصوص شماست؛ لینکش را نگه دارید تا وضعیت سفارش را ببینید.</p>
         </form>
-        <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+        <div class="fixed bottom-0 inset-x-0 md:right-64 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
           <div class="max-w-3xl mx-auto p-4 safe-bottom">
             <button form="receipt-form" class="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
               ارسال فیش <i class="fa-solid fa-arrow-left"></i>
@@ -1369,7 +1376,7 @@ export function DirectBuyPage(props: {
           به فروشگاه نشان داده می‌شود.
         </p>
       </form>
-      <div class="fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+      <div class="fixed bottom-0 inset-x-0 md:right-64 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom">
           <button form="direct" class="w-full py-4 bg-brand text-white rounded-2xl font-bold shadow-lg shadow-brand/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
             ادامه: روش ارسال و پرداخت <i class="fa-solid fa-arrow-left"></i>
