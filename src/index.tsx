@@ -20,6 +20,7 @@ import { igWebhook, refreshIgTokens } from "./shop/crm/webhook";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { seo } from "./seo";
+import { fromTrustedProxy } from "./proxy";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
@@ -143,7 +144,10 @@ app.onError((err, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  fetch(req: Request, env: Env["Bindings"], ctx: ExecutionContext) {
+    const visitor = fromTrustedProxy(req, env.PROXY_SECRET);
+    return visitor instanceof Response ? visitor : app.fetch(visitor, env, ctx);
+  },
   // Daily cron (wrangler.jsonc "triggers"): keep shops' Instagram tokens alive.
   async scheduled(_event: ScheduledController, env: Env["Bindings"], ctx: ExecutionContext) {
     ctx.waitUntil(ensureMigrated(env.DB).then(() => refreshIgTokens(env.DB)));

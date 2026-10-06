@@ -192,6 +192,8 @@
 تنظیمات (در `/admin/settings`): کلید API سفیر (`api-access-key` از پنل کسب‌وکار بله) و شناسه عددی بازو (`bot_id`)، به‌علاوه توکن بات بله و دکمه «اتصال».
 
 ## راه‌اندازی روی Cloudflare
+
+> Cloudflare در ایران فیلتر است؟ سایت روی Cloudflare می‌ماند و یک پراکسی روی سرور ایران ورودی سایت می‌شود: [docs/proxy.md](docs/proxy.md)
 ```bash
 npm install
 npx wrangler login
