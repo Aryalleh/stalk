@@ -37,6 +37,15 @@ export const DEFAULTS = {
   social_linkedin: "",
   social_youtube: "",
   social_aparat: "",
+  // Site logo image (replaces the site name text in headers, menus and the footer; "" = text).
+  logo_key: "",
+  // Footer: short text under the logo, a copyright line ("" = default) and HTML for trust badges
+  // (e.g. the eNamad / Samandehi code, which loads its own script).
+  footer_about: "",
+  footer_copyright: "",
+  footer_embed: "",
+  // Footer links to the admin's pages, kept in sync by /admin/pages: JSON [[slug, title, column], ...].
+  pages_index: "",
   // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.
   ga_measurement_id: "",
   cf_analytics_token: "",

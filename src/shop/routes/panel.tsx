@@ -8,11 +8,12 @@ import { colorList, pickVariant, variantKey, variants, type Variant } from "../v
 import type { C, Env } from "../../env";
 import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, igVerifyToken, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
+import { BUILTIN_PAGES, RESERVED_SLUGS, SLUG_RE, allPages, footerIndex, getPage, type Page } from "../../pages";
 import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
@@ -795,6 +796,85 @@ admin.post("/admin/content", async (c) => {
   return contentPage(c, { ok: "ذخیره شد. صفحه‌های «درباره» و «سوالات متداول» به‌روز شدند." });
 });
 
+// ---------- pages and footer (admin) ----------
+
+const MAX_PAGES = 40;
+
+async function pagesList(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
+  const s = await loadSettings(c.env.DB);
+  c.set("settings", s);
+  return render(c, <AdminPagesPage user={currentUser(c)} s={s} pages={await allPages(c.env.DB, s)} {...extra} />, status);
+}
+
+async function syncFooter(c: C) {
+  const s = await loadSettings(c.env.DB);
+  await saveSiteSettings(c.env.DB, { pages_index: await footerIndex(c.env.DB, s) });
+}
+
+admin.get("/admin/pages", (c) => pagesList(c));
+
+admin.post("/admin/pages/footer", async (c) => {
+  const f = await form(c);
+  await saveSiteSettings(c.env.DB, {
+    footer_about: (f.footer_about ?? "").replace(/\s+/g, " ").trim().slice(0, 400),
+    footer_copyright: (f.footer_copyright ?? "").replace(/\s+/g, " ").trim().slice(0, 160),
+    footer_embed: (f.footer_embed ?? "").replace(/\r/g, "").trim().slice(0, 6000),
+  });
+  return pagesList(c, { ok: "فوتر ذخیره شد." });
+});
+
+admin.get("/admin/pages/new", (c) => render(c, <AdminPageForm user={currentUser(c)} page={null} isNew />));
+
+admin.get("/admin/pages/:slug{[a-z0-9-]+}", async (c) => {
+  const page = await getPage(c.env.DB, c.get("settings"), c.req.param("slug"));
+  if (!page) return c.notFound();
+  return render(c, <AdminPageForm user={currentUser(c)} page={page} isNew={false} ok={c.req.query("saved") ? "ذخیره شد." : undefined} />);
+});
+
+async function savePage(c: C, original: string | null) {
+  const f = await form(c);
+  const isBuiltin = !!original && original in BUILTIN_PAGES;
+  const page: Page = {
+    slug: isBuiltin ? original! : (f.slug ?? "").trim().toLowerCase(),
+    title: (f.title ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
+    body: (f.body ?? "").replace(/\r/g, "").trim().slice(0, 20000),
+    footer_column: (["explore", "help", "company"].includes(f.footer_column ?? "") ? f.footer_column : "") as Page["footer_column"],
+    sort: Math.max(0, Math.min(999, Math.floor(Number(normalizeDigits(f.sort ?? "")) || 0))),
+  };
+  const fail = (error: string) => render(c, <AdminPageForm user={currentUser(c)} page={page} isNew={!original} error={error} />, 400);
+  if (!page.title) return fail("عنوان لازم است.");
+  if (!SLUG_RE.test(page.slug) || page.slug.length < 2) return fail("آدرس باید ۲ تا ۴۰ حرف کوچک انگلیسی، عدد یا - باشد.");
+  if (RESERVED_SLUGS.has(page.slug)) return fail(`آدرس /${page.slug} مال بخش دیگری از سایت است؛ آدرس دیگری انتخاب کنید.`);
+  const db = c.env.DB;
+  if (page.slug !== original) {
+    const taken = (await db.prepare("SELECT 1 FROM pages WHERE slug = ?").bind(page.slug).first()) || (!original && page.slug in BUILTIN_PAGES);
+    if (taken) return fail("صفحه‌ای با این آدرس هست.");
+    const count = await db.prepare("SELECT COUNT(*) AS n FROM pages").first<{ n: number }>();
+    if (!original && (count?.n ?? 0) >= MAX_PAGES) return fail(`حداکثر ${MAX_PAGES} صفحه.`);
+  }
+  await db.batch([
+    ...(original && original !== page.slug ? [db.prepare("DELETE FROM pages WHERE slug = ?").bind(original)] : []),
+    db
+      .prepare(
+        `INSERT INTO pages (slug, title, body, footer_column, sort, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (slug) DO UPDATE SET title = excluded.title, body = excluded.body, footer_column = excluded.footer_column, sort = excluded.sort, updated_at = excluded.updated_at`,
+      )
+      .bind(page.slug, page.title, page.body, page.footer_column, page.sort, now()),
+  ]);
+  await syncFooter(c);
+  return c.redirect(`/admin/pages/${page.slug}?saved=1`);
+}
+
+admin.post("/admin/pages/new", (c) => savePage(c, null));
+admin.post("/admin/pages/:slug{[a-z0-9-]+}", (c) => savePage(c, c.req.param("slug")));
+
+admin.post("/admin/pages/:slug{[a-z0-9-]+}/delete", async (c) => {
+  const slug = c.req.param("slug");
+  await c.env.DB.prepare("DELETE FROM pages WHERE slug = ?").bind(slug).run();
+  await syncFooter(c);
+  return pagesList(c, { ok: slug in BUILTIN_PAGES ? "متن پیش‌فرض برگشت." : "صفحه حذف شد." });
+});
+
 // ---------- site settings (admin) ----------
 
 async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) {
@@ -878,6 +958,23 @@ admin.post("/admin/settings/test-safir", async (c) => {
   } catch (e) {
     return settingsPage(c, { error: `ارسال ناموفق: ${(e as Error).message}` }, 400);
   }
+});
+
+// Site logo (shown instead of the site name text).
+admin.post("/admin/settings/logo", async (c) => {
+  const body = await c.req.parseBody();
+  const current = c.get("settings").logo_key;
+  const file = fileField(body.logo);
+  let key = current;
+  if (file) {
+    const err = imageError(file, 1, "لوگو");
+    if (err) return settingsPage(c, { error: err }, 400);
+    key = await storeImage(c.env.IMAGES, file, "s");
+  } else if (body.remove_logo === "1") key = "";
+  else return settingsPage(c, { error: "فایل لوگو را انتخاب کنید." }, 400);
+  await saveSiteSettings(c.env.DB, { logo_key: key });
+  if (current && current !== key) c.executionCtx.waitUntil(c.env.IMAGES.delete(current));
+  return settingsPage(c, { ok: key ? "لوگو ذخیره شد." : "لوگو حذف شد؛ نام سایت نمایش داده می‌شود." });
 });
 
 admin.post("/admin/settings", async (c) => {

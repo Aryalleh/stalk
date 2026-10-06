@@ -2,7 +2,7 @@ import { randomSlug } from "./db";
 
 // Public images in R2, by key prefix: p/ products, a/ avatars, s/ shop logos and covers.
 // Receipts (r/) are private and never served by /img.
-export const PUBLIC_IMAGE = /^(p|a|s)\/[\w/.-]+$/;
+export const PUBLIC_IMAGE = /^(p|a|s|b)\/[\w/.-]+$/;
 export const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
 /** The uploaded file in a form field, or null when the field is empty. */

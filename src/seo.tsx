@@ -5,6 +5,7 @@ import { STEPS, aboutBlocks, aboutTitle, developerHref, faqs } from "./content";
 import { render, siteOrigin } from "./render";
 import { categoryList, siteDescription, socialLinks, type Settings } from "./settings";
 import { Layout, SOCIAL_ICON } from "./shop/views/layout";
+import { PageText, SLUG_RE, allPages, getPage } from "./pages";
 
 // Search engines and AI answer engines: robots.txt, sitemap.xml, llms.txt, and the About / FAQ
 // pages whose question-and-answer content is also published as FAQPage / HowTo structured data.
@@ -51,7 +52,7 @@ seo.get("/sitemap.xml", async (c) => {
     url("/about", { priority: "0.6" }),
     url("/shops", { priority: "0.8" }),
     url("/faq", { priority: "0.6" }),
-    url("/privacy", { priority: "0.2" }),
+    ...(await allPages(db, c.get("settings"))).map((p) => url(`/${p.slug}`, { priority: "0.3" })),
     ...categoryList(c.get("settings")).map((cat) => url(`/c/${encodeURIComponent(cat)}`, { priority: "0.7" })),
     ...(shops.results as { slug: string; logo_key: string; created_at: string }[]).map((s) =>
       url(`/s/${s.slug}`, { priority: "0.8", lastmod: s.created_at, image: s.logo_key }),
@@ -222,72 +223,26 @@ seo.get("/llms.txt", async (c) => {
   return c.text(body, 200, { "Cache-Control": "public, max-age=3600" });
 });
 
-// ---------- privacy policy and data deletion (required by Meta to publish the Instagram app) ----------
+// ---------- pages: privacy, data deletion (required by Meta for the Instagram app), terms, shipping and
+// any page the admin adds; each address is /<slug> (registered last, after every other route) ----------
 
-function LegalPage(props: { c: C; title: string; children: unknown }) {
-  return (
-    <Layout title={props.title} user={props.c.get("user")} seo={{ description: summary(`${props.title} — ${props.c.get("settings").site_name}`, 158) }}>
-      <article class="space-y-4 text-sm leading-8">
-        <h1>{props.title}</h1>
-        {props.children as never}
+export async function pageRoute(c: C) {
+  const slug = c.req.param("slug") ?? "";
+  const s = c.get("settings");
+  const page = SLUG_RE.test(slug) ? await getPage(c.env.DB, s, slug) : null;
+  if (!page) return c.notFound();
+  return render(
+    c,
+    <Layout title={page.title} user={c.get("user")} bare wide seo={{ index: true, canonical: `/${page.slug}`, description: summary(page.body.replace(/[#*\[\]()-]/g, " ") || page.title, 158) }}>
+      <article class="px-4 md:px-10 py-8 md:py-12 max-w-3xl">
+        <nav class="text-xs text-muted mb-4" aria-label="مسیر">
+          <a href="/" class="hover:text-brand">{s.site_name}</a> <span class="mx-1">/</span> <span>{page.title}</span>
+        </nav>
+        <h1 class="text-2xl md:text-4xl font-black text-fg mb-6">{page.title}</h1>
+        <div class="bg-card rounded-[28px] border border-fg/5 p-5 md:p-8">
+          <PageText text={page.body} />
+        </div>
       </article>
-    </Layout>
+    </Layout>,
   );
 }
-
-const contactLine = (s: Settings) =>
-  [s.contact_email && `ایمیل: ${s.contact_email}`, s.contact_phone && `تلفن: ${s.contact_phone}`].filter(Boolean).join(" · ") || "از صفحه «درباره ما»";
-
-seo.get("/privacy", (c) => {
-  const s = c.get("settings");
-  return render(
-    c,
-    <LegalPage c={c} title="حریم خصوصی">
-      <section class="card">
-        <h2>چه اطلاعاتی نگه می‌داریم</h2>
-        <ul class="list-disc pr-5">
-          <li>شماره موبایل، نام، تاریخ تولد و لیست‌های آرزویی که خودتان در {s.site_name} ثبت می‌کنید.</li>
-          <li>اطلاعات سفارش (گیرنده، آدرس ارسال، مبلغ و رسید واریز) برای انجام سفارش.</li>
-          <li>
-            برای فروشگاه‌هایی که اینستاگرام خود را وصل کرده‌اند: پیام‌های دایرکت و کامنت‌هایی که برای آن فروشگاه فرستاده می‌شود، شناسه و نام کاربری
-            فرستنده، تا فروشگاه بتواند پاسخ بدهد و سفارش ثبت کند.
-          </li>
-        </ul>
-      </section>
-      <section class="card">
-        <h2>استفاده و اشتراک‌گذاری</h2>
-        <p>
-          این اطلاعات فقط برای انجام سفارش، ارتباط فروشگاه با مشتری و پشتیبانی استفاده می‌شود. اطلاعات هر مشتری فقط برای همان فروشگاهی که با آن در
-          ارتباط بوده قابل دیدن است. اطلاعات را نمی‌فروشیم و برای تبلیغات به دیگران نمی‌دهیم. پیام‌های اینستاگرام از طریق API رسمی متا دریافت و ارسال
-          می‌شوند.
-        </p>
-      </section>
-      <section class="card">
-        <h2>حذف اطلاعات</h2>
-        <p>
-          هر زمان بخواهید اطلاعاتتان حذف می‌شود؛ راهنما در صفحه <a href="/data-deletion">حذف اطلاعات</a> است. ارتباط: {contactLine(s)}
-        </p>
-      </section>
-    </LegalPage>,
-  );
-});
-
-seo.get("/data-deletion", (c) => {
-  const s = c.get("settings");
-  return render(
-    c,
-    <LegalPage c={c} title="حذف اطلاعات کاربر">
-      <section class="card">
-        <p>برای حذف اطلاعات خود از {s.site_name} (از جمله پیام‌ها و کامنت‌های اینستاگرامی که برای فروشگاه‌ها فرستاده‌اید):</p>
-        <ol class="list-decimal pr-5">
-          <li>درخواست حذف را با ذکر نام کاربری اینستاگرام یا شماره موبایل خود بفرستید: {contactLine(s)}</li>
-          <li>حداکثر تا ۳۰ روز پیام‌ها، کامنت‌ها، پرونده مشتری و حساب کاربری شما حذف می‌شود و نتیجه را به شما اطلاع می‌دهیم.</li>
-          <li>
-            اگر اپ را از اینستاگرام (Settings ← Apps and websites) حذف کنید، دریافت پیام‌های تازه هم قطع می‌شود. اطلاعاتی که قانوناً برای سوابق مالی
-            سفارش لازم است تا زمان لازم نگه داشته می‌شود.
-          </li>
-        </ol>
-      </section>
-    </LegalPage>,
-  );
-});

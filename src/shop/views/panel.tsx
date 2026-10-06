@@ -10,6 +10,7 @@ import { variantKey, variantLabel, variants, type Variant } from "../variants";
 import type { User } from "../../session";
 import type { Child } from "hono/jsx";
 import { Errors, FilePicker, Layout, Thumb } from "./layout";
+import { FOOTER_COLUMNS, type Page } from "../../pages";
 
 const SHOP_STATUS: Record<Shop["status"], string> = { pending: "در انتظار تأیید", approved: "فعال", suspended: "معلق" };
 
@@ -1193,6 +1194,7 @@ function AdminShell(props: { title: string; user: User; on: string; children?: C
     ["/admin", "fa-chart-simple", "آمار و فروشگاه‌ها"],
     ["/admin/users", "fa-users", "کاربران"],
     ["/admin/content", "fa-pen-to-square", "درباره و سوالات"],
+    ["/admin/pages", "fa-file-lines", "صفحه‌ها و فوتر"],
     ["/admin/settings", "fa-gear", "تنظیمات سایت"],
     ["/crm", "fa-address-book", "CRM"],
   ];
@@ -1301,6 +1303,22 @@ export function AdminSettingsPage(props: {
           </p>
         </div>
       )}
+      <form method="post" action="/admin/settings/logo" enctype="multipart/form-data" class="card" id="logo">
+        <h2>لوگوی سایت</h2>
+        <p class="muted small" style="margin-top:0">
+          به‌جای نوشته «{s.site_name}» در بالای صفحه‌ها، منوی کناری و فوتر نمایش داده می‌شود. بهترین: PNG یا WebP با پس‌زمینه شفاف، افقی (مثلاً ۴۰۰×۱۲۰)،
+          حداکثر ۱ مگابایت.
+        </p>
+        {s.logo_key && (
+          <div class="row" style="margin-bottom:8px">
+            <span style="background:#0f172a;padding:10px 14px;border-radius:12px"><img src={`/img/${s.logo_key}`} alt="لوگو" style="height:40px;width:auto" /></span>
+            <span style="background:#fff;padding:10px 14px;border-radius:12px;border:1px solid #e2e8f0"><img src={`/img/${s.logo_key}`} alt="لوگو" style="height:40px;width:auto" /></span>
+            <label class="row" style="color:var(--fg)"><input type="checkbox" name="remove_logo" value="1" style="width:auto" /> حذف لوگو (نمایش نام سایت)</label>
+          </div>
+        )}
+        <FilePicker name="logo" label={s.logo_key ? "انتخاب لوگوی جدید" : "انتخاب لوگو"} icon="fa-image" accept="image/png,image/webp,image/jpeg" />
+        <p><button>ذخیره لوگو</button></p>
+      </form>
       <form method="post" action="/admin/settings" class="card">
         <h2>عمومی</h2>
         <label>نام سایت</label>
@@ -1383,6 +1401,96 @@ export function AdminSettingsPage(props: {
 }
 
 /** /admin/content: About page, FAQ, contact details and social profiles, developer credit. */
+/** /admin/pages: footer settings (about text, copyright, trust-badge code) and the list of pages. */
+export function AdminPagesPage(props: { user: User; s: Settings; pages: (Page & { custom: boolean })[]; error?: string; ok?: string }) {
+  const s = props.s;
+  return (
+    <AdminShell title="صفحه‌ها و فوتر" user={props.user} on="/admin/pages">
+      <h1>صفحه‌ها و فوتر</h1>
+      <Errors errors={[props.error]} />
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <form method="post" action="/admin/pages/footer" class="card">
+        <h2>فوتر سایت</h2>
+        <label>متن کوتاه زیر لوگو (خالی = توضیح پیش‌فرض سایت)</label>
+        <textarea name="footer_about" rows={3} maxlength={400}>{s.footer_about}</textarea>
+        <label>متن کپی‌رایت (خالی = «© سال {s.site_name} — تمامی حقوق محفوظ است»)</label>
+        <input name="footer_copyright" value={s.footer_copyright} maxlength={160} />
+        <label>کد نمادها و مجوزها (مثل نماد اعتماد الکترونیکی «اینماد» یا ساماندهی) — همان کد HTML که سایت مجوز می‌دهد</label>
+        <textarea name="footer_embed" rows={4} class="ltr" maxlength={6000} placeholder={'<a referrerpolicy="origin" target="_blank" href="https://trustseal.enamad.ir/?id=...&Code=..."><img referrerpolicy="origin" src="https://trustseal.enamad.ir/logo.aspx?id=...&Code=..." alt="" style="cursor:pointer" code="..."></a>'}>{s.footer_embed}</textarea>
+        <p class="muted small">این کد بدون تغییر در فوتر همه صفحه‌ها قرار می‌گیرد؛ فقط کد سایت‌های معتبر را اینجا بگذارید.</p>
+        <p class="muted small">تماس و شبکه‌های اجتماعی فوتر از صفحه <a href="/admin/content">درباره و سوالات</a> و لوگو از <a href="/admin/settings#logo">تنظیمات سایت</a> می‌آید.</p>
+        <p><button>ذخیره فوتر</button></p>
+      </form>
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">صفحه‌ها</h2>
+          <a class="btn small" href="/admin/pages/new"><i class="fa-solid fa-plus"></i> صفحه جدید</a>
+        </div>
+        <p class="muted small">هر صفحه آدرس خودش را دارد (مثلاً /terms) و اگر ستونی برایش انتخاب کنید، در فوتر لینک می‌شود.</p>
+        <div class="wrap">
+          <table>
+            <thead><tr><th>عنوان</th><th>آدرس</th><th>ستون فوتر</th><th>وضعیت</th><th></th></tr></thead>
+            <tbody>
+              {props.pages.map((p) => (
+                <tr>
+                  <td><b>{p.title}</b></td>
+                  <td class="ltr"><a href={`/${p.slug}`} target="_blank" rel="noopener">/{p.slug}</a></td>
+                  <td>{p.footer_column ? FOOTER_COLUMNS[p.footer_column] : <span class="muted">—</span>}</td>
+                  <td>{p.custom ? (p.builtin ? <span class="tag">ویرایش‌شده</span> : <span class="tag ok">صفحه شما</span>) : <span class="muted small">متن پیش‌فرض</span>}</td>
+                  <td><a class="btn small secondary" href={`/admin/pages/${p.slug}`}>ویرایش</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminShell>
+  );
+}
+
+/** Edit (or create) one page. */
+export function AdminPageForm(props: { user: User; page: Page | null; isNew: boolean; error?: string; ok?: string }) {
+  const p = props.page;
+  return (
+    <AdminShell title={p?.title || "صفحه جدید"} user={props.user} on="/admin/pages">
+      <p class="mb-3"><a href="/admin/pages" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>صفحه‌ها و فوتر</a></p>
+      <h1>{props.isNew ? "صفحه جدید" : `ویرایش «${p?.title}»`}</h1>
+      <Errors errors={[props.error]} />
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <form method="post" action={props.isNew ? "/admin/pages/new" : `/admin/pages/${p!.slug}`} class="card">
+        <label>عنوان</label>
+        <input name="title" value={p?.title ?? ""} required maxlength={80} />
+        <label>آدرس (حروف کوچک انگلیسی، عدد و -)</label>
+        <div class="row">
+          <span class="muted ltr">/</span>
+          <input name="slug" value={p?.slug ?? ""} required maxlength={40} pattern="[a-z0-9-]+" class="ltr" style="flex:1" readonly={!props.isNew && p?.builtin} />
+        </div>
+        <label>نمایش در فوتر</label>
+        <select name="footer_column">
+          <option value="" selected={!p?.footer_column}>در فوتر نباشد</option>
+          {Object.entries(FOOTER_COLUMNS).map(([k, v]) => <option value={k} selected={p?.footer_column === k}>ستون «{v}»</option>)}
+        </select>
+        <label>ترتیب (عدد کوچک‌تر بالاتر)</label>
+        <input name="sort" value={String(p?.sort ?? 50)} inputmode="numeric" class="ltr" style="max-width:120px" />
+        <label>متن صفحه</label>
+        <textarea name="body" rows={18} maxlength={20000}>{p?.body ?? ""}</textarea>
+        <p class="muted small">
+          قالب‌بندی: «## » تیتر، «### » تیتر کوچک، «- » فهرست، «1. » فهرست شماره‌دار، **متن پررنگ**، [متن لینک](https://… یا /آدرس). بین پاراگراف‌ها یک خط خالی بگذارید.
+        </p>
+        <p class="row"><button>ذخیره</button>{!props.isNew && <a class="btn small secondary" href={`/${p!.slug}`} target="_blank" rel="noopener">مشاهده صفحه</a>}</p>
+      </form>
+      {!props.isNew && p && (
+        <form method="post" action={`/admin/pages/${p.slug}/delete`} class="card">
+          <p class="muted small" style="margin-top:0">
+            {p.builtin ? "متن پیش‌فرض این صفحه برمی‌گردد." : "صفحه و لینک فوترش حذف می‌شود."}
+          </p>
+          <button class="danger" onclick="return confirm('مطمئن هستید؟')">{p.builtin ? "بازگرداندن متن پیش‌فرض" : "حذف صفحه"}</button>
+        </form>
+      )}
+    </AdminShell>
+  );
+}
+
 export function AdminContentPage(props: { user: User; s: Settings; faq: [string, string][]; isDefaultFaq: boolean; error?: string; ok?: string }) {
   const s = props.s;
   const rows = [...props.faq, ...Array.from({ length: 3 }, () => ["", ""] as [string, string])];

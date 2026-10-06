@@ -24,7 +24,7 @@ import {
 import { PUBLIC_IMAGE } from "../images";
 import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGift } from "../views/profile";
 import { sendReceiptToShop } from "../orders";
-import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
+import { CheckoutPage, HomePage, type ProductShopInfo, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
 export const store = new Hono<Env>();
@@ -102,11 +102,12 @@ async function productPage(c: C, id: number) {
     productImages(c.env.DB, id),
     productPackages(c.env.DB, id),
     c.env.DB.prepare(
-      `SELECT s.logo_key, (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('paid','shipped','delivered')) AS sales
+      `SELECT s.logo_key, s.city, s.courier_enabled, s.post_enabled,
+              (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('paid','shipped','delivered')) AS sales
        FROM shops s WHERE s.id = ?`,
     )
       .bind(product.shop_id)
-      .first<{ logo_key: string; sales: number }>(),
+      .first<ProductShopInfo>(),
   ]);
   const error = c.req.query("err") === "size" ? "لطفاً سایز / رنگ را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز / رنگ را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
   const available = await availableByVariant(c.env.DB, product);
@@ -115,7 +116,7 @@ async function productPage(c: C, id: number) {
     <ProductPage
       user={user}
       product={product}
-      shop={shop ?? { logo_key: "", sales: 0 }}
+      shop={shop ?? { logo_key: "", sales: 0, city: "", courier_enabled: 0, post_enabled: 0 }}
       wishlists={wishlists}
       images={images}
       packages={packages}

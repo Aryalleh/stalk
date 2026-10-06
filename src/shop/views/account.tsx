@@ -3,7 +3,7 @@ import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { useSite } from "../../render";
-import { Avatar, Errors, FilePicker, Layout, MenuButton, Thumb, TitleBar } from "./layout";
+import { Avatar, Errors, FilePicker, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
@@ -280,7 +280,7 @@ export function AccountPage(props: {
         <>
           <header class="md:hidden sticky top-0 z-40 bg-ink/80 backdrop-blur-xl border-b border-card px-4 py-3 flex items-center justify-between">
             <MenuButton />
-            <a href="/" class="text-xl font-black text-brand">{site.site_name}</a>
+            <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo /></a>
             {publicUrl ? (
               <button type="button" data-share={publicUrl} aria-label="اشتراک‌گذاری پروفایل" class="w-10 h-10 flex items-center justify-center bg-brand text-white rounded-full shadow-lg shadow-brand/20">
                 <i class="fa-solid fa-share-nodes"></i>

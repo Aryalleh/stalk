@@ -19,7 +19,7 @@ import { miniapp } from "./bale/miniapp";
 import { igWebhook, refreshIgTokens } from "./shop/crm/webhook";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
-import { seo } from "./seo";
+import { pageRoute, seo } from "./seo";
 import { fromTrustedProxy } from "./proxy";
 import { actingAdmin } from "./impersonate";
 import { notFoundPage } from "./errorpage";
@@ -128,6 +128,9 @@ app.route("/", account);
 app.route("/", panel);
 app.route("/", admin);
 app.route("/", bot);
+
+// Footer pages (privacy, terms, shipping and the admin's own) at /<slug>: after every other route.
+app.get("/:slug{[a-z0-9-]{2,40}}", pageRoute);
 
 app.notFound((c) => notFoundPage(c));
 

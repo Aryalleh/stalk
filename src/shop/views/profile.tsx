@@ -1,7 +1,7 @@
 import { birthdayLabel } from "../../../lib/people";
 import { useSite } from "../../render";
 import type { User } from "../../session";
-import { Avatar, IconButton, Layout, MenuButton, ProfileHero, type Seo } from "./layout";
+import { Avatar, IconButton, Layout, MenuButton, SiteLogo, ProfileHero, type Seo } from "./layout";
 
 // Public profile at /u/<username>: the person's open wishlists and — if they allow it — the gifts
 // they received, with the names of givers who chose to be shown.
@@ -56,7 +56,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
     <header class="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-card">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": "/" }} />
-        <a href="/" class="text-lg font-medium text-brand">{site.site_name}</a>
+        <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo /></a>
         <div class="flex items-center gap-2">
           <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": url }} />
           <MenuButton />

@@ -27,7 +27,7 @@ import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
 import { STEPS, faqs } from "../../content";
-import { Avatar, Errors, IconButton, Layout, MenuButton, ProfileHero, TitleBar } from "./layout";
+import { Avatar, Errors, IconButton, Layout, MenuButton, SiteLogo, ProfileHero, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
 // a Pinterest-like masonry feed of image cards with the title and price over a dark gradient.
@@ -161,7 +161,7 @@ export function HomePage(props: {
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
             <MenuButton />
-            <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
+            <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo /></a>
           </div>
           <div class="flex items-center gap-3">
             {props.user ? (
@@ -321,10 +321,47 @@ function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
 
 const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-hidden focus:border-brand";
 
+export interface ProductShopInfo {
+  logo_key: string;
+  sales: number;
+  city: string;
+  courier_enabled: number;
+  post_enabled: number;
+}
+
+/** Desktop gallery: the big photo and thumbnails that switch it. */
+function DesktopGallery(props: { images: string[]; title: string }) {
+  const imgs = props.images;
+  const script = `(function(){var m=document.getElementById('dg-main');if(!m)return;document.querySelectorAll('[data-dg]').forEach(function(t){t.addEventListener('click',function(){
+    m.src=t.getAttribute('data-dg');document.querySelectorAll('[data-dg]').forEach(function(x){x.classList.toggle('border-brand',x===t);x.classList.toggle('border-fg/10',x!==t);});});});})();`;
+  return (
+    <div class="space-y-4">
+      <div class="relative aspect-[4/5] rounded-[40px] overflow-hidden bg-card border border-fg/5 shadow-xl group">
+        {imgs.length ? (
+          <img id="dg-main" src={`/img/${imgs[0]}`} alt={props.title} class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        ) : (
+          <div class="w-full h-full flex items-center justify-center text-8xl">🎁</div>
+        )}
+        <div class="absolute inset-0 photo-scrim-soft pointer-events-none"></div>
+      </div>
+      {imgs.length > 1 && (
+        <div class="grid grid-cols-5 gap-3">
+          {imgs.slice(0, 10).map((k, i) => (
+            <button type="button" data-dg={`/img/${k}`} aria-label={`عکس ${fa(i + 1)}`} class={`aspect-square rounded-2xl overflow-hidden border-2 ${i ? "border-fg/10" : "border-brand"} hover:border-brand transition-colors`}>
+              <img src={`/img/${k}`} alt="" loading="lazy" class="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+      <script dangerouslySetInnerHTML={{ __html: script }} />
+    </div>
+  );
+}
+
 export function ProductPage(props: {
   user: User | null;
   product: ProductWithShop;
-  shop: { logo_key: string; sales: number };
+  shop: ProductShopInfo;
   wishlists: Wishlist[];
   images: ProductImage[];
   packages: ProductPackage[];
@@ -416,16 +453,76 @@ export function ProductPage(props: {
     </>
   );
   return (
-    <Layout title={`${p.title} | ${p.shop_name}`} user={props.user} nav="none" header={header} bare seo={seo}>
-      <Gallery images={props.images} title={p.title} overlay={overlay} />
-      <div class="px-6 py-8 pb-36 space-y-6">
+    <Layout title={`${p.title} | ${p.shop_name}`} user={props.user} nav="none" header={header} bare full seo={seo}>
+      <div class="md:hidden">
+        <Gallery images={props.images} title={p.title} overlay={overlay} />
+      </div>
+      {/* Desktop: photos beside the details and the buy / wishlist buttons (UX Pilot product page). */}
+      <section class="hidden md:grid grid-cols-2 gap-10 lg:gap-14 px-8 lg:px-12 pt-24 pb-6 max-w-6xl mx-auto">
+        <DesktopGallery images={images} title={p.title} />
+        <div class="flex flex-col">
+          <div class="flex items-center gap-3 mb-4 flex-wrap">
+            {p.category && <a href={categoryPath(p.category)} class="px-4 py-1.5 bg-brand/10 text-brand rounded-full text-[11px] font-black">{p.category}</a>}
+            <a href={`/s/${p.shop_slug}`} class="text-xs text-muted font-bold hover:text-brand">• {p.shop_name}</a>
+          </div>
+          <h1 class="text-3xl lg:text-4xl font-black text-fg mb-5 leading-tight">{p.title}</h1>
+          <div class="flex items-baseline gap-3 flex-wrap mb-8">
+            <span class="text-4xl font-black text-brand">{fa(p.price)}</span>
+            <span class="text-lg text-muted font-bold">تومان</span>
+            {soldOut ? (
+              <span class="text-xs font-bold text-white bg-red-500 px-3 py-1 rounded-xl">ناموجود</span>
+            ) : totalLeft <= 3 ? (
+              <span class="text-xs font-bold text-amber-600 bg-amber-500/15 px-3 py-1 rounded-xl">فقط {fa(totalLeft)} عدد باقی مانده</span>
+            ) : null}
+          </div>
+          {p.description && (
+            <div class="mb-8">
+              <h2 class="text-sm font-black text-fg mb-3">توضیحات محصول</h2>
+              <p class="text-sm text-muted leading-8 whitespace-pre-wrap max-w-xl">{p.description}</p>
+            </div>
+          )}
+          <div class="grid grid-cols-2 gap-4 mb-8">
+            <div class="p-5 bg-card border border-fg/5 rounded-3xl">
+              <h3 class="text-[11px] font-black text-muted mb-2"><i class="fa-solid fa-truck-fast ml-1 text-brand"></i>ارسال</h3>
+              <p class="text-sm font-bold text-fg">
+                {[props.shop.courier_enabled ? `پیک${props.shop.city ? ` در ${props.shop.city}` : ""}` : "", props.shop.post_enabled ? "پست به سراسر ایران" : ""].filter(Boolean).join(" · ") || "هماهنگی با فروشگاه"}
+              </p>
+            </div>
+            <div class="p-5 bg-card border border-fg/5 rounded-3xl">
+              <h3 class="text-[11px] font-black text-muted mb-2"><i class="fa-solid fa-gift ml-1 text-brand"></i>بسته‌بندی کادویی</h3>
+              <p class="text-sm font-bold text-fg">{props.packages.length ? `${fa(props.packages.length)} مدل، از ${props.packages.some((k) => !k.price) ? "رایگان" : toman(Math.min(...props.packages.map((k) => k.price)))}` : "ساده"}</p>
+            </div>
+          </div>
+          {props.added && (
+            <div class="rounded-2xl bg-ok/15 text-ok px-4 py-3 text-sm mb-4">
+              <i class="fa-solid fa-circle-check ml-1"></i> به لیست «{props.added}» اضافه شد. <a class="underline" href="/me/wishlists">مشاهده لیست‌ها</a>
+            </div>
+          )}
+          <div class="space-y-3">
+            <a
+              href={soldOut ? "#" : props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`}
+              rel={nofollow}
+              aria-disabled={soldOut ? "true" : undefined}
+              class={`${soldOut ? "opacity-40 pointer-events-none " : ""}w-full py-4 bg-brand text-white rounded-[28px] text-base font-black shadow-xl shadow-brand/25 hover:brightness-110 transition-all flex items-center justify-center gap-3`}
+            >
+              <i class="fa-solid fa-bag-shopping"></i>
+              {soldOut ? "ناموجود" : "خرید مستقیم"}
+            </a>
+            <a href={wishHref} rel={nofollow} class="w-full py-4 border-2 border-brand text-brand hover:bg-brand/5 rounded-[28px] text-base font-black transition-all flex items-center justify-center gap-3">
+              <i class="fa-solid fa-gift"></i>
+              {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
+            </a>
+          </div>
+        </div>
+      </section>
+      <div class="px-6 md:px-12 py-8 pb-36 md:pb-10 space-y-6 md:max-w-6xl md:mx-auto">
         {props.added && (
-          <div class="rounded-2xl bg-ok/15 text-green-300 px-4 py-3 text-sm">
+          <div class="md:hidden rounded-2xl bg-ok/15 text-ok px-4 py-3 text-sm">
             <i class="fa-solid fa-circle-check ml-1"></i> به لیست «{props.added}» اضافه شد. <a class="underline" href="/me/wishlists">مشاهده لیست‌ها</a>
           </div>
         )}
         {p.description && (
-          <div>
+          <div class="md:hidden">
             <h2 class="text-sm font-bold text-fg mb-2">توضیحات محصول</h2>
             <p class="text-sm text-muted leading-relaxed whitespace-pre-wrap">{p.description}</p>
           </div>
@@ -533,7 +630,7 @@ export function ProductPage(props: {
         </div>
       )}
 
-      <div class="fixed bottom-0 inset-x-0 md:right-64 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
+      <div class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom flex gap-3">
           <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-brand text-white text-center rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
@@ -832,7 +929,7 @@ export function WishlistPublicPage(props: {
     <header class="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-card">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <IconButton icon="fa-chevron-right" label="بازگشت" attrs={{ "data-back": "/" }} />
-        <a href="/" class="text-lg font-medium text-brand">{site.site_name}</a>
+        <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo /></a>
         <div class="flex items-center gap-2">
           <IconButton icon="fa-share-nodes" label="اشتراک" attrs={{ "data-share": props.shareUrl }} />
           <MenuButton />

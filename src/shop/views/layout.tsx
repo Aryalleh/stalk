@@ -1,7 +1,8 @@
 import type { Child } from "hono/jsx";
 import { CSS_URL } from "../../assets";
 import { useSite } from "../../render";
-import { brandRgb, socialLinks } from "../../settings";
+import { brandRgb, siteDescription, socialLinks } from "../../settings";
+import { footerLinks } from "../../pages";
 import { summary } from "../../schema";
 import { developerHref } from "../../content";
 import { ACCENTS, canUseCrm, publicName, type Accent, type User } from "../../session";
@@ -224,7 +225,7 @@ function SiteNav(props: { user: User | null; stats?: { wishes: number; gifts: nu
     <>
       <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 bg-card border-l border-fg/5 flex-col" aria-label="منوی سایت">
         <div class="px-6 pt-6 pb-4">
-          <a href="/" class="text-2xl font-black text-brand">{site.site_name}</a>
+          <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo size="lg" /></a>
         </div>
         <SiteMenu user={props.user} stats={props.stats} />
       </aside>
@@ -235,7 +236,7 @@ function SiteNav(props: { user: User | null; stats?: { wishes: number; gifts: nu
         aria-label="منوی سایت"
       >
         <div class="p-5 flex items-center justify-between">
-          <span class="text-xl font-black text-brand">{site.site_name}</span>
+          <SiteLogo />
           <button type="button" data-drawer-close aria-label="بستن منو" class="w-9 h-9 flex items-center justify-center rounded-xl text-muted">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
@@ -244,6 +245,18 @@ function SiteNav(props: { user: User | null; stats?: { wishes: number; gifts: nu
       </aside>
     </>
   );
+}
+
+/** The site's logo image (uploaded in /admin/settings), or its name in the brand color. */
+export function SiteLogo(props: { size?: "sm" | "md" | "lg"; light?: boolean }) {
+  const site = useSite();
+  const size = props.size ?? "md";
+  if (site.logo_key) {
+    const h = { sm: "h-7", md: "h-9", lg: "h-11" }[size];
+    return <img src={`/img/${site.logo_key}`} alt={site.site_name} class={`${h} w-auto max-w-[160px] object-contain`} />;
+  }
+  const text = { sm: "text-lg font-bold", md: "text-xl font-black", lg: "text-2xl font-black" }[size];
+  return <span class={`${text} ${props.light ? "text-white" : "text-brand"}`}>{site.site_name}</span>;
 }
 
 /** Top of a public profile or wishlist: the person's banner photo (darkened for the text) or a soft gradient. */
@@ -354,42 +367,106 @@ export const SOCIAL_ICON: Record<string, [string, string]> = {
   social_aparat: ["fa-solid fa-film", "آپارات"],
 };
 
+/** Site footer (UX Pilot design): brand and socials, contact card, link columns (built-in links plus
+ *  the admin's pages), app install, copyright and the trust-badge code from /admin/pages. */
 function Footer() {
   const site = useSite();
   const socials = socialLinks(site);
-  return (
-    <footer class="max-w-5xl mx-auto px-4 pt-10 pb-4 text-center text-xs text-muted space-y-3">
-      <nav class="flex flex-wrap justify-center gap-4" aria-label="پیوندهای سایت">
-        <a href="/about" class="hover:text-fg">درباره {site.site_name}</a>
-        <a href="/faq" class="hover:text-fg">سوالات متداول</a>
-        <a href="/#search" class="hover:text-fg">جستجوی هدیه</a>
-      </nav>
-      {(site.contact_phone || site.contact_email || site.contact_address) && (
-        <address class="not-italic flex flex-wrap justify-center gap-x-4 gap-y-1">
-          {site.contact_phone && <a href={`tel:${site.contact_phone.replace(/[^\d+]/g, "")}`} class="hover:text-fg dt">{site.contact_phone}</a>}
-          {site.contact_email && <a href={`mailto:${site.contact_email}`} class="hover:text-fg dt">{site.contact_email}</a>}
-          {site.contact_address && <span>{site.contact_address}</span>}
-        </address>
-      )}
-      {site.developer_name && (
-        <p class="text-[11px] text-muted/80">
-          طراحی و توسعه:{" "}
-          {developerHref(site.developer_link) ? (
-            <a href={developerHref(site.developer_link)} target="_blank" rel="noopener" class="hover:text-fg">{site.developer_name}</a>
-          ) : (
-            site.developer_name
-          )}
-        </p>
-      )}
-      {socials.length > 0 && (
-        <div class="flex justify-center gap-4 text-base">
-          {socials.map((l) => (
-            <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="hover:text-brand">
-              <i class={SOCIAL_ICON[l.key][0]}></i>
-            </a>
+  const pages = footerLinks(site);
+  const year = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric" }).format(new Date());
+  const column = (title: string, links: [string, string][]) =>
+    links.length > 0 && (
+      <div class="space-y-4">
+        <h3 class="text-xs font-black text-brand">{title}</h3>
+        <ul class="space-y-3">
+          {links.map(([href, label]) => (
+            <li><a href={href} class="text-sm font-bold text-white/55 hover:text-white transition-colors">{label}</a></li>
           ))}
+        </ul>
+      </div>
+    );
+  const bots = [
+    site.bale_bot_username && { href: `https://ble.ir/${site.bale_bot_username}`, icon: "fa-solid fa-comment-dots", label: "ربات بله" },
+    site.telegram_bot_username && { href: `https://t.me/${site.telegram_bot_username}`, icon: "fa-brands fa-telegram", label: "ربات تلگرام" },
+  ].filter(Boolean) as { href: string; icon: string; label: string }[];
+  const contact = site.contact_phone || site.contact_email || site.contact_address;
+  return (
+    <footer class="site-footer relative overflow-hidden bg-slate-950 text-white mt-12 pt-14 pb-28 md:pb-10 md:rounded-t-[40px]">
+      <div class="pointer-events-none absolute -top-32 -right-24 w-96 h-96 rounded-full bg-brand/15 blur-[110px]"></div>
+      <div class="relative max-w-6xl mx-auto px-6 md:px-10">
+        <div class="grid gap-10 lg:grid-cols-12 pb-12 border-b border-white/10">
+          <div class="lg:col-span-5 space-y-6">
+            <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo size="lg" light /></a>
+            <p class="text-sm font-medium text-white/55 leading-8 max-w-sm">{site.footer_about || siteDescription(site)}</p>
+            {socials.length > 0 && (
+              <div class="flex flex-wrap gap-3">
+                {socials.map((l) => (
+                  <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="w-11 h-11 rounded-2xl bg-white/5 flex items-center justify-center text-lg text-white/80 hover:bg-brand hover:text-white hover:-translate-y-0.5 transition-all">
+                    <i class={SOCIAL_ICON[l.key][0]}></i>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+          <div class="lg:col-span-7">
+            <div class="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8 space-y-5">
+              <div>
+                <h3 class="text-lg font-black mb-1">لیست آرزویت را بساز، کادو بگیر 🎁</h3>
+                <p class="text-xs font-bold text-white/45">محصول دلخواهت را از فروشگاه‌ها به لیست اضافه کن و لینکش را برای دوستانت بفرست.</p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-3">
+                <a href="/me/wishlists/new" rel="nofollow" class="flex-1 text-center px-6 py-3.5 bg-brand text-white rounded-2xl font-black text-sm shadow-xl shadow-brand/20 hover:brightness-110">
+                  <i class="fa-solid fa-plus ml-1"></i>ساخت لیست آرزو
+                </a>
+                <a href="/shops" class="flex-1 text-center px-6 py-3.5 bg-white/10 text-white rounded-2xl font-black text-sm hover:bg-white/15">
+                  <i class="fa-solid fa-store ml-1"></i>دیدن فروشگاه‌ها
+                </a>
+              </div>
+              {contact && (
+                <address class="not-italic flex flex-wrap gap-x-5 gap-y-2 pt-4 border-t border-white/10 text-xs font-bold text-white/55">
+                  {site.contact_phone && <a href={`tel:${site.contact_phone.replace(/[^\d+]/g, "")}`} class="hover:text-white dt"><i class="fa-solid fa-phone ml-1.5 text-brand"></i>{site.contact_phone}</a>}
+                  {site.contact_email && <a href={`mailto:${site.contact_email}`} class="hover:text-white dt"><i class="fa-solid fa-envelope ml-1.5 text-brand"></i>{site.contact_email}</a>}
+                  {site.contact_address && <span><i class="fa-solid fa-location-dot ml-1.5 text-brand"></i>{site.contact_address}</span>}
+                </address>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-10 py-12">
+          {column("کاوش و خرید", [["/", "خانه و کاوش"], ["/shops", "فروشگاه‌ها"], ["/me/wishlists", "لیست آرزوها"], ["/me/gifts", "کادوهای من"], ...pages.explore])}
+          {column("راهنما و پشتیبانی", [["/faq", "سوالات متداول"], ["/me/orders", "پیگیری سفارش"], ...pages.help, ["/about#contact", "تماس با ما"]])}
+          {column(site.site_name, [["/about", "درباره ما"], ...pages.company])}
+          <div class="space-y-4">
+            <h3 class="text-xs font-black text-brand">اپلیکیشن و ربات‌ها</h3>
+            <div class="space-y-3">
+              <button type="button" data-install class="hidden w-full flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 text-right">
+                <i class="fa-solid fa-mobile-screen-button text-2xl text-white/60"></i>
+                <span><span class="block text-[10px] font-bold text-white/40">نصب روی گوشی</span><span class="block text-sm font-black">اپ {site.site_name}</span></span>
+              </button>
+              {bots.map((b) => (
+                <a href={b.href} target="_blank" rel="noopener" class="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10">
+                  <i class={`${b.icon} text-2xl text-white/60`}></i>
+                  <span><span class="block text-[10px] font-bold text-white/40">اعلان سفارش‌ها در</span><span class="block text-sm font-black">{b.label}</span></span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="flex flex-col md:flex-row items-center gap-4 text-center">
+            <p class="text-xs font-bold text-white/35">{site.footer_copyright || `© ${year} ${site.site_name} — تمامی حقوق محفوظ است`}</p>
+            {site.developer_name && (
+              <p class="text-[11px] text-white/30">
+                طراحی و توسعه:{" "}
+                {developerHref(site.developer_link) ? <a href={developerHref(site.developer_link)} target="_blank" rel="noopener" class="hover:text-white">{site.developer_name}</a> : site.developer_name}
+              </p>
+            )}
+          </div>
+          {site.footer_embed && <div class="footer-embed flex flex-wrap items-center justify-center gap-3" dangerouslySetInnerHTML={{ __html: site.footer_embed }} />}
+        </div>
+      </div>
     </footer>
   );
 }
@@ -485,7 +562,7 @@ export function Layout(props: {
         {accent && accent !== "255 92 147" && <style dangerouslySetInnerHTML={{ __html: `:root{--c-brand:${accent}}` }} />}
         {!props.panel && <Analytics />}
       </head>
-      <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar || siteNav ? "md:pr-64" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
+      <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar || siteNav ? "md:pr-64" : ""} ${showNav ? "" : "pb-10"}`}>
         <ActingAsBar />
         {props.sidebar}
         {siteNav && <SiteNav user={props.user} stats={props.stats} />}
@@ -493,7 +570,7 @@ export function Layout(props: {
           <header class="md:hidden sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">
             <div class="px-4 py-3 flex items-center justify-between gap-3">
               <MenuButton />
-              <a href="/" class="text-xl font-bold text-brand">{site.site_name}</a>
+              <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo /></a>
               <a href={props.user ? "/me" : "/login"} rel={props.user ? undefined : "nofollow"} aria-label="پروفایل">
                 {props.user ? <Avatar user={props.user} size="w-9 h-9" /> : <span class="text-sm text-muted">ورود</span>}
               </a>
@@ -501,7 +578,7 @@ export function Layout(props: {
           </header>
         )}
         <main class={`${props.full ? "max-w-[1400px]" : props.wide ? "max-w-5xl" : "max-w-3xl"} mx-auto ${props.bare ? "" : "ui px-4 py-6"}`}>{props.children}</main>
-        {showNav && <Footer />}
+        {showNav ? <Footer /> : !props.panel && <div class="hidden md:block"><Footer /></div>}
         {showNav && <BottomNav active={nav} user={props.user} />}
         <script dangerouslySetInnerHTML={{ __html: HELPERS }} />
         {siteNav && <script dangerouslySetInnerHTML={{ __html: DRAWER_SCRIPT }} />}
