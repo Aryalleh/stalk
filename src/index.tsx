@@ -22,6 +22,7 @@ import { pwa } from "./pwa";
 import { seo } from "./seo";
 import { fromTrustedProxy } from "./proxy";
 import { actingAdmin } from "./impersonate";
+import { notFoundPage } from "./errorpage";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
@@ -128,7 +129,7 @@ app.route("/", panel);
 app.route("/", admin);
 app.route("/", bot);
 
-app.notFound((c) => c.text("پیدا نشد", 404));
+app.notFound((c) => notFoundPage(c));
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) return err.getResponse(); // e.g. the CSRF guard's 403

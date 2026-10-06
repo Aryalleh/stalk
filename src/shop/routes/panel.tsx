@@ -21,6 +21,7 @@ import { InstagramSettings, TelegramSettings } from "../crm/views";
 import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
+import { forbiddenPage } from "../../errorpage";
 
 export const panel = new Hono<Env>();
 
@@ -612,8 +613,8 @@ panel.post("/panel/settings/test", async (c) => {
 
 export const admin = new Hono<Env>();
 
-admin.use("/admin/*", async (c, next) => (currentUser(c).is_admin ? next() : c.text("دسترسی ندارید", 403)));
-admin.use("/admin", async (c, next) => (currentUser(c).is_admin ? next() : c.text("دسترسی ندارید", 403)));
+admin.use("/admin/*", async (c, next) => (currentUser(c).is_admin ? next() : forbiddenPage(c, "این بخش فقط برای مدیران سایت است.")));
+admin.use("/admin", async (c, next) => (currentUser(c).is_admin ? next() : forbiddenPage(c, "این بخش فقط برای مدیران سایت است.")));
 
 admin.get("/admin", async (c) => {
   const [shops, stats, kpi] = await c.env.DB.batch([

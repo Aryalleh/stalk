@@ -1,3 +1,4 @@
+import { forbiddenPage } from "../../errorpage";
 import { Hono } from "hono";
 import { birthDate } from "../../../lib/people";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
@@ -76,7 +77,7 @@ const db = (c: C) => c.env.DB;
 const shopOf = (c: C) => c.get("shop");
 
 // Automation, team and the shop's settings are for the shop's admins only.
-const adminOnly = async (c: C, next: () => Promise<void>) => (isShopAdmin(currentUser(c), shopOf(c)) ? next() : c.text("فقط مدیر فروشگاه دسترسی دارد", 403));
+const adminOnly = async (c: C, next: () => Promise<void>) => (isShopAdmin(currentUser(c), shopOf(c)) ? next() : forbiddenPage(c, "این بخش فقط برای مدیر فروشگاه است."));
 for (const p of ["/panel/reels", "/panel/reels/*", "/panel/automation", "/panel/automation/*", "/panel/team", "/panel/team/*", "/panel/settings", "/panel/settings/*"]) crmPanel.use(p, adminOnly);
 
 async function ctx(c: C): Promise<Ctx> {

@@ -203,13 +203,13 @@ store.get("/u/:username", async (c) => {
       .bind(person.id),
     db
       .prepare(
-        // The recipient always sees who bought each gift (unless the buyer stayed anonymous). Everyone
-        // else sees a buyer's name only if the buyer agreed to it and the recipient shows givers.
+        // A buyer who didn't stay anonymous is named under the gift: for everyone while the recipient
+        // shows givers (on by default), and always for the recipient. Anonymous buyers are never named.
         `SELECT o.product_id, o.product_title, COALESCE(p.image_key, '') AS image_key,
                 CASE WHEN o.is_anonymous = 1 THEN CASE WHEN ?3 = 1 THEN 'ناشناس' ELSE '' END
-                     WHEN ?3 = 1 OR (?2 = 1 AND o.show_on_profile = 1) THEN COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست')
+                     WHEN ?3 = 1 OR ?2 = 1 THEN COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست')
                      ELSE '' END AS giver,
-                (?2 = 1 AND o.show_on_profile = 1 AND o.is_anonymous = 0) AS giver_public
+                (?2 = 1 AND o.is_anonymous = 0) AS giver_public
          FROM orders o JOIN wishlists w ON w.id = o.wishlist_id LEFT JOIN products p ON p.id = o.product_id
          LEFT JOIN users gu ON gu.phone = o.giver_phone AND o.giver_phone <> ''
          WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD} ORDER BY o.paid_at DESC LIMIT 60`,
@@ -286,7 +286,6 @@ store.post("/gift/:itemId{[0-9]+}", async (c) => {
       phone,
       message: (f.message ?? "").slice(0, 300),
       anonymous: f.visibility === "anonymous" || f.anonymous === "1",
-      showOnProfile: f.show_on_profile === "1",
     },
     reservationMinutes(c.get("settings")),
     { packageName: pkg?.name ?? "", packagePrice: pkg?.price ?? 0, method: ship!.method, fee: ship!.fee },

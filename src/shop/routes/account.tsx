@@ -24,6 +24,7 @@ import { answerChange } from "../orders";
 const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
 import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
+import { notFoundPage } from "../../errorpage";
 
 export const account = new Hono<Env>();
 const MOBILE = /^09\d{9}$/;
@@ -437,7 +438,7 @@ account.post("/p/:id{[0-9]+}/wish", async (c) => {
   const user = currentUser(c);
   const f = await form(c);
   const w = await c.env.DB.prepare("SELECT id, title FROM wishlists WHERE id = ? AND user_id = ? AND is_direct = 0").bind(Number(f.wishlist_id), user.id).first<{ id: number; title: string }>();
-  if (!w) return c.text("لیست پیدا نشد", 404);
+  if (!w) return notFoundPage(c, "این لیست آرزو پیدا نشد یا مال شما نیست.");
   const qty = Math.min(20, Math.max(1, Math.floor(Number(f.quantity) || 1)));
   const options = await productOptions(c.env.DB, intParam(c, "id"));
   const v = pickVariant(options, hasChoice(options) ? f.variant : "|");

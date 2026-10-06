@@ -1,3 +1,4 @@
+import { forbiddenPage } from "../errorpage";
 import { Hono } from "hono";
 import { render } from "../render";
 import { inviteLink, linksFor } from "../bale/links";
@@ -44,7 +45,7 @@ export const crm = new Hono<Env>();
 crm.use(async (c, next) => {
   const user = c.get("user");
   if (!user) return c.redirect(`/login?next=${encodeURIComponent(c.req.path)}`);
-  if (!canUseCrm(user)) return c.text("دسترسی به CRM ندارید", 403);
+  if (!canUseCrm(user)) return forbiddenPage(c, "شما به CRM دسترسی ندارید.");
   await next();
 });
 
@@ -52,7 +53,7 @@ type C = Ctx;
 const me = (c: C) => c.get("user") as User;
 
 const requireAdmin = async (c: C, next: () => Promise<void>) => {
-  if (!me(c).is_admin) return c.text("دسترسی ندارید", 403);
+  if (!me(c).is_admin) return forbiddenPage(c, "این بخش فقط برای مدیران است.");
   await next();
 };
 

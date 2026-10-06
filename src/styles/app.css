@@ -160,3 +160,10 @@
 }
 .switch:checked { background-color: rgb(var(--c-brand)); background-position: left center; }
 .switch:focus-visible { outline: 3px solid rgb(var(--c-brand) / 0.4); outline-offset: 2px; }
+
+/* Error pages (404 / 403): a gently floating card, a lock that shakes now and then. */
+@keyframes err-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
+@keyframes err-shake { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(-4deg); } 40%, 80% { transform: rotate(4deg); } }
+.err-float { animation: err-float 6s ease-in-out infinite; }
+.err-shake { animation: err-shake 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .err-float, .err-shake { animation: none; } }

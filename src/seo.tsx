@@ -130,7 +130,7 @@ seo.get("/about", (c) => {
           </ol>
         </section>
         {(s.contact_phone || s.contact_email || s.contact_address || socials.length > 0) && (
-          <section class="card">
+          <section class="card scroll-mt-24" id="contact">
             <h2>راه‌های ارتباط با ما</h2>
             <div class="grid gap-3 md:grid-cols-2">
               {s.contact_phone && contact(`tel:${s.contact_phone.replace(/[^\d+]/g, "")}`, "fa-solid fa-phone", "تلفن", s.contact_phone)}

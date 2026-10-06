@@ -190,7 +190,6 @@ export interface GiverInput {
   message: string;
   anonymous: boolean;
   /** Name shown under the gift on the recipient's public profile. */
-  showOnProfile?: boolean;
 }
 
 export interface Pricing {
@@ -225,7 +224,7 @@ export async function reserveItem(db: D1Database, itemId: number, giver: GiverIn
        RETURNING id, token, amount`,
     )
     .bind(itemId, giver.name, giver.phone, giver.message, giver.anonymous ? 1 : 0, expires, t, randomSlug(24),
-      pricing.packageName, pricing.packagePrice, pricing.method, pricing.fee, giver.showOnProfile && !giver.anonymous ? 1 : 0)
+      pricing.packageName, pricing.packagePrice, pricing.method, pricing.fee, giver.anonymous ? 0 : 1)
     .first<{ id: number; token: string; amount: number }>();
 }
 

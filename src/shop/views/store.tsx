@@ -968,9 +968,7 @@ export function CheckoutPage(props: {
       var a=document.getElementById('pkg-fee');if(a)a.textContent=pp?fa(pp):'رایگان';
       var b=document.getElementById('ship-fee');if(b)b.textContent=dd?fa(dd):'رایگان';}
     f.addEventListener('change',upd);upd();
-    var sp=document.getElementById('show-on-profile');
-    function vis(){var a=f.querySelector('input[name=visibility][value=anonymous]');if(!sp||!a)return;var cb=sp.querySelector('input');cb.disabled=a.checked;if(a.checked)cb.checked=false;sp.style.opacity=a.checked?'.4':'1';}
-    f.addEventListener('change',vis);vis();})();`;
+})();`;
   const input = "w-full bg-card border border-muted/10 rounded-xl px-4 py-3 text-sm text-fg outline-hidden focus:border-brand";
   const direct = !!props.wishlist.is_direct;
   const heading = direct ? "خرید برای خودم" : "خرید کادو";
@@ -1038,14 +1036,10 @@ export function CheckoutPage(props: {
               <fieldset class="space-y-2 pt-1" id="visibility">
                 <legend class="text-xs text-muted px-1 mb-1">گیرنده شما را بشناسد؟</legend>
                 <label class="flex items-center gap-2 text-sm text-fg px-1">
-                  <input type="radio" name="visibility" value="named" checked={v.visibility !== "anonymous" && v.anonymous !== "1"} class="accent-brand" /> با نام من
+                  <input type="radio" name="visibility" value="named" checked={v.visibility !== "anonymous" && v.anonymous !== "1"} class="accent-brand" /> با نام من (نامم زیر کادو در پروفایل {props.ownerName} هم دیده می‌شود)
                 </label>
                 <label class="flex items-center gap-2 text-sm text-fg px-1">
                   <input type="radio" name="visibility" value="anonymous" checked={v.visibility === "anonymous" || v.anonymous === "1"} class="accent-brand" /> ناشناس (نامم به گیرنده نشان داده نشود)
-                </label>
-                <label class="flex items-start gap-2 text-xs text-muted px-1 pt-1" id="show-on-profile">
-                  <input type="checkbox" name="show_on_profile" value="1" checked={v.show_on_profile === "1" || !("visibility" in v)} class="accent-brand mt-0.5" />
-                  <span>نامم زیر این کادو در پروفایل عمومی {props.ownerName} هم نمایش داده شود (همه می‌بینند)</span>
                 </label>
               </fieldset>
             </>
