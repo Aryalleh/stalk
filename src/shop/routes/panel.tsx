@@ -10,7 +10,7 @@ import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettin
 import { fileField, imageError, storeImage } from "../images";
 import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
-import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
+import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
 import { AdminContentPage, AdminDeleteShopPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
@@ -268,10 +268,8 @@ panel.post("/panel/orders/:id{[0-9]+}/refund", async (c) => {
 panel.post("/panel/orders/:id{[0-9]+}/ship", async (c) => {
   const order = await shopOrder(c);
   if (!order || (order.status !== "paid" && order.status !== "shipped")) return c.notFound();
-  const tracking = ((await form(c)).tracking_code ?? "").slice(0, 60);
-  await c.env.DB.prepare("UPDATE orders SET status = 'shipped', tracking_code = ?, shipped_at = COALESCE(shipped_at, ?) WHERE id = ?")
-    .bind(tracking, now(), order.id)
-    .run();
+  const tracking = ((await form(c)).tracking_code ?? "").trim().slice(0, 60);
+  await shipOrder(deps(c), order.id, shopOf(c).id, tracking);
   return c.redirect(`/panel/orders/${order.id}?done=saved`);
 });
 

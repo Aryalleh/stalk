@@ -32,6 +32,7 @@ export interface ReceivedGift {
   product_title: string;
   image_key: string;
   giver: string; // "" = not shown
+  giver_public: number; // 1 = everyone sees the name, 0 = only the recipient
 }
 
 const fa = (n: number) => n.toLocaleString("fa-IR");
@@ -126,7 +127,12 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
                 <div class="absolute inset-0 photo-scrim"></div>
                 <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
                   <h3 class="text-xs font-bold text-fg truncate">{g.product_title}</h3>
-                  {g.giver && <p class="text-[10px] text-brand truncate">🎁 از طرف {g.giver}</p>}
+                  {g.giver && (
+                    <p class="text-[11px] font-bold text-white/90 truncate mt-0.5">
+                      <i class="fa-solid fa-gift text-brand ml-1"></i>از طرف {g.giver}
+                      {props.isMe && !g.giver_public && <span class="font-normal text-white/60"> · فقط شما می‌بینید</span>}
+                    </p>
+                  )}
                 </div>
               </a>
             ))}

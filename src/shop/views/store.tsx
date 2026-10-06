@@ -1044,7 +1044,7 @@ export function CheckoutPage(props: {
                   <input type="radio" name="visibility" value="anonymous" checked={v.visibility === "anonymous" || v.anonymous === "1"} class="accent-brand" /> ناشناس (نامم به گیرنده نشان داده نشود)
                 </label>
                 <label class="flex items-start gap-2 text-xs text-muted px-1 pt-1" id="show-on-profile">
-                  <input type="checkbox" name="show_on_profile" value="1" checked={v.show_on_profile === "1"} class="accent-brand mt-0.5" />
+                  <input type="checkbox" name="show_on_profile" value="1" checked={v.show_on_profile === "1" || !("visibility" in v)} class="accent-brand mt-0.5" />
                   <span>نامم زیر این کادو در پروفایل عمومی {props.ownerName} هم نمایش داده شود (همه می‌بینند)</span>
                 </label>
               </fieldset>

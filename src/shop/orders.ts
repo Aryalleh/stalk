@@ -1,7 +1,7 @@
 // Order actions shared by the shop panel and the bot's inline buttons.
 import { sendPhotoToChats, sendToChats, type Chats } from "../bale/botapi";
 import type { Settings } from "../settings";
-import { adjustStock, cancelOutOfStock, confirmPayment, rejectPayment, toman, type Order } from "./db";
+import { adjustStock, cancelOutOfStock, confirmPayment, now, rejectPayment, toman, type Order } from "./db";
 import { variantLabel } from "./variants";
 import { syncGiftBuyer } from "./crm/db";
 import { receiptButtons, receiptCaption, shipMessage } from "./notify";
@@ -50,6 +50,45 @@ export async function confirmOrder(d: Deps, orderId: number, shopId: number) {
   if (o) await syncGiftBuyer(d.db, o).catch((e) => console.error("crm sync", e));
   const chats = await shopOwnerChats(d.db, shopId);
   if (o && chats) await recordNotify(d.db, o.id, await sendToChats(d.settings, chats, shipMessage(o, d.siteUrl)).catch((e) => String(e)));
+  if (o) await tellPaid(d, o);
+  return true;
+}
+
+/** Payment confirmed: the buyer hears it's on its way soon, the recipient that someone bought them a gift. */
+async function tellPaid(d: Deps, o: Order) {
+  const people = await orderPeople(d.db, o);
+  await say(d, people.giver, `✅ فروشگاه پرداخت سفارش «${o.product_title}» را تأیید کرد و به‌زودی آن را ارسال می‌کند.\nپیگیری سفارش: ${orderLink(d, o)}`);
+  if (!people.isDirect) {
+    const who = o.is_anonymous ? "یک دوست ناشناس" : await giverName(d.db, o);
+    await say(d, people.owner, `🎁 ${who} برایتان «${o.product_title}» را از لیست آرزویتان خرید!\nفروشگاه پرداخت را تأیید کرد و به‌زودی کادو را برایتان می‌فرستد.`);
+  }
+}
+
+/**
+ * The shop marks the order shipped and/or sets or changes its tracking code. The buyer and the
+ * recipient hear about the shipment and about every later tracking code change. Returns false if the
+ * order can't be shipped.
+ */
+export async function shipOrder(d: Deps, orderId: number, shopId: number, tracking: string) {
+  const before = await d.db.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ?").bind(orderId, shopId).first<Order>();
+  if (!before || (before.status !== "paid" && before.status !== "shipped")) return false;
+  await d.db
+    .prepare("UPDATE orders SET status = 'shipped', tracking_code = ?, shipped_at = COALESCE(shipped_at, ?) WHERE id = ?")
+    .bind(tracking, now(), orderId)
+    .run();
+  const firstShip = before.status === "paid";
+  if (!firstShip && tracking === before.tracking_code) return true; // nothing new to tell
+  const o = { ...before, status: "shipped" as const, tracking_code: tracking };
+  const code = tracking ? `\nکد رهگیری مرسوله: ${tracking}` : "";
+  const people = await orderPeople(d.db, o);
+  if (firstShip) {
+    await say(d, people.giver, `📦 سفارش «${o.product_title}» ارسال شد.${code}\nپیگیری سفارش: ${orderLink(d, o)}`);
+    if (!people.isDirect) await say(d, people.owner, `📦 کادوی «${o.product_title}» برایتان ارسال شد و به‌زودی به دستتان می‌رسد.${code}`);
+  } else {
+    const text = tracking ? `🔄 کد رهگیری سفارش «${o.product_title}» به‌روز شد: ${tracking}` : `🔄 کد رهگیری سفارش «${o.product_title}» برداشته شد.`;
+    await say(d, people.giver, `${text}\nپیگیری سفارش: ${orderLink(d, o)}`);
+    if (!people.isDirect) await say(d, people.owner, text);
+  }
   return true;
 }
 
@@ -70,6 +109,14 @@ async function orderPeople(db: D1Database, o: Order) {
     owner: owner ? await userChats(db, "id = ?", owner.user_id) : null,
     giver: o.giver_phone ? await userChats(db, "phone = ?", o.giver_phone) : null,
   };
+}
+
+const orderLink = (d: Deps, o: Order) => `${d.siteUrl}/order/${o.token}`;
+
+/** The buyer's public name: their account nickname, else the name they typed at checkout. */
+async function giverName(db: D1Database, o: Order) {
+  const u = o.giver_phone ? await db.prepare("SELECT nickname FROM users WHERE phone = ?").bind(o.giver_phone).first<{ nickname: string }>() : null;
+  return u?.nickname || o.giver_name || "یک دوست";
 }
 
 const say = (d: Deps, to: Chats | null, text: string) => (to ? sendToChats(d.settings, to, text).catch((e) => String(e)) : Promise.resolve(""));

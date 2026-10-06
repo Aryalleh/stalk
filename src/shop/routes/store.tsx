@@ -186,6 +186,8 @@ store.get("/u/:username", async (c) => {
     .bind(c.req.param("username").toLowerCase())
     .first<PublicPerson>();
   if (!person) return c.notFound();
+  const viewer = c.get("user");
+  const isMe = viewer?.id === person.id;
   const SOLD = "('paid', 'shipped', 'delivered')";
   const [lists, gifts] = await db.batch([
     db
@@ -201,24 +203,27 @@ store.get("/u/:username", async (c) => {
       .bind(person.id),
     db
       .prepare(
-        // A giver's name appears only if they chose to be named on the profile and the owner shows givers.
+        // The recipient always sees who bought each gift (unless the buyer stayed anonymous). Everyone
+        // else sees a buyer's name only if the buyer agreed to it and the recipient shows givers.
         `SELECT o.product_id, o.product_title, COALESCE(p.image_key, '') AS image_key,
-                CASE WHEN ?2 = 1 AND o.show_on_profile = 1 AND o.is_anonymous = 0 THEN COALESCE(NULLIF(gu.nickname, ''), o.giver_name) ELSE '' END AS giver
+                CASE WHEN o.is_anonymous = 1 THEN CASE WHEN ?3 = 1 THEN 'ناشناس' ELSE '' END
+                     WHEN ?3 = 1 OR (?2 = 1 AND o.show_on_profile = 1) THEN COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست')
+                     ELSE '' END AS giver,
+                (?2 = 1 AND o.show_on_profile = 1 AND o.is_anonymous = 0) AS giver_public
          FROM orders o JOIN wishlists w ON w.id = o.wishlist_id LEFT JOIN products p ON p.id = o.product_id
          LEFT JOIN users gu ON gu.phone = o.giver_phone AND o.giver_phone <> ''
          WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD} ORDER BY o.paid_at DESC LIMIT 60`,
       )
-      .bind(person.id, person.show_givers),
+      .bind(person.id, person.show_givers, isMe ? 1 : 0),
   ]);
-  const viewer = c.get("user");
   return render(
     c,
     <PublicProfilePage
       viewer={viewer}
       person={person}
       lists={lists.results as PublicList[]}
-      gifts={person.show_received ? (gifts.results as ReceivedGift[]) : null}
-      isMe={viewer?.id === person.id}
+      gifts={person.show_received || isMe ? (gifts.results as ReceivedGift[]) : null}
+      isMe={isMe}
     />,
   );
 });
