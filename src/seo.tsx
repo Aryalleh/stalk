@@ -49,6 +49,7 @@ seo.get("/sitemap.xml", async (c) => {
   const lines = [
     url("/", { priority: "1.0" }),
     url("/about", { priority: "0.6" }),
+    url("/shops", { priority: "0.8" }),
     url("/faq", { priority: "0.6" }),
     url("/privacy", { priority: "0.2" }),
     ...categoryList(c.get("settings")).map((cat) => url(`/c/${encodeURIComponent(cat)}`, { priority: "0.7" })),

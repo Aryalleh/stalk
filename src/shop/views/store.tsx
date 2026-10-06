@@ -217,7 +217,7 @@ export function HomePage(props: {
         }
       : { description: siteDescription(site) };
   return (
-    <Layout title={title} fullTitle={isHome} user={props.user} nav={props.search ? "search" : "home"} header={header} bare wide seo={seo}>
+    <Layout title={title} fullTitle={isHome} user={props.user} nav="search" header={header} bare wide seo={seo}>
       <div class="px-4 py-6">
         {f && !props.q && !props.category && props.page === 1 && (
           <a href={`/s/${f.slug}`} class="block mb-8 overflow-hidden rounded-3xl bg-card relative h-48 group">
@@ -250,7 +250,7 @@ export function HomePage(props: {
             {props.q && <>نتیجه جستجوی «<b class="text-fg">{props.q}</b>»</>} {props.category && <>در دسته <b class="text-fg">{props.category}</b></>}
           </p>
         )}
-        {isHome && props.products.length > 0 && <h2 class="text-lg font-bold mb-4">تازه‌ترین هدیه‌ها</h2>}
+        {!props.q && !props.category && props.products.length > 0 && <h2 class="text-lg font-bold mb-4">تازه‌ترین هدیه‌ها</h2>}
         <Masonry products={props.products} empty={props.search && !props.q && !props.category ? "دنبال چه هدیه‌ای می‌گردی؟" : undefined} />
         <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(search, props.q, props.category)} />
         {isHome && props.page === 1 && <HomeGuide categories={props.categories} />}
@@ -533,6 +533,75 @@ export function ProductPage(props: {
             <i class="fa-solid fa-bag-shopping ml-1"></i> {soldOut ? "ناموجود" : "خرید مستقیم"}
           </a>
         </div>
+      </div>
+    </Layout>
+  );
+}
+
+export interface ShopCard {
+  id: number;
+  name: string;
+  slug: string;
+  city: string;
+  description: string;
+  logo_key: string;
+  cover_key: string;
+  products: number;
+}
+
+/** /shops: every approved shop as a card (cover, logo, name, city, product count), searchable. */
+export function ShopsPage(props: { user: User | null; shops: ShopCard[]; q: string }) {
+  const site = useSite();
+  const fa = (n: number) => n.toLocaleString("fa-IR");
+  const seo: Seo = {
+    index: !props.q,
+    canonical: "/shops",
+    description: `فروشگاه‌های ${site.site_name}: ${fa(props.shops.length)} فروشگاه هدیه و کادو. محصولاتشان را ببینید، به لیست آرزو اضافه کنید یا مستقیم بخرید.`,
+  };
+  return (
+    <Layout title={props.q ? `فروشگاه‌ها: ${props.q}` : "فروشگاه‌ها"} user={props.user} nav="shops" bare wide seo={seo}>
+      <div class="px-4 py-6">
+        <h1 class="text-xl font-black mb-1">فروشگاه‌ها</h1>
+        <p class="text-xs text-muted mb-4">{fa(props.shops.length)} فروشگاه{props.q ? ` برای «${props.q}»` : ""}</p>
+        <form method="get" action="/shops" class="relative mb-6" role="search">
+          <input name="q" value={props.q} type="search" placeholder="جستجوی نام فروشگاه یا شهر…" class="w-full bg-card rounded-2xl py-3.5 pr-11 pl-4 text-sm border border-fg/5" />
+          <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-muted"></i>
+        </form>
+        {props.shops.length ? (
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {props.shops.map((s) => (
+              <a href={`/s/${s.slug}`} class="group block bg-card rounded-[28px] overflow-hidden border border-fg/5 shadow-sm hover:shadow-xl transition-shadow">
+                <div class="h-28 relative overflow-hidden">
+                  {s.cover_key ? (
+                    <img src={`/img/${s.cover_key}`} alt="" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                  ) : (
+                    <div class="w-full h-full bg-gradient-to-br from-brand/40 to-plum"></div>
+                  )}
+                  <div class="absolute inset-0 photo-scrim-soft"></div>
+                </div>
+                <div class="px-4 pb-4 pt-2 relative flex items-end gap-3">
+                  <div class="-mt-10 w-16 h-16 rounded-2xl bg-ink overflow-hidden flex items-center justify-center text-2xl font-bold text-brand shrink-0 border-4 border-card shadow-md">
+                    {s.logo_key ? <img src={`/img/${s.logo_key}`} alt={s.name} loading="lazy" class="w-full h-full object-cover" /> : s.name.charAt(0)}
+                  </div>
+                  <div class="min-w-0 flex-1 pb-0.5">
+                    <h2 class="text-sm font-black truncate">{s.name}</h2>
+                    <p class="text-[11px] text-muted truncate">
+                      {s.city && <><i class="fa-solid fa-location-dot text-brand ml-1"></i>{s.city} · </>}
+                      {fa(s.products)} محصول
+                    </p>
+                  </div>
+                  <i class="fa-solid fa-chevron-left text-muted text-xs pb-2"></i>
+                </div>
+                {s.description && <p class="px-4 pb-4 -mt-1 text-xs text-muted line-clamp-2 leading-6">{s.description}</p>}
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div class="text-center text-muted py-16">
+            <i class="fa-solid fa-store-slash text-4xl mb-3 block"></i>
+            {props.q ? "فروشگاهی با این نام یا شهر پیدا نشد." : "هنوز فروشگاهی ثبت نشده."}
+          </div>
+        )}
       </div>
     </Layout>
   );

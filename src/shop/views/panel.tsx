@@ -914,6 +914,7 @@ export function AdminPage(props: {
   stats: { shop_id: number; name: string; orders: number; total: number; unsent: number }[];
   kpi: { shops: number; pendingShops: number; users: number; customers: number; openConversations: number; instagramShops: number; giftGmv: number; directGmv: number };
   featuredId: number;
+  deleted?: string;
 }) {
   const k = props.kpi;
   const fa = (n: number) => n.toLocaleString("fa-IR");
@@ -927,6 +928,7 @@ export function AdminPage(props: {
   return (
     <AdminShell title="مدیریت" user={props.user} on="/admin">
       <h1>داشبورد پلتفرم</h1>
+      {props.deleted && <div class="okbox">فروشگاه «{props.deleted}» و همه اطلاعاتش حذف شد.</div>}
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {box("فروشگاه‌ها", fa(k.shops), k.pendingShops ? `${fa(k.pendingShops)} منتظر تأیید` : undefined)}
         {box("کاربران", fa(k.users))}
@@ -960,6 +962,7 @@ export function AdminPage(props: {
                     {s.status !== "approved" && <button class="small" name="status" value="approved">تأیید</button>}
                     {s.status !== "suspended" && <button class="small secondary" name="status" value="suspended">تعلیق</button>}
                   </form>
+                  <a href={`/admin/shops/${s.id}/delete`} class="text-[11px] !text-red-500 block mt-1.5"><i class="fa-solid fa-trash-can ml-1"></i>حذف فروشگاه</a>
                   {s.status === "approved" && (
                     <form method="post" action="/admin/featured" style="margin-top:6px">
                       {props.featuredId === s.id ? (
@@ -1118,6 +1121,42 @@ export function AdminUsersPage(props: {
         ) : (
           <p class="muted small">هنوز موردی نیست.</p>
         )}
+      </div>
+    </AdminShell>
+  );
+}
+
+/** Confirmation before deleting a shop for good: what goes with it, and the shop's address typed back. */
+export function AdminDeleteShopPage(props: {
+  user: User;
+  shop: Shop;
+  footprint: { products: number; orders: number; open_orders: number; wishes: number; customers: number; crm_orders: number };
+  error?: string;
+}) {
+  const s = props.shop;
+  const f = props.footprint;
+  const fa = (n: number) => n.toLocaleString("fa-IR");
+  return (
+    <AdminShell title="حذف فروشگاه" user={props.user} on="/admin">
+      <p class="mb-3"><a href="/admin" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>بازگشت</a></p>
+      <h1>حذف فروشگاه «{s.name}»</h1>
+      <Errors errors={[props.error]} />
+      <div class="card">
+        <div class="errbox">این کار برگشت‌پذیر نیست. اگر فقط می‌خواهید فروشگاه دیده نشود، «تعلیق» کافی است.</div>
+        <p class="small">همراه فروشگاه این‌ها برای همیشه حذف می‌شوند:</p>
+        <ul class="small list-disc pr-5 leading-8">
+          <li>{fa(f.products)} محصول، با عکس‌ها، بسته‌بندی‌ها و موجودی</li>
+          <li>{fa(f.orders)} سفارش کادو{f.open_orders ? <b class="text-red-500"> (که {fa(f.open_orders)} تا هنوز باز است: منتظر تأیید یا ارسال)</b> : null}</li>
+          <li>{fa(f.wishes)} آرزو در لیست‌های کاربران که این محصولات را داشتند</li>
+          <li>{fa(f.customers)} مشتری CRM، گفتگوها، یادداشت‌ها، وظایف و {fa(f.crm_orders)} سفارش دایرکت</li>
+          <li>اتصال اینستاگرام و تلگرام فروشگاه، و عکس لوگو و کاور</li>
+        </ul>
+        <p class="small muted">حساب کاربری صاحب فروشگاه ({s.phone}) حذف نمی‌شود و فقط دیگر فروشگاهی ندارد.</p>
+        <form method="post" action={`/admin/shops/${s.id}/delete`}>
+          <label>برای تأیید، آدرس فروشگاه را بنویسید: <b class="ltr">{s.slug}</b></label>
+          <input name="confirm_slug" class="ltr" autocomplete="off" required />
+          <p><button class="!bg-red-500 !border-red-500"><i class="fa-solid fa-trash-can ml-1"></i> حذف همیشگی فروشگاه</button></p>
+        </form>
       </div>
     </AdminShell>
   );

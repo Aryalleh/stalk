@@ -12,9 +12,10 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
+import { deleteShop, shopFootprint } from "../delete";
 import { postProductToChannel, shareError } from "../telegram/share";
 import { InstagramSettings, TelegramSettings } from "../crm/views";
 import { miniAppLink } from "../telegram/channel";
@@ -648,6 +649,7 @@ admin.get("/admin", async (c) => {
       stats={stats.results as never}
       kpi={kpi.results[0] as never}
       featuredId={Number(c.get("settings").featured_shop_id) || 0}
+      deleted={c.req.query("deleted")}
     />,
   );
 });
@@ -668,6 +670,26 @@ admin.post("/admin/shops/:id{[0-9]+}/status", async (c) => {
     }
   }
   return c.redirect("/admin");
+});
+
+// Delete a shop for good: a confirmation page with what will be removed, then the delete itself
+// (the admin types the shop's address to confirm).
+admin.get("/admin/shops/:id{[0-9]+}/delete", async (c) => {
+  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(intParam(c, "id")).first<Shop>();
+  if (!shop) return c.notFound();
+  return render(c, <AdminDeleteShopPage user={currentUser(c)} shop={shop} footprint={await shopFootprint(c.env.DB, shop.id)} />);
+});
+
+admin.post("/admin/shops/:id{[0-9]+}/delete", async (c) => {
+  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(intParam(c, "id")).first<Shop>();
+  if (!shop) return c.notFound();
+  if ((await form(c)).confirm_slug !== shop.slug) {
+    return render(c, <AdminDeleteShopPage user={currentUser(c)} shop={shop} footprint={await shopFootprint(c.env.DB, shop.id)} error="آدرس فروشگاه را درست وارد کنید." />, 400);
+  }
+  const keys = await deleteShop(c.env.DB, shop.id);
+  if (keys?.length) c.executionCtx.waitUntil(c.env.IMAGES.delete(keys).catch((e) => console.error("delete shop images", e)));
+  console.log(`admin ${currentUser(c).id} deleted shop ${shop.id} (${shop.slug})`);
+  return c.redirect(`/admin?deleted=${encodeURIComponent(shop.name)}`);
 });
 
 // "Shop of the week" banner on the home page (0 removes it).

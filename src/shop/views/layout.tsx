@@ -9,7 +9,7 @@ import { ACCENTS, canUseCrm, type Accent, type User } from "../../session";
 // Visual language from the designs in html/: dark ink background, cards #221c26, pink accent,
 // sticky blurred header, bottom tab bar with a raised "+" button on phones.
 
-export type NavKey = "home" | "wishes" | "search" | "profile" | "none";
+export type NavKey = "home" | "shops" | "wishes" | "search" | "profile" | "none";
 
 // Icons and the Vazirmatn font are self-hosted (src/fonts.ts); preloading the font avoids a late text swap.
 const HEAD_LINKS = <link rel="preload" href="/static/fonts/vazirmatn.woff2" as="font" type="font/woff2" crossorigin="anonymous" />;
@@ -117,21 +117,18 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
     </a>
   );
   return (
-    <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/90 backdrop-blur-lg border-t border-card px-6 pt-3 safe-bottom flex items-center justify-between">
-      {item("home", "/", "fa-store", "فروشگاه")}
-      {item("wishes", "/me/wishlists", "fa-gift", "آرزوها")}
+    <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/90 backdrop-blur-lg border-t border-card px-10 pt-3 safe-bottom flex items-center justify-between">
+      {item("shops", "/shops", "fa-store", "فروشگاه‌ها")}
       <div class="relative -top-6">
         <a
-          href="/me/wishlists/new"
-          rel={props.user ? undefined : "nofollow"}
-          aria-label="لیست آرزوی جدید"
-          class="w-14 h-14 bg-brand text-white rounded-full shadow-lg shadow-brand/40 flex items-center justify-center text-xl"
+          href="/search"
+          aria-label="جستجو و کاوش محصولات"
+          class={`w-14 h-14 bg-brand text-white rounded-full shadow-lg shadow-brand/40 flex items-center justify-center text-xl ${props.active === "search" || props.active === "home" ? "ring-4 ring-brand/25" : ""}`}
         >
-          <i class="fa-solid fa-plus"></i>
+          <i class="fa-solid fa-magnifying-glass"></i>
         </a>
       </div>
-      {item("search", "/search", "fa-magnifying-glass", "جستجو")}
-      {item("profile", "/me", "fa-user", "پروفایل")}
+      {item("wishes", "/me/wishlists", "fa-gift", "آرزوها")}
     </nav>
   );
 }
@@ -140,8 +137,8 @@ function DesktopNav(props: { user: User | null }) {
   const u = props.user;
   return (
     <div class="hidden md:flex items-center gap-5 text-sm text-muted">
-      <a href="/" class="hover:text-fg">فروشگاه</a>
-      <a href="/search" class="hover:text-fg">جستجو</a>
+      <a href="/shops" class="hover:text-fg">فروشگاه‌ها</a>
+      <a href="/search" class="hover:text-fg">جستجو و کاوش</a>
       {u ? (
         <>
           <a href="/me/wishlists" class="hover:text-fg">آرزوهای من</a>

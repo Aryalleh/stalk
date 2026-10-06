@@ -23,12 +23,13 @@ import {
 import { PUBLIC_IMAGE } from "../images";
 import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGift } from "../views/profile";
 import { sendReceiptToShop } from "../orders";
-import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView } from "../views/store";
+import { CheckoutPage, HomePage, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
 export const store = new Hono<Env>();
 
-// Home feed and /search share one view: search box, category chips and a masonry of products.
+// Home and /search share one view (explore): search box, category chips, the shop of the week and a
+// masonry of all products (or the search results).
 async function feed(c: C, search: boolean, cat = c.req.query("cat") ?? "") {
   const q = search ? (c.req.query("q") ?? "").trim().slice(0, 100) : "";
   const categories = categoryList(c.get("settings"));
@@ -36,8 +37,8 @@ async function feed(c: C, search: boolean, cat = c.req.query("cat") ?? "") {
   const page = pageParam(c);
   const featuredId = Number(c.get("settings").featured_shop_id) || 0;
   const [products, featured] = await Promise.all([
-    search && !q && !category ? [] : listProducts(c.env.DB, { q, category, limit: PAGE + 1, offset: (page - 1) * PAGE }),
-    !search && featuredId
+    listProducts(c.env.DB, { q, category, limit: PAGE + 1, offset: (page - 1) * PAGE }),
+    !q && !category && featuredId
       ? c.env.DB.prepare("SELECT name, slug, description, cover_key, logo_key FROM shops WHERE id = ? AND status = 'approved'").bind(featuredId).first<FeaturedShop>()
       : null,
   ]);
@@ -104,6 +105,22 @@ store.get("/p/:id{[0-9]+}", async (c) => {
       error={error}
     />,
   );
+});
+
+// ---------- all shops ----------
+
+store.get("/shops", async (c) => {
+  const q = (c.req.query("q") ?? "").trim().slice(0, 60);
+  const like = `%${q.replace(/[%_]/g, "")}%`;
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.id, s.name, s.slug, s.city, s.description, s.logo_key, s.cover_key,
+            (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id AND p.is_active = 1) AS products
+     FROM shops s WHERE s.status = 'approved' ${q ? "AND (s.name LIKE ?1 OR s.city LIKE ?1 OR s.description LIKE ?1)" : ""}
+     ORDER BY (s.id = ${Number(c.get("settings").featured_shop_id) || 0}) DESC, products DESC, s.created_at DESC LIMIT 300`,
+  )
+    .bind(...(q ? [like] : []))
+    .all<ShopCard>();
+  return render(c, <ShopsPage user={c.get("user")} shops={results} q={q} />);
 });
 
 store.get("/s/:slug", async (c) => {
