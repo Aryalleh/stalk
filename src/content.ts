@@ -38,6 +38,18 @@ export const STEPS: [string, string][] = [
 ];
 
 
+/** The About page's "how it works" steps: the admin's lines ("title | text"), the built-in ones, or none. */
+export function aboutSteps(s: Settings): [string, string][] {
+  const raw = s.about_steps.trim();
+  if (!raw) return STEPS;
+  if (raw === "-") return [];
+  return raw
+    .split("\n")
+    .map((l) => l.split("|").map((x) => x.trim()))
+    .filter(([t, d]) => t && d)
+    .map(([t, d]) => [t, d] as [string, string]);
+}
+
 export const aboutTitle = (s: Settings) => s.about_title || `${s.site_name} چیست؟`;
 
 export const defaultAboutBody = (s: Settings) =>

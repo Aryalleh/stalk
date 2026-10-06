@@ -765,6 +765,7 @@ admin.post("/admin/content", async (c) => {
   const values: Partial<Settings> = {
     about_title: one("about_title", 120),
     about_body: (f.about_body ?? "").replace(/\r/g, "").trim().slice(0, 6000),
+    about_steps: (f.about_steps ?? "").replace(/\r/g, "").trim().slice(0, 3000),
     developer_name: one("developer_name", 80),
     developer_link: one("developer_link", 200),
     contact_phone: one("contact_phone", 30),

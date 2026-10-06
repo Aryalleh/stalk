@@ -1431,6 +1431,20 @@ export function AdminPagesPage(props: { user: User; s: Settings; pages: (Page & 
           <table>
             <thead><tr><th>عنوان</th><th>آدرس</th><th>ستون فوتر</th><th>وضعیت</th><th></th></tr></thead>
             <tbody>
+              <tr>
+                <td><b>درباره ما</b></td>
+                <td class="ltr"><a href="/about" target="_blank" rel="noopener">/about</a></td>
+                <td>{FOOTER_COLUMNS.company}</td>
+                <td>{s.about_body || s.about_title || s.about_steps ? <span class="tag">ویرایش‌شده</span> : <span class="muted small">متن پیش‌فرض</span>}</td>
+                <td><a class="btn small secondary" href="/admin/content#about">ویرایش</a></td>
+              </tr>
+              <tr>
+                <td><b>سوالات متداول</b></td>
+                <td class="ltr"><a href="/faq" target="_blank" rel="noopener">/faq</a></td>
+                <td>{FOOTER_COLUMNS.help}</td>
+                <td>{s.faq_items ? <span class="tag">ویرایش‌شده</span> : <span class="muted small">متن پیش‌فرض</span>}</td>
+                <td><a class="btn small secondary" href="/admin/content#faq">ویرایش</a></td>
+              </tr>
               {props.pages.map((p) => (
                 <tr>
                   <td><b>{p.title}</b></td>
@@ -1506,7 +1520,7 @@ export function AdminContentPage(props: { user: User; s: Settings; faq: [string,
       <Errors errors={[props.error]} />
       {props.ok && <div class="okbox">{props.ok}</div>}
       <form method="post" action="/admin/content">
-        <div class="card">
+        <div class="card" id="about">
           <div class="row">
             <h2 style="margin:0">صفحه «درباره ما»</h2>
             <span class="sp" />
@@ -1516,6 +1530,10 @@ export function AdminContentPage(props: { user: User; s: Settings; faq: [string,
           <input name="about_title" value={s.about_title} maxlength={120} placeholder={`${s.site_name} چیست؟`} />
           <label>متن (خالی = متن پیش‌فرض). پاراگراف‌ها را با یک خط خالی جدا کنید؛ خطی که با «-» شروع شود، فهرست نقطه‌دار می‌شود.</label>
           <textarea name="about_body" maxlength={6000} style="min-height:220px">{s.about_body}</textarea>
+          <p class="muted small">قالب‌بندی: «## » تیتر، «- » فهرست، **متن پررنگ**، [متن لینک](https://… یا /آدرس).</p>
+          <label>مراحل «چطور کار می‌کند» — هر خط یک مرحله: «عنوان | توضیح». خالی = مراحل پیش‌فرض، فقط «-» = بدون این بخش.</label>
+          <textarea name="about_steps" maxlength={3000} style="min-height:120px" placeholder={"لیست آرزو بساز | وارد شو و یک لیست آرزو بساز.\nلینک را بفرست | لینک لیست را برای دوستانت بفرست."}>{s.about_steps}</textarea>
+          <p class="muted small">لوگوی بالای صفحه از <a href="/admin/settings#logo">تنظیمات سایت ← لوگو</a> می‌آید.</p>
         </div>
 
         <div class="card">
@@ -1546,7 +1564,7 @@ export function AdminContentPage(props: { user: User; s: Settings; faq: [string,
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="faq">
           <div class="row">
             <h2 style="margin:0">سوالات متداول</h2>
             <span class="sp" />

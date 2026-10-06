@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import type { C, Env } from "./env";
 import { organizationLd, summary } from "./schema";
-import { STEPS, aboutBlocks, aboutTitle, developerHref, faqs } from "./content";
+import { aboutBlocks, aboutSteps, aboutTitle, defaultAboutBody, developerHref, faqs } from "./content";
 import { render, siteOrigin } from "./render";
 import { categoryList, siteDescription, socialLinks, type Settings } from "./settings";
-import { Layout, SOCIAL_ICON } from "./shop/views/layout";
+import { Layout, SOCIAL_ICON, SiteLogo } from "./shop/views/layout";
 import { PageText, SLUG_RE, allPages, getPage } from "./pages";
 
 // Search engines and AI answer engines: robots.txt, sitemap.xml, llms.txt, and the About / FAQ
@@ -76,6 +76,8 @@ seo.get("/about", (c) => {
   const s = c.get("settings");
   const origin = siteOrigin(c);
   const blocks = aboutBlocks(s);
+  const steps = aboutSteps(s);
+  const fa = (n: number) => n.toLocaleString("fa-IR");
   const firstText = blocks.find((b) => b.kind === "p");
   const description = summary(firstText && firstText.kind === "p" ? firstText.text : siteDescription(s), 158);
   const dev = developerHref(s.developer_link);
@@ -84,7 +86,7 @@ seo.get("/about", (c) => {
     "@type": "HowTo",
     name: `کادو گرفتن با ${s.site_name}`,
     description,
-    step: STEPS.map(([name, text], i) => ({ "@type": "HowToStep", position: i + 1, name, text, url: `${origin}/about#step-${i + 1}` })),
+    step: steps.map(([name, text], i) => ({ "@type": "HowToStep", position: i + 1, name, text, url: `${origin}/about#step-${i + 1}` })),
   };
   const page = {
     "@context": "https://schema.org",
@@ -107,56 +109,57 @@ seo.get("/about", (c) => {
   const handle = (url: string) => url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
   return render(
     c,
-    <Layout title={aboutTitle(s)} user={c.get("user")} seo={{ index: true, description, type: "article", jsonLd: [organization(c), page, howTo] }}>
-      <article class="space-y-6">
-        <header class="text-center pt-2">
-          <img src="/static/icon-192.png" alt={s.site_name} width="72" height="72" class="mx-auto mb-4 rounded-2xl" />
-          <h1>{aboutTitle(s)}</h1>
+    <Layout title={aboutTitle(s)} user={c.get("user")} bare wide seo={{ index: true, description, type: "article", jsonLd: [organization(c), page, ...(steps.length ? [howTo] : [])] }}>
+      <article class="px-4 md:px-10 py-8 md:py-12 max-w-3xl space-y-6">
+        <header class="text-center md:text-right space-y-4">
+          <div class="flex justify-center md:justify-start">
+            {s.logo_key ? <SiteLogo size="lg" /> : <img src="/static/icon-192.png" alt={s.site_name} width="72" height="72" class="rounded-2xl" />}
+          </div>
+          <h1 class="text-2xl md:text-4xl font-black text-fg">{aboutTitle(s)}</h1>
         </header>
-        <section class="space-y-4 leading-8">
-          {blocks.map((b) =>
-            b.kind === "p" ? (
-              <p>{b.text}</p>
-            ) : (
-              <ul class="list-disc pr-5 space-y-1">{b.items.map((i) => <li>{i}</li>)}</ul>
-            ),
-          )}
-        </section>
-        <section class="card">
-          <h2>کادو گرفتن در ۴ قدم</h2>
-          <ol class="list-decimal pr-5 space-y-3 text-sm leading-7">
-            {STEPS.map(([name, text], i) => (
-              <li id={`step-${i + 1}`}><b>{name}:</b> {text}</li>
-            ))}
-          </ol>
-        </section>
+        <div class="bg-card rounded-[28px] border border-fg/5 p-5 md:p-8">
+          <PageText text={s.about_body || defaultAboutBody(s)} />
+        </div>
+        {steps.length > 0 && (
+          <section class="bg-card rounded-[28px] border border-fg/5 p-5 md:p-8">
+            <h2 class="text-lg font-black text-fg mb-5">کادو گرفتن در {fa(steps.length)} قدم</h2>
+            <ol class="grid gap-4 md:grid-cols-2">
+              {steps.map(([name, text], i) => (
+                <li id={`step-${i + 1}`} class="flex gap-3 p-4 rounded-2xl bg-ink">
+                  <span class="w-9 h-9 rounded-xl bg-brand text-white font-black flex items-center justify-center shrink-0">{fa(i + 1)}</span>
+                  <span class="text-sm leading-7"><b class="block text-fg">{name}</b><span class="text-muted">{text}</span></span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
         {(s.contact_phone || s.contact_email || s.contact_address || socials.length > 0) && (
-          <section class="card scroll-mt-24" id="contact">
-            <h2>راه‌های ارتباط با ما</h2>
+          <section class="bg-card rounded-[28px] border border-fg/5 p-5 md:p-8 scroll-mt-24" id="contact">
+            <h2 class="text-lg font-black text-fg mb-4">راه‌های ارتباط با ما</h2>
             <div class="grid gap-3 md:grid-cols-2">
               {s.contact_phone && contact(`tel:${s.contact_phone.replace(/[^\d+]/g, "")}`, "fa-solid fa-phone", "تلفن", s.contact_phone)}
               {s.contact_email && contact(`mailto:${s.contact_email}`, "fa-solid fa-envelope", "ایمیل", s.contact_email)}
               {socials.map((l) => contact(l.url, SOCIAL_ICON[l.key][0], SOCIAL_ICON[l.key][1], handle(l.url), true))}
             </div>
             {s.contact_address && (
-              <p class="text-sm mt-4"><i class="fa-solid fa-location-dot text-brand ml-2"></i>{s.contact_address}</p>
+              <p class="text-sm text-fg mt-4"><i class="fa-solid fa-location-dot text-brand ml-2"></i>{s.contact_address}</p>
             )}
           </section>
         )}
         {s.developer_name && (
-          <section class="card flex items-center gap-4">
+          <section class="bg-card rounded-[28px] border border-fg/5 p-5 flex items-center gap-4">
             <span class="w-12 h-12 rounded-2xl bg-brand/15 text-brand flex items-center justify-center text-xl shrink-0"><i class="fa-solid fa-code"></i></span>
             <div class="min-w-0">
-              <p class="text-[11px] muted" style="margin:0">طراحی و توسعه</p>
+              <p class="text-[11px] text-muted">طراحی و توسعه</p>
               {dev ? (
-                <a href={dev} target="_blank" rel="noopener" class="font-bold">{s.developer_name} <span class="text-xs muted ltr">{handle(dev)}</span></a>
+                <a href={dev} target="_blank" rel="noopener" class="font-bold text-fg hover:text-brand">{s.developer_name} <span class="text-xs text-muted ltr">{handle(dev)}</span></a>
               ) : (
-                <b>{s.developer_name}</b>
+                <b class="text-fg">{s.developer_name}</b>
               )}
             </div>
           </section>
         )}
-        <p class="text-sm">سوال دیگری دارید؟ <a href="/faq">سوالات متداول</a> را ببینید.</p>
+        <p class="text-sm text-muted">سوال دیگری دارید؟ <a href="/faq" class="text-brand font-bold">سوالات متداول</a> را ببینید.</p>
       </article>
     </Layout>,
   );

@@ -24,6 +24,8 @@ export const DEFAULTS = {
   faq_items: "",
   about_title: "",
   about_body: "",
+  // About page steps, one per line "title | text" ("" = built-in steps, "-" = no steps section).
+  about_steps: "",
   developer_name: "",
   developer_link: "", // site URL, t.me link or @telegram_id
   // Public contact details and profiles: shown in the footer and published as Organization data.

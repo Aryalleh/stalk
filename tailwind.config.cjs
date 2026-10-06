@@ -12,7 +12,7 @@ module.exports = {
         fg: v("fg"), // text
         muted: v("muted"), // secondary text
         brand: v("brand"), // accent (blue by default)
-        ok: "#1b7f3b", // success
+        ok: v("ok"), // success (lighter on the dark theme)
         tg: "#229ED9", // Telegram
         bale: "#2db57d", // Bale
       },

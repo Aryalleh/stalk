@@ -380,7 +380,7 @@ function Footer() {
         <h3 class="text-xs font-black text-brand">{title}</h3>
         <ul class="space-y-3">
           {links.map(([href, label]) => (
-            <li><a href={href} class="text-sm font-bold text-white/55 hover:text-white transition-colors">{label}</a></li>
+            <li><a href={href} class="text-sm font-bold text-muted hover:text-brand transition-colors">{label}</a></li>
           ))}
         </ul>
       </div>
@@ -391,17 +391,17 @@ function Footer() {
   ].filter(Boolean) as { href: string; icon: string; label: string }[];
   const contact = site.contact_phone || site.contact_email || site.contact_address;
   return (
-    <footer class="site-footer relative overflow-hidden bg-slate-950 text-white mt-12 pt-14 pb-28 md:pb-10 md:rounded-t-[40px]">
+    <footer class="site-footer relative overflow-hidden bg-card text-fg border-t border-fg/5 mt-12 pt-14 pb-28 md:pb-10 md:rounded-t-[40px]">
       <div class="pointer-events-none absolute -top-32 -right-24 w-96 h-96 rounded-full bg-brand/15 blur-[110px]"></div>
       <div class="relative max-w-6xl mx-auto px-6 md:px-10">
-        <div class="grid gap-10 lg:grid-cols-12 pb-12 border-b border-white/10">
+        <div class="grid gap-10 lg:grid-cols-12 pb-12 border-b border-fg/10">
           <div class="lg:col-span-5 space-y-6">
-            <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo size="lg" light /></a>
-            <p class="text-sm font-medium text-white/55 leading-8 max-w-sm">{site.footer_about || siteDescription(site)}</p>
+            <a href="/" aria-label={site.site_name} class="inline-flex"><SiteLogo size="lg" /></a>
+            <p class="text-sm font-medium text-muted leading-8 max-w-sm">{site.footer_about || siteDescription(site)}</p>
             {socials.length > 0 && (
               <div class="flex flex-wrap gap-3">
                 {socials.map((l) => (
-                  <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="w-11 h-11 rounded-2xl bg-white/5 flex items-center justify-center text-lg text-white/80 hover:bg-brand hover:text-white hover:-translate-y-0.5 transition-all">
+                  <a href={l.url} target="_blank" rel="noopener me" aria-label={SOCIAL_ICON[l.key][1]} class="w-11 h-11 rounded-2xl bg-ink flex items-center justify-center text-lg text-fg/70 hover:bg-brand hover:text-brand hover:-translate-y-0.5 transition-all">
                     <i class={SOCIAL_ICON[l.key][0]}></i>
                   </a>
                 ))}
@@ -409,23 +409,23 @@ function Footer() {
             )}
           </div>
           <div class="lg:col-span-7">
-            <div class="bg-white/5 border border-white/10 rounded-[32px] p-6 md:p-8 space-y-5">
+            <div class="bg-ink border border-fg/5 rounded-[32px] p-6 md:p-8 space-y-5">
               <div>
                 <h3 class="text-lg font-black mb-1">لیست آرزویت را بساز، کادو بگیر 🎁</h3>
-                <p class="text-xs font-bold text-white/45">محصول دلخواهت را از فروشگاه‌ها به لیست اضافه کن و لینکش را برای دوستانت بفرست.</p>
+                <p class="text-xs font-bold text-muted">محصول دلخواهت را از فروشگاه‌ها به لیست اضافه کن و لینکش را برای دوستانت بفرست.</p>
               </div>
               <div class="flex flex-col sm:flex-row gap-3">
                 <a href="/me/wishlists/new" rel="nofollow" class="flex-1 text-center px-6 py-3.5 bg-brand text-white rounded-2xl font-black text-sm shadow-xl shadow-brand/20 hover:brightness-110">
                   <i class="fa-solid fa-plus ml-1"></i>ساخت لیست آرزو
                 </a>
-                <a href="/shops" class="flex-1 text-center px-6 py-3.5 bg-white/10 text-white rounded-2xl font-black text-sm hover:bg-white/15">
+                <a href="/shops" class="flex-1 text-center px-6 py-3.5 bg-card text-fg border border-fg/10 rounded-2xl font-black text-sm hover:border-brand/40">
                   <i class="fa-solid fa-store ml-1"></i>دیدن فروشگاه‌ها
                 </a>
               </div>
               {contact && (
-                <address class="not-italic flex flex-wrap gap-x-5 gap-y-2 pt-4 border-t border-white/10 text-xs font-bold text-white/55">
-                  {site.contact_phone && <a href={`tel:${site.contact_phone.replace(/[^\d+]/g, "")}`} class="hover:text-white dt"><i class="fa-solid fa-phone ml-1.5 text-brand"></i>{site.contact_phone}</a>}
-                  {site.contact_email && <a href={`mailto:${site.contact_email}`} class="hover:text-white dt"><i class="fa-solid fa-envelope ml-1.5 text-brand"></i>{site.contact_email}</a>}
+                <address class="not-italic flex flex-wrap gap-x-5 gap-y-2 pt-4 border-t border-fg/10 text-xs font-bold text-muted">
+                  {site.contact_phone && <a href={`tel:${site.contact_phone.replace(/[^\d+]/g, "")}`} class="hover:text-brand inline-flex items-center gap-2"><i class="fa-solid fa-phone text-brand"></i><span class="dt">{site.contact_phone}</span></a>}
+                  {site.contact_email && <a href={`mailto:${site.contact_email}`} class="hover:text-brand inline-flex items-center gap-2"><i class="fa-solid fa-envelope text-brand"></i><span class="dt">{site.contact_email}</span></a>}
                   {site.contact_address && <span><i class="fa-solid fa-location-dot ml-1.5 text-brand"></i>{site.contact_address}</span>}
                 </address>
               )}
@@ -440,27 +440,27 @@ function Footer() {
           <div class="space-y-4">
             <h3 class="text-xs font-black text-brand">اپلیکیشن و ربات‌ها</h3>
             <div class="space-y-3">
-              <button type="button" data-install class="hidden w-full flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 text-right">
-                <i class="fa-solid fa-mobile-screen-button text-2xl text-white/60"></i>
-                <span><span class="block text-[10px] font-bold text-white/40">نصب روی گوشی</span><span class="block text-sm font-black">اپ {site.site_name}</span></span>
+              <button type="button" data-install class="hidden w-full flex items-center gap-3 p-3 bg-ink rounded-2xl border border-fg/10 hover:border-brand/40 text-right">
+                <i class="fa-solid fa-mobile-screen-button text-2xl text-muted"></i>
+                <span><span class="block text-[10px] font-bold text-muted">نصب روی گوشی</span><span class="block text-sm font-black">اپ {site.site_name}</span></span>
               </button>
               {bots.map((b) => (
-                <a href={b.href} target="_blank" rel="noopener" class="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10">
-                  <i class={`${b.icon} text-2xl text-white/60`}></i>
-                  <span><span class="block text-[10px] font-bold text-white/40">اعلان سفارش‌ها در</span><span class="block text-sm font-black">{b.label}</span></span>
+                <a href={b.href} target="_blank" rel="noopener" class="flex items-center gap-3 p-3 bg-ink rounded-2xl border border-fg/10 hover:border-brand/40">
+                  <i class={`${b.icon} text-2xl text-muted`}></i>
+                  <span><span class="block text-[10px] font-bold text-muted">اعلان سفارش‌ها در</span><span class="block text-sm font-black">{b.label}</span></span>
                 </a>
               ))}
             </div>
           </div>
         </div>
 
-        <div class="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="pt-8 border-t border-fg/10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div class="flex flex-col md:flex-row items-center gap-4 text-center">
-            <p class="text-xs font-bold text-white/35">{site.footer_copyright || `© ${year} ${site.site_name} — تمامی حقوق محفوظ است`}</p>
+            <p class="text-xs font-bold text-muted">{site.footer_copyright || `© ${year} ${site.site_name} — تمامی حقوق محفوظ است`}</p>
             {site.developer_name && (
-              <p class="text-[11px] text-white/30">
+              <p class="text-[11px] text-muted/80">
                 طراحی و توسعه:{" "}
-                {developerHref(site.developer_link) ? <a href={developerHref(site.developer_link)} target="_blank" rel="noopener" class="hover:text-white">{site.developer_name}</a> : site.developer_name}
+                {developerHref(site.developer_link) ? <a href={developerHref(site.developer_link)} target="_blank" rel="noopener" class="hover:text-brand">{site.developer_name}</a> : site.developer_name}
               </p>
             )}
           </div>
