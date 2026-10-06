@@ -12,8 +12,9 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminPage, AdminSettingsPage, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
+import { startImpersonation } from "../../impersonate";
 import { InstagramSettings, TelegramSettings } from "../crm/views";
 import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
@@ -668,6 +669,49 @@ async function contentPage(c: C, extra: { error?: string; ok?: string } = {}, st
   c.set("settings", s);
   return render(c, <AdminContentPage user={currentUser(c)} s={s} faq={faqs(s)} isDefaultFaq={!s.faq_items} {...extra} />, status);
 }
+
+// ---------- users: search, and sign in as one of them ----------
+
+const USERS_PAGE = 30;
+
+admin.get("/admin/users", async (c) => {
+  const q = (c.req.query("q") ?? "").trim();
+  const page = Math.max(1, Number(c.req.query("page")) || 1);
+  const like = `%${q.replace(/[%_]/g, "")}%`;
+  const where = q ? "WHERE u.name LIKE ?1 OR u.phone LIKE ?1 OR u.username LIKE ?1 OR s.name LIKE ?1" : "";
+  const list = c.env.DB.prepare(
+    `SELECT u.id, u.name, u.phone, u.username, u.is_admin, u.is_staff, u.created_at, u.bale_chat_id <> '' AS bale, u.telegram_chat_id <> '' AS telegram,
+            s.name AS shop_name, s.slug AS shop_slug, u.shop_role
+     FROM users u LEFT JOIN shops s ON s.id = u.shop_id OR s.owner_id = u.id
+     ${where} GROUP BY u.id ORDER BY u.id DESC LIMIT ${USERS_PAGE + 1} OFFSET ${(page - 1) * USERS_PAGE}`,
+  );
+  const [users, recent] = await c.env.DB.batch([
+    q ? list.bind(like) : list,
+    c.env.DB.prepare(
+      `SELECT i.started_at, i.ended_at, a.name AS admin_name, u.id AS user_id, u.name AS user_name, u.phone AS user_phone
+       FROM impersonations i JOIN users a ON a.id = i.admin_id JOIN users u ON u.id = i.user_id ORDER BY i.id DESC LIMIT 15`,
+    ),
+  ]);
+  const rows = users.results as AdminUserRow[];
+  return render(
+    c,
+    <AdminUsersPage
+      user={currentUser(c)}
+      q={q}
+      page={page}
+      users={rows.slice(0, USERS_PAGE)}
+      more={rows.length > USERS_PAGE}
+      recent={recent.results as never}
+      error={c.req.query("error") ?? ""}
+    />,
+  );
+});
+
+admin.post("/admin/users/:id{[0-9]+}/login-as", async (c) => {
+  const error = await startImpersonation(c, currentUser(c), intParam(c, "id"));
+  if (error) return c.redirect(`/admin/users?error=${encodeURIComponent(error)}`);
+  return c.redirect("/me");
+});
 
 admin.get("/admin/content", (c) => contentPage(c));
 

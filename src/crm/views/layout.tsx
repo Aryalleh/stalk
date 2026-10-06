@@ -1,6 +1,7 @@
 import type { Child } from "hono/jsx";
 import { CSS_URL } from "../../assets";
 import type { User } from "../../session";
+import { ActingAsBar } from "../../shop/views/layout";
 
 // Super-admin CRM shell (UX Pilot "Super Admin CRM" designs): sky palette, side navigation on
 // desktop, a header with the page title, subtitle and actions, a tab row on phones.
@@ -37,6 +38,7 @@ export function Layout(props: {
         <link rel="stylesheet" href={CSS_URL} />
       </head>
       <body class={`min-h-screen theme-panel ${u ? "md:pr-64" : ""}`}>
+        <ActingAsBar />
         {u && (
           <aside class="hidden md:flex fixed top-0 right-0 bottom-0 w-64 z-40 flex-col bg-white border-l border-sky-100" aria-label="بخش‌های CRM">
             <div class="h-20 flex items-center gap-3 px-6 border-b border-sky-100 shrink-0">

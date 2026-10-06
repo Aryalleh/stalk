@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { stopImpersonation } from "../../impersonate";
 import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
@@ -149,7 +150,11 @@ async function saveProfile(c: C, userId: number, f: Record<string, string>, extr
 account.get("/register", (c) => c.redirect(`/login${new URL(c.req.url).search}`));
 account.get("/login/code", (c) => c.redirect(`/login${new URL(c.req.url).search}`));
 
+// While an admin is signed in as a user, logging out (or "back to admin") returns to the admin's own account.
+account.post("/logout/return", async (c) => c.redirect((await stopImpersonation(c)) ? "/admin/users" : "/"));
+
 account.post("/logout", async (c) => {
+  if (await stopImpersonation(c)) return c.redirect("/admin/users");
   await deleteSession(c.env.DB, getCookie(c, SESSION_COOKIE));
   deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
   return c.redirect("/");

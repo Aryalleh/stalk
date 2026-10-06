@@ -922,7 +922,14 @@ export function AdminPage(props: {
             {props.shops.map((s) => (
               <tr>
                 <td><a href={`/s/${s.slug}`}>{s.name}</a><div class="small muted dt">{s.phone}</div></td>
-                <td>{s.owner_name}<div class="small muted dt">{s.owner_phone}</div></td>
+                <td>
+                  {s.owner_name}<div class="small muted dt">{s.owner_phone}</div>
+                  {s.owner_id !== props.user.id && (
+                    <form method="post" action={`/admin/users/${s.owner_id}/login-as`} class="m-0" style="margin-top:4px">
+                      <button class="small secondary" title="ورود به حساب مالک فروشگاه">ورود به حساب</button>
+                    </form>
+                  )}
+                </td>
                 <td>{s.products}</td>
                 <td><span class={`tag ${s.status === "approved" ? "ok" : ""}`}>{SHOP_STATUS[s.status]}</span></td>
                 <td class="muted"><span class="dt">{formatJalali(s.created_at, false)}</span></td>
@@ -1001,10 +1008,104 @@ export function SetupPage(props: { step: "details" | "code"; error?: string; val
   );
 }
 
+export interface AdminUserRow {
+  id: number;
+  name: string;
+  phone: string;
+  username: string | null;
+  is_admin: number;
+  is_staff: number;
+  created_at: string;
+  bale: number;
+  telegram: number;
+  shop_name: string | null;
+  shop_slug: string | null;
+  shop_role: string;
+}
+
+/** /admin/users: every account, searchable, with "sign in as" for non-admins and a log of those sign-ins. */
+export function AdminUsersPage(props: {
+  user: User;
+  q: string;
+  page: number;
+  users: AdminUserRow[];
+  more: boolean;
+  recent: { started_at: string; ended_at: string | null; admin_name: string; user_id: number; user_name: string; user_phone: string }[];
+  error: string;
+}) {
+  const pageLink = (p: number) => `/admin/users?${new URLSearchParams({ ...(props.q ? { q: props.q } : {}), page: String(p) })}`;
+  return (
+    <AdminShell title="کاربران" user={props.user} on="/admin/users">
+      <h1>کاربران</h1>
+      <p class="muted small">
+        با «ورود به حساب» سایت را دقیقاً همان‌طور که آن کاربر می‌بیند باز می‌کنید (پروفایل، لیست‌ها، پنل فروشگاهش). حداکثر ۲ ساعت؛ با دکمه
+        «بازگشت به حساب مدیر» در بالای صفحه یا خروج، به حساب خودتان برمی‌گردید. هر ورود ثبت می‌شود.
+      </p>
+      {props.error && <div class="errbox">{props.error}</div>}
+      <form method="get" action="/admin/users" class="row mb-3">
+        <input name="q" value={props.q} placeholder="جستجو: نام، موبایل، نام کاربری یا فروشگاه" class="flex-1" />
+        <button>جستجو</button>
+      </form>
+      <div class="card wrap">
+        <table>
+          <thead><tr><th>کاربر</th><th>فروشگاه</th><th>بات</th><th>عضویت</th><th></th></tr></thead>
+          <tbody>
+            {props.users.map((u) => (
+              <tr>
+                <td>
+                  {u.username ? <a href={`/u/${u.username}`}>{u.name || "—"}</a> : u.name || "—"}
+                  {u.is_admin ? <span class="tag ok mr-1">مدیر</span> : u.is_staff ? <span class="tag mr-1">CRM</span> : null}
+                  <div class="small muted dt">{u.phone}</div>
+                </td>
+                <td>{u.shop_slug ? <a href={`/s/${u.shop_slug}`}>{u.shop_name}</a> : <span class="muted">—</span>}{u.shop_role === "agent" && <div class="small muted">کارمند</div>}</td>
+                <td class="small">{[u.bale ? "بله" : "", u.telegram ? "تلگرام" : ""].filter(Boolean).join("، ") || <span class="muted">وصل نیست</span>}</td>
+                <td class="muted"><span class="dt">{formatJalali(u.created_at, false)}</span></td>
+                <td>
+                  {!u.is_admin && u.id !== props.user.id && (
+                    <form method="post" action={`/admin/users/${u.id}/login-as`} class="m-0">
+                      <button class="small secondary"><i class="fa-solid fa-right-to-bracket ml-1"></i>ورود به حساب</button>
+                    </form>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {!props.users.length && <tr><td colSpan={5} class="muted">کاربری پیدا نشد.</td></tr>}
+          </tbody>
+        </table>
+        <div class="row" style="justify-content:space-between;margin-top:10px">
+          {props.page > 1 ? <a href={pageLink(props.page - 1)}>→ قبلی</a> : <span></span>}
+          {props.more && <a href={pageLink(props.page + 1)}>بعدی ←</a>}
+        </div>
+      </div>
+      <div class="card wrap">
+        <h2>ورودهای اخیر مدیران به حساب کاربران</h2>
+        {props.recent.length ? (
+          <table>
+            <thead><tr><th>مدیر</th><th>کاربر</th><th>شروع</th><th>پایان</th></tr></thead>
+            <tbody>
+              {props.recent.map((r) => (
+                <tr>
+                  <td>{r.admin_name}</td>
+                  <td>{r.user_name}<div class="small muted dt">{r.user_phone}</div></td>
+                  <td class="muted"><span class="dt">{formatJalali(r.started_at)}</span></td>
+                  <td class="muted">{r.ended_at ? <span class="dt">{formatJalali(r.ended_at)}</span> : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p class="muted small">هنوز موردی نیست.</p>
+        )}
+      </div>
+    </AdminShell>
+  );
+}
+
 /** Admin area: light theme (like the shop panel) with its own header and tabs. */
 function AdminShell(props: { title: string; user: User; on: string; children?: Child }) {
   const tabs: [string, string, string][] = [
     ["/admin", "fa-chart-simple", "آمار و فروشگاه‌ها"],
+    ["/admin/users", "fa-users", "کاربران"],
     ["/admin/content", "fa-pen-to-square", "درباره و سوالات"],
     ["/admin/settings", "fa-gear", "تنظیمات سایت"],
     ["/crm", "fa-address-book", "CRM"],

@@ -21,6 +21,7 @@ import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { seo } from "./seo";
 import { fromTrustedProxy } from "./proxy";
+import { actingAdmin } from "./impersonate";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
@@ -56,6 +57,7 @@ app.use(async (c, next) => {
   const [user, settings] = await Promise.all([sessionUser(c.env.DB, getCookie(c, SESSION_COOKIE)), loadSettings(c.env.DB)]);
   c.set("user", user);
   c.set("settings", settings);
+  c.set("impersonator", user ? await actingAdmin(c) : null); // an admin signed in as this user
   await next();
 });
 

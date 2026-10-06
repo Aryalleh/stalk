@@ -234,6 +234,25 @@ function Analytics() {
   );
 }
 
+/** Shown on every page while a platform admin is signed in as this user. */
+export function ActingAsBar() {
+  const acting = useSite().actingAs;
+  if (!acting) return null;
+  return (
+    <div class="sticky top-0 z-[60] bg-amber-400 text-amber-950 text-sm" role="status">
+      <div class="max-w-5xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+        <span>
+          <i class="fa-solid fa-user-secret ml-1"></i>
+          شما ({acting.admin}) با حساب <b>{acting.user}</b> وارد شده‌اید. هر کاری انجام دهید به نام این کاربر ثبت می‌شود.
+        </span>
+        <form method="post" action="/logout/return" class="m-0">
+          <button class="!bg-amber-950 !text-amber-50 !px-3 !py-1 !rounded-lg !text-xs font-bold">بازگشت به حساب مدیر</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Page shell.
  * - `nav`: which bottom tab is active ("none" hides the tab bar, for focused flows like checkout).
@@ -286,6 +305,7 @@ export function Layout(props: {
         {!props.panel && <Analytics />}
       </head>
       <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar ? "md:pr-64" : ""} ${showNav ? "pb-28 md:pb-10" : "pb-10"}`}>
+        <ActingAsBar />
         {props.sidebar}
         {props.header ?? (
           <header class="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-card">

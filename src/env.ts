@@ -13,5 +13,5 @@ export type Bindings = {
   PROXY_SECRET?: string;
 };
 
-export type Env = { Bindings: Bindings; Variables: { user: User | null; shop: Shop; settings: Settings } };
+export type Env = { Bindings: Bindings; Variables: { user: User | null; shop: Shop; settings: Settings; impersonator: User | null } };
 export type C = Context<Env>;

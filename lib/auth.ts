@@ -33,14 +33,14 @@ async function sha256(text: string) {
 }
 
 /** Create a session and return the raw token for the cookie (only its hash is stored). */
-export async function createSession(db: D1Database, userId: number) {
+export async function createSession(db: D1Database, userId: number, maxAgeSeconds = SESSION_DAYS * 86400) {
   const token = b64(crypto.getRandomValues(new Uint8Array(32)));
-  const expires = Date.now() + SESSION_DAYS * 86400_000;
+  const expires = Date.now() + maxAgeSeconds * 1000;
   await db.batch([
     db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(Date.now()),
     db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(token), userId, expires),
   ]);
-  return { token, maxAge: SESSION_DAYS * 86400 };
+  return { token, maxAge: maxAgeSeconds };
 }
 
 /** The user id behind a session cookie, or null if missing/expired. */
