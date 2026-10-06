@@ -122,7 +122,17 @@ store.get("/s/:slug", async (c) => {
           .all()
       ).results
     : await listProducts(c.env.DB, { shopId: shop.id, limit: 200, offset: 0 });
-  return render(c, <ShopPage user={user} shop={shop} products={products as never} preview={preview} />);
+  // Can each product be bought now? (not stock-tracked, or units left)
+  const { results: stock } = await c.env.DB.prepare(
+    `SELECT p.id, CASE WHEN p.track_stock = 0 THEN 1 WHEN COALESCE((SELECT SUM(quantity) FROM product_stock s WHERE s.product_id = p.id), 0) > 0 THEN 1 ELSE 0 END AS ok
+     FROM products p WHERE p.shop_id = ?`,
+  )
+    .bind(shop.id)
+    .all<{ id: number; ok: number }>();
+  const available: Record<number, boolean> = Object.fromEntries(stock.map((r) => [r.id, !!r.ok]));
+  const onlyAvailable = c.req.query("f") === "available";
+  const shown = onlyAvailable ? (products as { id: number }[]).filter((p) => available[p.id] !== false) : products;
+  return render(c, <ShopPage user={user} shop={shop} products={shown as never} preview={preview} available={available} onlyAvailable={onlyAvailable} />);
 });
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {

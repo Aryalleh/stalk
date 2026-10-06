@@ -545,7 +545,15 @@ const SOCIALS: [keyof Shop, string, string, (v: string) => string][] = [
   ["website", "وب‌سایت", "fa-solid fa-globe", (v) => (v.startsWith("http") ? v : `https://${v}`)],
 ];
 
-export function ShopPage(props: { user: User | null; shop: Shop; products: ProductWithShop[]; preview?: boolean }) {
+export function ShopPage(props: {
+  user: User | null;
+  shop: Shop;
+  products: ProductWithShop[];
+  preview?: boolean;
+  /** product id → can be bought now (not tracked, or units left) */
+  available: Record<number, boolean>;
+  onlyAvailable: boolean;
+}) {
   const shop = props.shop;
   const site = useSite();
   const url = `${site.origin}/s/${shop.slug}`;
@@ -577,44 +585,158 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
       breadcrumbLd(site, [[site.site_name, "/"], [shop.name, `/s/${shop.slug}`]]),
     ],
   };
+  const socials = SOCIALS.filter(([k]) => shop[k]);
+  const contact = SOCIALS.filter(([k]) => k !== "website" && shop[k]).map(([k, , icon, link]) => ({ href: link(String(shop[k])), icon }))[0];
+  const verified = shop.status === "approved";
+  const delivery = [
+    shop.courier_enabled ? `پیک در ${shop.city || "شهر فروشگاه"}: ${shop.courier_fee ? toman(shop.courier_fee) : "رایگان"}` : "",
+    shop.post_enabled ? `پست به همه شهرها: ${shop.post_fee ? toman(shop.post_fee) : "رایگان"}` : "",
+  ].filter(Boolean);
+  const logo = (size: string) => (
+    <div class={`${size} rounded-[28%] bg-ink overflow-hidden flex items-center justify-center font-black text-brand shrink-0 border-4 border-card shadow-md`}>
+      {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
+    </div>
+  );
+  const shareBtn = (cls: string) => (
+    <button type="button" data-share={url} aria-label="اشتراک‌گذاری فروشگاه" class={cls}><i class="fa-solid fa-share-nodes"></i></button>
+  );
+  const filterLink = (only: boolean, label: string) => (
+    <a
+      href={only ? `/s/${shop.slug}?f=available` : `/s/${shop.slug}`}
+      class={`px-4 md:px-6 py-2 rounded-xl text-xs font-bold ${props.onlyAvailable === only ? "bg-brand !text-white shadow-lg shadow-brand/20" : "bg-card text-muted border border-fg/10"}`}
+    >
+      {label}
+    </a>
+  );
   return (
-    <Layout title={shop.city ? `${shop.name} | ${shop.city}` : shop.name} user={props.user} bare wide seo={seo}>
+    <Layout title={shop.city ? `${shop.name} | ${shop.city}` : shop.name} user={props.user} bare full seo={seo}>
       {props.preview && (
-        <div class="bg-amber-400/10 text-amber-200 text-sm px-4 py-3 text-center">
+        <div class="bg-amber-400/15 text-amber-600 text-sm px-4 py-3 text-center">
           پیش‌نمایش: این فروشگاه هنوز تأیید نشده و فقط شما (و مدیر سایت) این صفحه را می‌بینید.
         </div>
       )}
+
+      {/* hero: cover photo; on wide screens the logo, name and actions sit on it */}
       <section class="relative">
-        <div class="h-40 md:h-56 bg-card overflow-hidden relative">
-          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover" /> : <div class="w-full h-full bg-gradient-to-br from-brand/30 to-plum"></div>}
+        <div class="h-44 md:h-[380px] bg-card overflow-hidden relative md:rounded-b-[40px]">
+          {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover" /> : <div class="w-full h-full bg-gradient-to-br from-brand/40 to-plum"></div>}
           <div class="absolute inset-0 photo-scrim"></div>
-        </div>
-        <div class="px-6 -mt-10 relative">
-          <div class="inline-flex max-w-full items-center gap-3 bg-card/95 backdrop-blur-md rounded-3xl p-2 pl-5 shadow-lg border border-fg/5">
-            <div class="w-16 h-16 rounded-2xl bg-ink overflow-hidden flex items-center justify-center text-2xl font-bold text-brand shrink-0">
-              {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
+          <div class="hidden md:flex absolute bottom-0 inset-x-0 px-10 pb-10 items-end gap-8 on-photo">
+            {logo("w-36 h-36 text-5xl")}
+            <div class="flex-1 min-w-0 mb-3">
+              <div class="flex items-center gap-4 mb-2 flex-wrap">
+                <h1 class="text-4xl font-black truncate">{shop.name}</h1>
+                {verified && <span class="px-4 py-1.5 bg-emerald-500 text-white text-[11px] font-bold rounded-full shadow-lg"><i class="fa-solid fa-circle-check ml-1"></i>تأیید شده {site.site_name}</span>}
+              </div>
+              {shop.city && <p class="text-sm font-bold text-muted"><i class="fa-solid fa-location-dot text-brand ml-1"></i>{shop.city}</p>}
             </div>
-            <div class="min-w-0">
-              <h1 class="text-xl font-bold truncate">{shop.name}</h1>
-              {shop.city && <p class="text-xs text-muted"><i class="fa-solid fa-location-dot ml-1"></i>{shop.city}</p>}
+            <div class="flex items-center gap-3 mb-3">
+              {contact && (
+                <a href={contact.href} target="_blank" rel="noopener nofollow" class="px-7 py-4 bg-brand !text-white font-bold rounded-2xl shadow-xl shadow-brand/20 flex items-center gap-2">
+                  <i class={contact.icon}></i> گفتگوی مستقیم
+                </a>
+              )}
+              {shareBtn("w-14 h-14 !bg-white/10 backdrop-blur-md !text-white rounded-2xl border border-white/20 flex items-center justify-center text-xl")}
             </div>
           </div>
         </div>
-      </section>
-      <div class="px-6 pt-4 pb-2 space-y-4">
-        {shop.description && <p class="text-sm text-muted leading-relaxed whitespace-pre-wrap">{shop.description}</p>}
-        <div class="flex flex-wrap gap-2">
-          {SOCIALS.filter(([k]) => shop[k]).map(([k, label, icon, url]) => (
-            <a class="px-3 py-2 rounded-xl bg-card text-xs text-fg flex items-center gap-2" href={url(String(shop[k]))} target="_blank" rel="noopener nofollow">
-              <i class={`${icon} text-brand`}></i>{label}
-            </a>
-          ))}
+
+        {/* phones: a floating card with logo, name, city and share */}
+        <div class="md:hidden px-5 -mt-12 relative z-10">
+          <div class="bg-card/95 backdrop-blur-md rounded-[32px] p-4 shadow-xl border border-fg/5 flex items-center gap-4">
+            {logo("w-20 h-20 text-3xl")}
+            <div class="flex-1 min-w-0">
+              <h1 class="text-xl font-black truncate">{shop.name}</h1>
+              {shop.city && <p class="text-[11px] text-muted font-bold mt-1"><i class="fa-solid fa-location-dot text-brand ml-1"></i>{shop.city}</p>}
+              {verified && <p class="text-[10px] text-emerald-500 font-bold mt-1"><i class="fa-solid fa-circle-check ml-1"></i>تأیید شده</p>}
+            </div>
+            {shareBtn("w-10 h-10 !bg-brand/10 !text-brand rounded-xl flex items-center justify-center border border-brand/20 shrink-0")}
+          </div>
         </div>
-      </div>
-      <div class="px-4 py-4">
-        <Masonry products={props.products} empty="این فروشگاه هنوز محصولی ندارد." />
+      </section>
+
+      <div class="px-5 md:px-10 py-8 md:py-12 md:flex md:gap-10">
+        {/* about, links and delivery: above the products on phones, a sidebar on wide screens */}
+        <aside class="md:w-80 md:shrink-0 space-y-6 mb-8 md:mb-0">
+          {(shop.description || socials.length > 0) && (
+            <div class="bg-card p-6 md:p-8 rounded-[28px] md:rounded-[36px] border border-fg/5 shadow-sm space-y-5">
+              <h2 class="hidden md:block text-lg font-black">درباره فروشگاه</h2>
+              {shop.description && <p class="text-sm font-medium text-muted leading-relaxed whitespace-pre-wrap">{shop.description}</p>}
+              {socials.length > 0 && (
+                <div class="flex flex-wrap md:flex-col gap-2 md:gap-3 md:pt-5 md:border-t md:border-fg/5">
+                  {socials.map(([k, label, icon, link]) => (
+                    <a href={link(String(shop[k]))} target="_blank" rel="noopener nofollow" class="group px-4 py-2 md:p-4 bg-brand/10 text-brand border border-brand/15 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold flex items-center gap-2 md:gap-3">
+                      <i class={`${icon} text-lg md:text-xl`}></i>
+                      {label}
+                      <i class="hidden md:inline fa-solid fa-arrow-left mr-auto opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {delivery.length > 0 && (
+            <div class="relative overflow-hidden rounded-[28px] md:rounded-[36px] p-6 md:p-8 text-white bg-gradient-to-br from-brand to-slate-900 shadow-xl shadow-brand/20">
+              <div class="absolute -top-10 -right-10 w-32 h-32 bg-white/15 rounded-full blur-2xl"></div>
+              <div class="relative">
+                <i class="fa-solid fa-truck-fast text-2xl mb-3 block"></i>
+                <h3 class="text-base font-black mb-2">ارسال</h3>
+                {delivery.map((d) => <p class="text-xs text-white/85 leading-6">{d}</p>)}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* products */}
+        <section class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-3 mb-6 flex-wrap">
+            <h2 class="text-base md:text-2xl font-black">محصولات {shop.name}</h2>
+            <div class="flex gap-2">
+              {filterLink(false, "همه محصولات")}
+              {filterLink(true, "موجود")}
+            </div>
+          </div>
+          {props.products.length ? (
+            <div class="columns-2 lg:columns-3 2xl:columns-4 gap-4 md:gap-6">
+              {props.products.map((p) => (
+                <ShopProductCard p={p} available={props.available[p.id] !== false} />
+              ))}
+            </div>
+          ) : (
+            <div class="text-center text-muted py-16">
+              <i class="fa-solid fa-box-open text-4xl mb-3 block"></i>
+              {props.onlyAvailable ? "فعلاً محصول موجودی ندارد." : "این فروشگاه هنوز محصولی ندارد."}
+            </div>
+          )}
+        </section>
       </div>
     </Layout>
+  );
+}
+
+/** A product on the shop page: the photo with a stock badge, then title, price and a cart icon. */
+function ShopProductCard(props: { p: ProductWithShop; available: boolean }) {
+  const p = props.p;
+  return (
+    <div class="break-inside-avoid mb-4 md:mb-6">
+      <a href={`/p/${p.id}`} class="group block bg-card rounded-[24px] md:rounded-[32px] overflow-hidden border border-fg/5 shadow-sm md:hover:shadow-2xl md:hover:-translate-y-1 transition-all">
+        <div class="relative overflow-hidden">
+          <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-700" />
+          <span class={`absolute top-3 left-3 px-2.5 py-1 backdrop-blur-md rounded-lg text-[10px] font-bold border ${props.available ? "bg-black/25 text-white border-white/20" : "bg-red-500/80 text-white border-red-300/30"}`}>
+            {props.available ? "موجود" : "ناموجود"}
+          </span>
+        </div>
+        <div class="p-4 md:p-6">
+          <h3 class="text-xs md:text-base font-bold truncate mb-1">{p.title}</h3>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] md:text-base font-black text-brand">{toman(p.price)}</span>
+            <span class="w-8 h-8 md:w-11 md:h-11 bg-brand/10 text-brand rounded-xl md:rounded-2xl flex items-center justify-center group-hover:bg-brand group-hover:text-white transition-colors">
+              <i class="fa-solid fa-cart-shopping text-xs md:text-base"></i>
+            </span>
+          </div>
+        </div>
+      </a>
+    </div>
   );
 }
 
