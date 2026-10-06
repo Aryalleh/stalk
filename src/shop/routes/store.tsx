@@ -173,9 +173,9 @@ store.get("/s/:slug", async (c) => {
 
 async function wishlistWithOwner(db: D1Database, where: string, value: string | number) {
   return db
-    .prepare(`SELECT w.*, ${publicNameSql("u")} AS owner_name, u.avatar_key AS owner_avatar, u.username AS owner_username FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
+    .prepare(`SELECT w.*, ${publicNameSql("u")} AS owner_name, u.avatar_key AS owner_avatar, u.banner_key AS owner_banner, u.username AS owner_username FROM wishlists w JOIN users u ON u.id = w.user_id WHERE ${where}`)
     .bind(value)
-    .first<Wishlist & { owner_name: string; owner_avatar: string; owner_username: string | null }>();
+    .first<Wishlist & { owner_name: string; owner_avatar: string; owner_banner: string; owner_username: string | null }>();
 }
 
 store.get("/w/:slug", async (c) => {
@@ -187,7 +187,7 @@ store.get("/w/:slug", async (c) => {
     <WishlistPublicPage
       user={user}
       wishlist={w}
-      owner={{ name: w.owner_name, avatar_key: w.owner_avatar, username: w.owner_username ?? "" }}
+      owner={{ name: w.owner_name, avatar_key: w.owner_avatar, banner_key: w.owner_banner, username: w.owner_username ?? "" }}
       items={await wishlistItems(c.env.DB, w.id)}
       isOwner={user?.id === w.user_id}
       shareUrl={`${siteUrl(c)}/w/${w.slug}`}
@@ -200,7 +200,7 @@ store.get("/w/:slug", async (c) => {
 store.get("/u/:username", async (c) => {
   const db = c.env.DB;
   const person = await db
-    .prepare(`SELECT id, ${publicNameSql("users")} AS name, username, avatar_key, birth_date, show_received, show_givers, show_birthday, show_given_count, phone FROM users WHERE username = ?`)
+    .prepare(`SELECT id, ${publicNameSql("users")} AS name, username, avatar_key, banner_key, birth_date, show_received, show_givers, show_birthday, show_given_count, phone FROM users WHERE username = ?`)
     .bind(c.req.param("username").toLowerCase())
     .first<PublicPerson>();
   if (!person) return c.notFound();
@@ -381,7 +381,7 @@ store.get("/order/:token/receipt", async (c) => {
 });
 
 // Product, avatar and shop images are public; receipts (r/...) are only served through /panel.
-store.get("/img/:key{[pas]/.+}", async (c) => {
+store.get("/img/:key{[pasb]/.+}", async (c) => {
   if (!PUBLIC_IMAGE.test(c.req.param("key"))) return c.notFound();
   const obj = await c.env.IMAGES.get(c.req.param("key"));
   if (!obj) return c.notFound();

@@ -401,6 +401,32 @@ function SettingsBody(props: SettingsProps & { user: User }) {
         </div>
       )}
       <form id="me-form" method="post" action="/me/settings" enctype="multipart/form-data" class="space-y-6 md:space-y-8">
+        <section class="bg-card rounded-[28px] md:rounded-[40px] border border-fg/5 p-3 md:p-4">
+          <div id="banner-preview" class="relative h-32 md:h-44 rounded-[22px] md:rounded-[32px] overflow-hidden bg-gradient-to-br from-brand/40 via-plum to-ink">
+            {u.banner_key && <img src={`/img/${u.banner_key}`} alt="بنر پروفایل" class="absolute inset-0 w-full h-full object-cover" />}
+            <div class="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent"></div>
+            <div class="absolute bottom-3 right-4 left-4 flex items-end justify-between gap-3 on-photo">
+              <div>
+                <p class="text-sm font-black">بنر پروفایل</p>
+                <p class="text-[10px] text-white/75">بالای پروفایل عمومی و همه لیست‌های آرزوی شما نمایش داده می‌شود.</p>
+              </div>
+              <label for="banner-input" class="shrink-0 cursor-pointer px-3 py-2 rounded-xl bg-white/90 text-slate-900 text-xs font-black flex items-center gap-1.5 shadow-lg">
+                <i class="fa-solid fa-image"></i>{u.banner_key ? "تغییر بنر" : "افزودن بنر"}
+              </label>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-[11px] text-muted">
+            <label class="file-pick !border-0 !p-0 !bg-transparent gap-2">
+              <input type="file" name="banner" id="banner-input" accept="image/jpeg,image/png,image/webp" class="sr-only" />
+              <span class="file-pick-name" data-empty="عکس افقی، حداکثر ۵ مگابایت (بهترین: ۱۶۰۰×۵۰۰)">عکس افقی، حداکثر ۵ مگابایت (بهترین: ۱۶۰۰×۵۰۰)</span>
+            </label>
+            {u.banner_key && (
+              <label class="inline-flex items-center gap-2 font-bold text-red-500 cursor-pointer">
+                <input type="checkbox" name="remove_banner" value="1" class="accent-red-500" /> حذف بنر
+              </label>
+            )}
+          </div>
+        </section>
         <header class="flex flex-col items-center text-center md:flex-row md:text-right md:items-center md:gap-6 md:bg-card md:rounded-[40px] md:border md:border-fg/5 md:p-8">
           <div class="relative mb-4 md:mb-0">
             <div id="avatar-preview"><Avatar user={u} size="w-28 h-28" ring /></div>
@@ -608,7 +634,10 @@ function SettingsBody(props: SettingsProps & { user: User }) {
           __html: `(function(){var input=document.getElementById('avatar-input'),box=document.querySelector('#avatar-preview > div'),orig=box.innerHTML;
             input.addEventListener('change',function(){var f=this.files[0];if(!f)return;box.innerHTML='';var img=document.createElement('img');
             img.className='w-full h-full rounded-full object-cover';img.alt='';img.src=URL.createObjectURL(f);box.appendChild(img);});
-            document.getElementById('me-form').addEventListener('reset',function(){box.innerHTML=orig;setTimeout(function(){window.updateFilePick&&window.updateFilePick(input);});});})();`,
+            var bIn=document.getElementById('banner-input'),bBox=document.getElementById('banner-preview'),bOrig=bBox.innerHTML;
+            bIn.addEventListener('change',function(){var f=this.files[0];if(!f)return;var old=bBox.querySelector('img');if(old)old.remove();var img=document.createElement('img');
+            img.className='absolute inset-0 w-full h-full object-cover';img.alt='';img.src=URL.createObjectURL(f);bBox.insertBefore(img,bBox.firstChild);});
+            document.getElementById('me-form').addEventListener('reset',function(){box.innerHTML=orig;bBox.innerHTML=bOrig;setTimeout(function(){window.updateFilePick&&window.updateFilePick(bIn);});setTimeout(function(){window.updateFilePick&&window.updateFilePick(input);});});})();`,
         }}
       />
     </div>

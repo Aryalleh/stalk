@@ -246,6 +246,20 @@ function SiteNav(props: { user: User | null; stats?: { wishes: number; gifts: nu
   );
 }
 
+/** Top of a public profile or wishlist: the person's banner photo (darkened for the text) or a soft gradient. */
+export function ProfileHero(props: { banner?: string; children?: Child }) {
+  if (!props.banner) {
+    return <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">{props.children}</section>;
+  }
+  return (
+    <section class="relative overflow-hidden px-6 pt-20 md:pt-28 pb-8 text-center rounded-b-[32px] mb-6 on-photo">
+      <img src={`/img/${props.banner}`} alt="" class="absolute inset-0 w-full h-full object-cover" />
+      <div class="absolute inset-0 bg-gradient-to-b from-black/15 via-black/45 to-black/80"></div>
+      <div class="relative">{props.children}</div>
+    </section>
+  );
+}
+
 /** Opens the site menu drawer on phones (hidden on desktop, where the sidebar is always shown). */
 export function MenuButton(props: { glass?: boolean; class?: string }) {
   return (

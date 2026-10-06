@@ -27,7 +27,7 @@ import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
 import { STEPS, faqs } from "../../content";
-import { Avatar, Errors, IconButton, Layout, MenuButton, TitleBar } from "./layout";
+import { Avatar, Errors, IconButton, Layout, MenuButton, ProfileHero, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
 // a Pinterest-like masonry feed of image cards with the title and price over a dark gradient.
@@ -821,7 +821,7 @@ function ShopProductCard(props: { p: ProductWithShop; available: boolean }) {
 export function WishlistPublicPage(props: {
   user: User | null;
   wishlist: Wishlist;
-  owner: { name: string; avatar_key: string; username: string };
+  owner: { name: string; avatar_key: string; username: string; banner_key: string };
   items: ItemView[];
   isOwner: boolean;
   shareUrl: string;
@@ -848,7 +848,7 @@ export function WishlistPublicPage(props: {
   };
   return (
     <Layout title={`${w.title} | آرزوهای ${props.owner.name}`} user={props.user} nav={props.isOwner ? "wishes" : "home"} header={header} bare wide seo={seo}>
-      <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">
+      <ProfileHero banner={props.owner.banner_key}>
         <a href={props.owner.username ? `/u/${props.owner.username}` : "#"} class="relative inline-block mb-4" aria-label={`پروفایل ${props.owner.name}`}>
           <Avatar user={props.owner} size="w-24 h-24" ring />
           <div class="absolute -bottom-1 -left-1 bg-brand text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] border-2 border-ink">
@@ -873,7 +873,7 @@ export function WishlistPublicPage(props: {
           </div>
         )}
         {!w.is_open && <p class="mt-4 text-sm text-amber-200">این لیست بسته شده و فعلاً امکان خرید ندارد.</p>}
-      </section>
+      </ProfileHero>
       <section class="px-4">
         {props.items.length === 0 && <p class="text-center text-muted py-10">هنوز آرزویی اضافه نشده.</p>}
         <div class="masonry">

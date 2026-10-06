@@ -1,7 +1,7 @@
 import { birthdayLabel } from "../../../lib/people";
 import { useSite } from "../../render";
 import type { User } from "../../session";
-import { Avatar, IconButton, Layout, MenuButton, type Seo } from "./layout";
+import { Avatar, IconButton, Layout, MenuButton, ProfileHero, type Seo } from "./layout";
 
 // Public profile at /u/<username>: the person's open wishlists and — if they allow it — the gifts
 // they received, with the names of givers who chose to be shown.
@@ -11,6 +11,7 @@ export interface PublicPerson {
   name: string;
   username: string;
   avatar_key: string;
+  banner_key: string;
   birth_date: string;
   show_received: number;
   show_givers: number;
@@ -65,7 +66,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
   );
   return (
     <Layout title={`${p.name} (@${p.username})`} user={props.viewer} nav={props.isMe ? "profile" : "home"} header={header} bare wide seo={seo}>
-      <section class="px-6 py-8 text-center bg-gradient-to-b from-card to-ink rounded-b-[32px] mb-6">
+      <ProfileHero banner={p.banner_key}>
         <div class="inline-block mb-4">
           <Avatar user={p} size="w-24 h-24" ring />
         </div>
@@ -95,7 +96,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
             این پروفایل عمومی شماست. <a href="/me" class="text-brand">تنظیم نمایش کادوها و تولد</a>
           </p>
         )}
-      </section>
+      </ProfileHero>
 
       <section class="px-4 mb-10">
         <h2 class="text-lg font-bold mb-4 px-2">لیست‌های آرزو</h2>

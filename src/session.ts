@@ -11,6 +11,7 @@ export interface User {
   bale_chat_id: string;
   telegram_chat_id: string;
   avatar_key: string;
+  banner_key: string; // profile banner, also on top of every wishlist
   first_name: string;
   last_name: string;
   nickname: string; // shown on public pages instead of the real name
@@ -30,7 +31,7 @@ export const ACCENTS = { blue: "59 130 246", pink: "255 92 147" } as const;
 export type Accent = keyof typeof ACCENTS;
 
 export const USER_COLUMNS =
-  "id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key, first_name, last_name, nickname, birth_date, username, show_received, show_givers, show_birthday, show_given_count, shop_id, shop_role, accent, theme";
+  "id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key, banner_key, first_name, last_name, nickname, birth_date, username, show_received, show_givers, show_birthday, show_given_count, shop_id, shop_role, accent, theme";
 
 export async function sessionUser(db: D1Database, token: string | undefined): Promise<User | null> {
   const id = await sessionUserId(db, token);

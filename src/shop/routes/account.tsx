@@ -280,6 +280,11 @@ account.post("/me/settings", async (c) => {
     const err = imageError(file, 2, "عکس پروفایل");
     if (err) return settingsView(c, { error: err, values: f }, 400);
   }
+  const bannerFile = fileField(body.banner);
+  if (bannerFile) {
+    const err = imageError(bannerFile, 5, "بنر پروفایل");
+    if (err) return settingsView(c, { error: err, values: f }, 400);
+  }
   const error = await saveProfile(c, user.id, f, {
     show_received: f.show_received === "1" ? 1 : 0,
     show_givers: f.show_givers === "1" ? 1 : 0,
@@ -289,8 +294,12 @@ account.post("/me/settings", async (c) => {
   if (error) return settingsView(c, { error, values: f }, 400);
   if (file) avatar = await storeImage(c.env.IMAGES, file, "a");
   else if (f.remove_avatar === "1") avatar = "";
-  await c.env.DB.prepare("UPDATE users SET avatar_key = ? WHERE id = ?").bind(avatar, user.id).run();
+  let banner = user.banner_key;
+  if (bannerFile) banner = await storeImage(c.env.IMAGES, bannerFile, "b");
+  else if (f.remove_banner === "1") banner = "";
+  await c.env.DB.prepare("UPDATE users SET avatar_key = ?, banner_key = ? WHERE id = ?").bind(avatar, banner, user.id).run();
   if (user.avatar_key && user.avatar_key !== avatar) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.avatar_key));
+  if (user.banner_key && user.banner_key !== banner) c.executionCtx.waitUntil(c.env.IMAGES.delete(user.banner_key));
   return c.redirect("/me?saved=1");
 });
 
