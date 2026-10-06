@@ -589,13 +589,15 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
           {shop.cover_key ? <img src={`/img/${shop.cover_key}`} alt="" class="w-full h-full object-cover" /> : <div class="w-full h-full bg-gradient-to-br from-brand/30 to-plum"></div>}
           <div class="absolute inset-0 photo-scrim"></div>
         </div>
-        <div class="px-6 -mt-10 relative flex items-end gap-4">
-          <div class="w-20 h-20 rounded-2xl bg-card border-4 border-ink overflow-hidden flex items-center justify-center text-3xl font-bold text-brand shrink-0">
-            {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
-          </div>
-          <div class="min-w-0 bg-card/95 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg border border-fg/5">
-            <h1 class="text-xl font-bold truncate">{shop.name}</h1>
-            {shop.city && <p class="text-xs text-muted"><i class="fa-solid fa-location-dot ml-1"></i>{shop.city}</p>}
+        <div class="px-6 -mt-10 relative">
+          <div class="inline-flex max-w-full items-center gap-3 bg-card/95 backdrop-blur-md rounded-3xl p-2 pl-5 shadow-lg border border-fg/5">
+            <div class="w-16 h-16 rounded-2xl bg-ink overflow-hidden flex items-center justify-center text-2xl font-bold text-brand shrink-0">
+              {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
+            </div>
+            <div class="min-w-0">
+              <h1 class="text-xl font-bold truncate">{shop.name}</h1>
+              {shop.city && <p class="text-xs text-muted"><i class="fa-solid fa-location-dot ml-1"></i>{shop.city}</p>}
+            </div>
           </div>
         </div>
       </section>
