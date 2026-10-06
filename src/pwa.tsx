@@ -55,7 +55,7 @@ pwa.get("/manifest.webmanifest", (c) => {
       ],
       shortcuts: [
         { name: "لیست‌های آرزوی من", url: "/me/wishlists", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
-        { name: "جستجوی هدیه", url: "/search", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
+        { name: "جستجوی هدیه", url: "/#search", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
         { name: "پنل فروشگاه", url: "/panel", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
       ],
     },

@@ -80,16 +80,14 @@ function Pager(props: { page: number; hasNext: boolean; base: string }) {
   );
 }
 
-/** Category pages have clean paths (/c/<name>); searches live under /search?q=…&cat=…. */
+/** Category pages have clean paths (/c/<name>); searches stay on the home page (/?q=…&cat=…). */
 export const categoryPath = (cat: string) => `/c/${encodeURIComponent(cat)}`;
 
-function feedUrl(search: boolean, q: string, category: string) {
-  if (!search) return category ? categoryPath(category) : "/";
-  const qs = new URLSearchParams();
-  if (q) qs.set("q", q);
+function feedUrl(q: string, category: string) {
+  if (!q) return category ? categoryPath(category) : "/";
+  const qs = new URLSearchParams({ q });
   if (category) qs.set("cat", category);
-  const s = qs.toString();
-  return s ? `/search?${s}` : "/search";
+  return `/?${qs}`;
 }
 
 /** Home page copy under the feed: how it works, categories and common questions (H2/H3 structure). */
@@ -145,13 +143,11 @@ export function HomePage(props: {
   page: number;
   hasNext: boolean;
   featured?: FeaturedShop | null;
-  search?: boolean;
 }) {
   const site = useSite();
-  const search = !!props.search;
   const chip = (label: string, cat: string) => (
     <a
-      href={feedUrl(search, props.q, cat)}
+      href={feedUrl(props.q, cat)}
       class={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-medium ${props.category === cat ? "bg-brand text-white" : "bg-card text-muted hover:text-fg"}`}
     >
       {label}
@@ -177,7 +173,7 @@ export function HomePage(props: {
             )}
           </div>
         </div>
-        <form method="get" action="/search" class="relative" role="search">
+        <form method="get" action="/" class="relative" role="search" id="search">
           <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true"></i>
           {props.category && <input type="hidden" name="cat" value={props.category} />}
           <input
@@ -185,7 +181,6 @@ export function HomePage(props: {
             name="q"
             aria-label="جستجوی هدیه"
             value={props.q}
-            autofocus={props.search}
             placeholder="جستجوی هدیه، فروشگاه یا برند..."
             class="w-full bg-card border-none rounded-2xl py-3 pr-11 pl-4 text-sm text-fg placeholder:text-muted focus:ring-2 focus:ring-brand outline-hidden"
           />
@@ -201,13 +196,13 @@ export function HomePage(props: {
   );
   const f = props.featured;
   // Home and category pages are indexed (one canonical URL each); searches and later pages are not.
-  const isHome = !props.search && !props.q && !props.category;
-  const title = props.search
-    ? props.q ? `جستجوی «${props.q}»` : "جستجوی هدیه"
+  const isHome = !props.q && !props.category;
+  const title = props.q
+    ? `جستجوی «${props.q}»`
     : props.category ? `خرید هدیه و کادو ${props.category}؛ ارسال به سراسر ایران` : `${site.site_name} | لیست آرزو، خرید کادو و هدیه آنلاین از فروشگاه‌ها`;
   const seo: Seo = isHome
     ? { index: props.page === 1, canonical: "/", description: siteDescription(site), jsonLd: [organizationLd(site), websiteLd(site), itemListLd(site, "تازه‌ترین هدیه‌ها", props.products)] }
-    : props.category && !props.search && !props.q
+    : props.category && !props.q
       ? {
           index: props.page === 1,
           canonical: categoryPath(props.category),
@@ -220,7 +215,7 @@ export function HomePage(props: {
         }
       : { description: siteDescription(site) };
   return (
-    <Layout title={title} fullTitle={isHome} user={props.user} nav="search" header={header} bare wide seo={seo}>
+    <Layout title={title} fullTitle={isHome} user={props.user} nav="home" header={header} bare wide seo={seo}>
       <div class="px-4 py-6">
         {f && !props.q && !props.category && props.page === 1 && (
           <a href={`/s/${f.slug}`} class="block mb-8 overflow-hidden rounded-3xl bg-card relative h-48 group">
@@ -254,8 +249,8 @@ export function HomePage(props: {
           </p>
         )}
         {!props.q && !props.category && props.products.length > 0 && <h2 class="text-lg font-bold mb-4">تازه‌ترین هدیه‌ها</h2>}
-        <Masonry products={props.products} empty={props.search && !props.q && !props.category ? "دنبال چه هدیه‌ای می‌گردی؟" : undefined} />
-        <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(search, props.q, props.category)} />
+        <Masonry products={props.products} />
+        <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(props.q, props.category)} />
         {isHome && props.page === 1 && <HomeGuide categories={props.categories} />}
       </div>
     </Layout>

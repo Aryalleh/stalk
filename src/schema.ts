@@ -49,7 +49,7 @@ export function websiteLd(site: Site) {
     url: `${site.origin}/`,
     inLanguage: "fa-IR",
     publisher: { "@id": `${site.origin}/#organization` },
-    potentialAction: { "@type": "SearchAction", target: `${site.origin}/search?q={search_term_string}`, "query-input": "required name=search_term_string" },
+    potentialAction: { "@type": "SearchAction", target: `${site.origin}/?q={search_term_string}`, "query-input": "required name=search_term_string" },
   };
 }
 

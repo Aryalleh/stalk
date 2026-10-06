@@ -182,8 +182,7 @@ function SiteMenu(props: { user: User | null; stats?: { wishes: number; gifts: n
         </div>
       )}
       <nav class="flex-1 p-4 space-y-0.5 overflow-y-auto">
-        {item("/", "fa-house", "خانه")}
-        {item("/search", "fa-magnifying-glass", "جستجو و کاوش")}
+        {item("/", "fa-house", "خانه و کاوش", path === "/" || path.startsWith("/c/"))}
         {item("/shops", "fa-shop", "فروشگاه‌ها", path === "/shops" || path.startsWith("/s/"))}
         {u && (
           <>
@@ -348,7 +347,7 @@ function Footer() {
       <nav class="flex flex-wrap justify-center gap-4" aria-label="پیوندهای سایت">
         <a href="/about" class="hover:text-fg">درباره {site.site_name}</a>
         <a href="/faq" class="hover:text-fg">سوالات متداول</a>
-        <a href="/search" class="hover:text-fg">جستجوی هدیه</a>
+        <a href="/#search" class="hover:text-fg">جستجوی هدیه</a>
       </nav>
       {(site.contact_phone || site.contact_email || site.contact_address) && (
         <address class="not-italic flex flex-wrap justify-center gap-x-4 gap-y-1">

@@ -28,10 +28,10 @@ import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
 export const store = new Hono<Env>();
 
-// Home and /search share one view (explore): search box, category chips, the shop of the week and a
-// masonry of all products (or the search results).
-async function feed(c: C, search: boolean, cat = c.req.query("cat") ?? "") {
-  const q = search ? (c.req.query("q") ?? "").trim().slice(0, 100) : "";
+// The home page is the explore page: search box, category chips, the shop of the week and a masonry of
+// all products, or the search results for ?q= (searches stay on /).
+async function feed(c: C, cat = c.req.query("cat") ?? "") {
+  const q = (c.req.query("q") ?? "").trim().slice(0, 100);
   const categories = categoryList(c.get("settings"));
   const category = categories.includes(cat) ? cat : "";
   const page = pageParam(c);
@@ -53,25 +53,26 @@ async function feed(c: C, search: boolean, cat = c.req.query("cat") ?? "") {
       page={page}
       hasNext={products.length > PAGE}
       featured={featured}
-      search={search}
     />,
   );
 }
 
 store.get("/", async (c) => {
-  // Old/alternate URLs: home searches live under /search, category pages under /c/<name>.
-  const q = c.req.query("q");
-  if (q) return c.redirect(`/search?${new URLSearchParams({ q, ...(c.req.query("cat") ? { cat: c.req.query("cat")! } : {}) })}`, 301);
+  // A category without a search has its own clean page (/c/<name>).
   const cat = c.req.query("cat");
-  if (cat) return c.redirect(categoryPath(cat), 301);
-  return feed(c, false, "");
+  if (cat && !c.req.query("q")?.trim()) return c.redirect(categoryPath(cat), 301);
+  return feed(c);
 });
 store.get("/c/:cat", async (c) => {
   const cat = c.req.param("cat");
   if (!categoryList(c.get("settings")).includes(cat)) return c.notFound();
-  return feed(c, false, cat);
+  return feed(c, cat);
 });
-store.get("/search", (c) => feed(c, true));
+// Old links: search used to live on its own page.
+store.get("/search", (c) => {
+  const qs = new URL(c.req.url).search;
+  return c.redirect(`/${qs}`, 301);
+});
 
 store.get("/p/:id{[0-9]+}", async (c) => {
   const id = intParam(c, "id");
