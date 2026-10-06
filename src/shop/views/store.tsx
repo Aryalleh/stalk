@@ -593,7 +593,7 @@ export function ShopPage(props: { user: User | null; shop: Shop; products: Produ
           <div class="w-20 h-20 rounded-2xl bg-card border-4 border-ink overflow-hidden flex items-center justify-center text-3xl font-bold text-brand shrink-0">
             {shop.logo_key ? <img src={`/img/${shop.logo_key}`} alt={shop.name} class="w-full h-full object-cover" /> : shop.name.charAt(0)}
           </div>
-          <div class="pb-1 min-w-0">
+          <div class="min-w-0 bg-card/95 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg border border-fg/5">
             <h1 class="text-xl font-bold truncate">{shop.name}</h1>
             {shop.city && <p class="text-xs text-muted"><i class="fa-solid fa-location-dot ml-1"></i>{shop.city}</p>}
           </div>
