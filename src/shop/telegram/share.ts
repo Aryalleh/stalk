@@ -56,7 +56,7 @@ export function productCaption(p: Product, shop: Shop, price: { price: number; f
 export async function postProductToChannel(d: Deps, shop: Shop, p: Product) {
   if (!shop.tg_channel_id) throw new Error("کانال تلگرام وصل نیست.");
   const price = await lowestPrice(d.db, p);
-  const caption = productCaption(p, shop, price, `${d.siteUrl}/p/${p.id}`);
+  const caption = productCaption(p, shop, price, `${d.siteUrl}/p/${p.code || p.id}`);
   const msg = await send(d, shop.tg_channel_id, p.image_key, caption, postButtons(d.settings, d.siteUrl, p.id));
   await d.db
     .prepare("UPDATE products SET tg_shared_chat = ?, tg_shared_message = ?, tg_shared_at = ? WHERE id = ?")

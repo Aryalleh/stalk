@@ -14,6 +14,8 @@ import {
   type ProductWithShop,
   type Shop,
   type Wishlist,
+  productPath,
+  showCode,
 } from "../db";
 import { CITIES } from "../cities";
 import { DELIVERY_LABEL } from "../notify";
@@ -44,7 +46,7 @@ function ImageOrGift(props: { imageKey: string; alt: string; class?: string }) {
 function ProductCard(props: { p: ProductWithShop }) {
   const p = props.p;
   return (
-    <a href={`/p/${p.id}`} class="group relative block bg-card rounded-3xl overflow-hidden shadow-lg transition-transform active:scale-95">
+    <a href={productPath(p)} class="group relative block bg-card rounded-3xl overflow-hidden shadow-lg transition-transform active:scale-95">
       <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-500" />
       <div class="absolute inset-0 photo-scrim"></div>
       <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
@@ -345,10 +347,10 @@ export function ProductPage(props: {
   const sheetOpen = !!props.error;
   const site = useSite();
   const images = props.images.length ? props.images.map((i) => i.image_key) : p.image_key ? [p.image_key] : [];
-  const url = `${site.origin}/p/${p.id}`;
+  const url = `${site.origin}${productPath(p)}`;
   const seo: Seo = {
     index: true,
-    canonical: `/p/${p.id}`,
+    canonical: productPath(p),
     type: "product",
     description: summary(p.description ? `${p.title}: ${p.description}` : `خرید ${p.title} از فروشگاه ${p.shop_name} در ${site.site_name}؛ به لیست آرزویت اضافه کن تا دوستانت برایت کادو بخرند، یا مستقیم بخر.`),
     image: images[0] ? `/img/${images[0]}` : undefined,
@@ -360,7 +362,7 @@ export function ProductPage(props: {
         "@id": `${url}#product`,
         name: p.title,
         description: p.description || p.title,
-        sku: String(p.id),
+        sku: p.code ? showCode(p.code) : String(p.id),
         url,
         ...(images.length ? { image: images.map((k) => `${site.origin}/img/${k}`) } : {}),
         ...(p.category ? { category: p.category } : {}),
@@ -381,7 +383,7 @@ export function ProductPage(props: {
         [site.site_name, "/"],
         ...(p.category ? ([[p.category, categoryPath(p.category)]] as [string, string][]) : []),
         [p.shop_name, `/s/${p.shop_slug}`],
-        [p.title, `/p/${p.id}`],
+        [p.title, productPath(p)],
       ]),
     ],
   };
@@ -468,6 +470,14 @@ export function ProductPage(props: {
               <div class="flex justify-between text-xs text-muted py-1.5"><span>{k.name}</span><span>{k.price ? toman(k.price) : "رایگان"}</span></div>
             ))}
             <p class="text-[10px] text-muted/70 mt-2">خریدار کادو هنگام خرید بسته‌بندی را انتخاب می‌کند.</p>
+          </div>
+        )}
+        {p.code && (
+          <div class="flex items-center justify-between gap-3 px-1 text-[11px] text-muted">
+            <span>شناسه کالا</span>
+            <button type="button" data-copy={showCode(p.code)} data-copied="کپی شد ✓" class="font-mono font-bold text-fg ltr tracking-wider" title="کپی شناسه">
+              {showCode(p.code)} <i class="fa-regular fa-copy text-muted mr-1"></i>
+            </button>
           </div>
         )}
         <div class="p-4 bg-card rounded-2xl flex items-center justify-between">
@@ -787,7 +797,7 @@ function ShopProductCard(props: { p: ProductWithShop; available: boolean }) {
   const p = props.p;
   return (
     <div class="break-inside-avoid mb-4 md:mb-6">
-      <a href={`/p/${p.id}`} class="group block bg-card rounded-[24px] md:rounded-[32px] overflow-hidden border border-fg/5 shadow-sm md:hover:shadow-2xl md:hover:-translate-y-1 transition-all">
+      <a href={productPath(p)} class="group block bg-card rounded-[24px] md:rounded-[32px] overflow-hidden border border-fg/5 shadow-sm md:hover:shadow-2xl md:hover:-translate-y-1 transition-all">
         <div class="relative overflow-hidden">
           <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-700" />
           <span class={`absolute top-3 left-3 px-2.5 py-1 backdrop-blur-md rounded-lg text-[10px] font-bold border ${props.available ? "bg-black/25 text-white border-white/20" : "bg-red-500/80 text-white border-red-300/30"}`}>

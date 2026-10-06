@@ -61,12 +61,12 @@ export function breadcrumbLd(site: Site, items: [string, string][]) {
   };
 }
 
-export function itemListLd(site: Site, name: string, items: { id: number; title: string }[]) {
+export function itemListLd(site: Site, name: string, items: { id: number; code?: string; title: string }[]) {
   return {
     "@context": "https://schema.org",
     "@type": "ItemList",
     name,
-    itemListElement: items.slice(0, 30).map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${site.origin}/p/${p.id}`, name: p.title })),
+    itemListElement: items.slice(0, 30).map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${site.origin}/p/${p.code || p.id}`, name: p.title })),
   };
 }
 

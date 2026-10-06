@@ -18,6 +18,7 @@ import m0014 from "../migrations/0014_ig_comments.sql";
 import m0015 from "../migrations/0015_telegram_channel.sql";
 import m0016 from "../migrations/0016_impersonation.sql";
 import m0017 from "../migrations/0017_nickname_tg_share.sql";
+import m0018 from "../migrations/0018_shop_packages_codes.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -39,6 +40,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0015_telegram_channel.sql", m0015],
   ["0016_impersonation.sql", m0016],
   ["0017_nickname_tg_share.sql", m0017],
+  ["0018_shop_packages_codes.sql", m0018],
 ];
 
 let done: Promise<void> | null = null;

@@ -3,7 +3,7 @@ import { formatCard } from "../../../lib/normalize";
 import { birthdayLabel } from "../../../lib/people";
 import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
-import { STATUS_LABEL, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
+import { STATUS_LABEL, showCode, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
 import { DELIVERY_LABEL } from "../notify";
 import { CLOTHING_TEMPLATE } from "../sizes";
 import { variantKey, variantLabel, variants, type Variant } from "../variants";
@@ -556,6 +556,7 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
               </div>
               <div class="p-3 pb-1">
                 <h3 class="text-xs font-bold truncate">{p.title}</h3>
+                {p.code && <p class="text-[9px] font-mono text-slate-400 ltr text-right truncate">{showCode(p.code)}</p>}
                 <div class="flex items-center justify-between mt-1">
                   <span class="text-[11px] font-bold text-sky-600">{toman(p.price)}</span>
                   <span class={`text-[10px] px-1.5 py-0.5 rounded-sm ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
@@ -637,7 +638,6 @@ export function ProductFormPage(props: {
   product: Product | null;
   values: Record<string, string>;
   images?: ProductImage[];
-  packages?: ProductPackage[];
   stock?: Record<string, number>;
   variantInfo?: Record<string, VariantInfo>;
   categories: string[];
@@ -645,10 +645,17 @@ export function ProductFormPage(props: {
 }) {
   const p = props.product;
   const v = props.values;
-  const pkgs = [...(props.packages ?? []), ...Array.from({ length: 3 }, () => ({ id: 0, name: "", price: 0 }))];
   return (
     <PanelShell title={p ? p.title : "محصول جدید"} user={props.user} shop={props.shop} on="products">
-      <p class="mb-3"><a href="/panel/products" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>محصولات</a></p>
+      <p class="mb-3 row" style="justify-content:space-between">
+        <a href="/panel/products" class="text-xs"><i class="fa-solid fa-chevron-right ml-1"></i>محصولات</a>
+        {p?.code && (
+          <span class="small muted">
+            شناسه کالا: <button type="button" class="small secondary ltr font-mono" data-copy={showCode(p.code)} data-copied="کپی شد ✓">{showCode(p.code)}</button>{" "}
+            <a href={`/p/${p.code}`} class="small" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+          </span>
+        )}
+      </p>
       {v.saved && <div class="okbox">ذخیره شد.</div>}
       {v.tg_ok && <div class="okbox">{v.tg_ok}</div>}
       <Errors errors={[...(props.errors ?? []), v.tg_error]} />
@@ -727,17 +734,9 @@ export function ProductFormPage(props: {
 
         <div class="card">
           <h2>بسته‌بندی‌های کادویی</h2>
-          <p class="muted small" style="margin-top:0">
-            خریدار کادو یکی از این‌ها را انتخاب می‌کند و قیمتش به مبلغ اضافه می‌شود (قیمت ۰ = رایگان). برای حذف، نام را خالی کنید. اگر
-            هیچ بسته‌بندی تعریف نکنید، انتخاب بسته‌بندی نمایش داده نمی‌شود.
+          <p class="muted small" style="margin:0">
+            بسته‌بندی‌ها و قیمتشان یک‌بار برای کل فروشگاه تعریف می‌شوند: <a href="/panel/settings#packages">تنظیمات فروشگاه ← بسته‌بندی‌ها</a>
           </p>
-          {pkgs.map((k, n) => (
-            <div class="row" style="margin-bottom:6px">
-              <input type="hidden" name={`pkg_id_${n}`} value={k.id ? String(k.id) : ""} />
-              <input name={`pkg_name_${n}`} value={k.name} placeholder="مثلاً: جعبه کادو با روبان" maxlength={60} style="flex:2;min-width:180px" />
-              <input name={`pkg_price_${n}`} value={k.id ? String(k.price) : ""} placeholder="قیمت (تومان)" class="ltr" inputmode="numeric" style="flex:1;min-width:120px" />
-            </div>
-          ))}
         </div>
         <p><button>{p ? "ذخیره" : "ثبت محصول"}</button></p>
       </form>
@@ -817,6 +816,32 @@ function productFormScript(existingImages: number) {
 
 const PREVIEW_SCRIPT = `document.querySelectorAll('input[data-preview]').forEach(function(i){i.addEventListener('change',function(){
   var img=document.getElementById(i.getAttribute('data-preview'));if(i.files[0]){img.src=URL.createObjectURL(i.files[0]);img.classList.remove('hidden');}});});`;
+
+/** Gift-wrap packages for the whole shop: the buyer picks one at checkout and its price is added. */
+export function PackagesSettings(props: { packages: ProductPackage[]; ok?: string; error?: string }) {
+  const rows = [...props.packages, ...Array.from({ length: 3 }, () => ({ id: 0, name: "", price: 0 }))];
+  return (
+    <div class="card" id="packages">
+      <h2>🎀 بسته‌بندی‌های کادویی</h2>
+      <p class="muted small" style="margin-top:0">
+        یک‌بار برای کل فروشگاه: خریدار کادو یکی را انتخاب می‌کند و قیمتش به مبلغ اضافه می‌شود (قیمت ۰ = رایگان). برای حذف، نام را خالی کنید.
+        اگر هیچ بسته‌بندی تعریف نکنید، انتخاب بسته‌بندی نمایش داده نمی‌شود.
+      </p>
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <Errors errors={[props.error]} />
+      <form method="post" action="/panel/settings/packages">
+        {rows.map((k, n) => (
+          <div class="row" style="margin-bottom:6px">
+            <input type="hidden" name={`pkg_id_${n}`} value={k.id ? String(k.id) : ""} />
+            <input name={`pkg_name_${n}`} value={k.name} placeholder="مثلاً: جعبه کادو با روبان" maxlength={60} style="flex:2;min-width:180px" aria-label="نام بسته‌بندی" />
+            <input name={`pkg_price_${n}`} value={k.id ? String(k.price) : ""} placeholder="قیمت (تومان)" class="ltr" inputmode="numeric" style="flex:1;min-width:120px" aria-label="قیمت بسته‌بندی" />
+          </div>
+        ))}
+        <p><button>ذخیره بسته‌بندی‌ها</button></p>
+      </form>
+    </div>
+  );
+}
 
 export function SettingsPage(props: { user: User; shop: Shop; error?: string; ok?: string; children?: Child }) {
   const s = props.shop;

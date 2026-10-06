@@ -188,7 +188,8 @@ function SiteMenu(props: { user: User | null; stats?: { wishes: number; gifts: n
           <>
             {heading("حساب کاربری")}
             {item("/me", "fa-user-gear", "حساب من")}
-            {item("/me/wishlists", "fa-gift", "لیست آرزوها", path.startsWith("/me/wishlists"))}
+            {item("/me/wishlists", "fa-list-check", "لیست آرزوها", path.startsWith("/me/wishlists"))}
+            {item("/me/gifts", "fa-gift", "کادوهای من")}
             {item("/me/orders", "fa-bag-shopping", "سفارشات من", path.startsWith("/me/orders"))}
             {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : null}
             {u.is_admin ? item("/admin", "fa-shield-halved", "مدیریت سایت") : null}

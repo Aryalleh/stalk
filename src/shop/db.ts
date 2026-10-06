@@ -24,6 +24,17 @@ export function randomSlug(len = 10) {
   return [...bytes].map((b) => alphabet[b % alphabet.length]).join("");
 }
 
+/** Product code in four parts, shop first: <shop>-xxxx-xxxx-xxxx. It is also the product's address. */
+export function productCode(shopSlug: string) {
+  const shop = shopSlug.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) || "shop";
+  return `${shop}-${randomSlug(4)}-${randomSlug(4)}-${randomSlug(4)}`;
+}
+export const PRODUCT_CODE = "[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}";
+/** The product page's address: by code, or by id for rows saved before codes existed. */
+export const productPath = (p: { id: number; code?: string | null }) => `/p/${p.code || p.id}`;
+/** How a code is shown to people (and typed back into search). */
+export const showCode = (code: string) => code.toUpperCase();
+
 export interface Shop {
   id: number;
   owner_id: number;
@@ -64,6 +75,7 @@ export interface Shop {
 
 export interface Product {
   id: number;
+  code: string;
   shop_id: number;
   title: string;
   description: string;
@@ -261,8 +273,18 @@ export async function productImages(db: D1Database, productId: number) {
   return (await db.prepare("SELECT id, image_key FROM product_images WHERE product_id = ? ORDER BY sort, id").bind(productId).all<ProductImage>()).results;
 }
 
+/** The gift-wrap packages of the product's shop (set once per shop in the panel settings). */
 export async function productPackages(db: D1Database, productId: number) {
-  return (await db.prepare("SELECT id, name, price FROM product_packages WHERE product_id = ? ORDER BY sort, id").bind(productId).all<ProductPackage>()).results;
+  return (
+    await db
+      .prepare("SELECT id, name, price FROM shop_packages WHERE shop_id = (SELECT shop_id FROM products WHERE id = ?) ORDER BY sort, id")
+      .bind(productId)
+      .all<ProductPackage>()
+  ).results;
+}
+
+export async function shopPackages(db: D1Database, shopId: number) {
+  return (await db.prepare("SELECT id, name, price FROM shop_packages WHERE shop_id = ? ORDER BY sort, id").bind(shopId).all<ProductPackage>()).results;
 }
 
 export type OrderStatus = "pending" | "awaiting" | "paid" | "shipped" | "delivered" | "rejected";

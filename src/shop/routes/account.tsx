@@ -17,7 +17,7 @@ import { activeBots, botLink, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange } from "../orders";
 
@@ -284,6 +284,7 @@ account.post("/me/settings", async (c) => {
     show_received: f.show_received === "1" ? 1 : 0,
     show_givers: f.show_givers === "1" ? 1 : 0,
     show_birthday: f.show_birthday === "1" ? 1 : 0,
+    show_given_count: f.show_given_count === "1" ? 1 : 0,
   });
   if (error) return settingsView(c, { error, values: f }, 400);
   if (file) avatar = await storeImage(c.env.IMAGES, file, "a");
@@ -493,6 +494,36 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
   const item = await db.prepare("SELECT id FROM wishlist_items WHERE wishlist_id = ?").bind(w!.id).first<{ id: number }>();
   if (!item) return directBuyPage(c, { ...f, ...values }, ["این محصول دیگر قابل خرید نیست."], 400);
   return c.redirect(`/gift/${item.id}`);
+});
+
+// "My gifts": gifts I received (from my wishlists) and gifts I gave to others.
+account.get("/me/gifts", async (c) => {
+  const user = currentUser(c);
+  const db = c.env.DB;
+  const [received, given] = await db.batch([
+    db
+      .prepare(
+        `SELECT o.token, o.product_title, o.status, o.cancel_kind, COALESCE(o.paid_at, o.created_at) AS at, o.tracking_code, o.gift_message,
+                COALESCE(p.image_key, '') AS image_key, COALESCE(p.code, '') AS product_code, o.product_id,
+                CASE WHEN o.is_anonymous = 1 THEN '' ELSE COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست') END AS person,
+                CASE WHEN o.is_anonymous = 1 THEN NULL ELSE gu.username END AS person_username
+         FROM orders o JOIN wishlists w ON w.id = o.wishlist_id LEFT JOIN products p ON p.id = o.product_id
+         LEFT JOIN users gu ON gu.phone = o.giver_phone AND o.giver_phone <> ''
+         WHERE w.user_id = ? AND w.is_direct = 0 AND o.status IN ('paid', 'shipped', 'delivered') ORDER BY at DESC LIMIT 100`,
+      )
+      .bind(user.id),
+    db
+      .prepare(
+        `SELECT o.token, o.product_title, o.status, o.cancel_kind, o.created_at AS at, o.tracking_code, o.gift_message,
+                COALESCE(p.image_key, '') AS image_key, COALESCE(p.code, '') AS product_code, o.product_id,
+                ${publicNameSql("u")} AS person, u.username AS person_username
+         FROM orders o JOIN wishlists w ON w.id = o.wishlist_id JOIN users u ON u.id = w.user_id LEFT JOIN products p ON p.id = o.product_id
+         WHERE o.giver_phone = ? AND w.is_direct = 0 AND o.status <> 'pending' ORDER BY o.created_at DESC LIMIT 100`,
+      )
+      .bind(user.phone),
+  ]);
+  const tab = c.req.query("tab") === "given" ? "given" : "received";
+  return render(c, <MyGiftsPage user={user} tab={tab} received={received.results as GiftRow[]} given={given.results as GiftRow[]} />);
 });
 
 account.get("/me/orders", async (c) => {

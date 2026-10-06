@@ -15,6 +15,8 @@ export interface PublicPerson {
   show_received: number;
   show_givers: number;
   show_birthday: number;
+  show_given_count: number;
+  phone?: string; // only for the server's queries; never rendered
 }
 
 export interface PublicList {
@@ -33,11 +35,13 @@ export interface ReceivedGift {
   image_key: string;
   giver: string; // "" = not shown
   giver_public: number; // 1 = everyone sees the name, 0 = only the recipient
+  giver_username: string | null; // links the name to the giver's profile
+  product_code: string;
 }
 
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
-export function PublicProfilePage(props: { viewer: User | null; person: PublicPerson; lists: PublicList[]; gifts: ReceivedGift[] | null; isMe: boolean }) {
+export function PublicProfilePage(props: { viewer: User | null; person: PublicPerson; lists: PublicList[]; gifts: ReceivedGift[] | null; isMe: boolean; givenTo?: number | null }) {
   const site = useSite();
   const p = props.person;
   const url = `${site.origin}/u/${p.username}`;
@@ -79,6 +83,12 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
               <div class="text-[11px] text-muted">کادوی گرفته</div>
             </div>
           )}
+          {props.givenTo != null && (
+            <div>
+              <div class="text-xl font-bold text-fg">{fa(props.givenTo)}</div>
+              <div class="text-[11px] text-muted">کادو داده (نفر)</div>
+            </div>
+          )}
         </div>
         {props.isMe && (
           <p class="text-xs text-muted mt-5">
@@ -101,7 +111,7 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
                   <div class="w-full h-full flex items-center justify-center text-5xl bg-plum">🎁</div>
                 )}
                 <div class="absolute inset-0 photo-scrim"></div>
-                <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
+                <div class="absolute inset-x-0 bottom-0 p-4 on-photo pointer-events-none">
                   <h3 class="text-sm font-bold text-fg truncate">{l.title}</h3>
                   <p class="text-[10px] text-muted">
                     {fa(l.items)} آرزو{l.fulfilled ? ` · ${fa(l.fulfilled)} برآورده شده` : ""}{l.occasion_date ? ` · ${l.occasion_date}` : ""}
@@ -118,7 +128,8 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
           <h2 class="text-lg font-bold mb-4 px-2">کادوهایی که گرفته</h2>
           <div class="masonry">
             {props.gifts.map((g) => (
-              <a href={`/p/${g.product_id}`} class="relative block bg-card rounded-3xl overflow-hidden">
+              <div class="relative block bg-card rounded-3xl overflow-hidden">
+                <a href={g.product_code ? `/p/${g.product_code}` : `/p/${g.product_id}`} class="absolute inset-0 z-[1]" aria-label={g.product_title}></a>
                 {g.image_key ? (
                   <img src={`/img/${g.image_key}`} alt={g.product_title} loading="lazy" class="w-full h-auto block min-h-[140px] object-cover" />
                 ) : (
@@ -129,12 +140,17 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
                   <h3 class="text-xs font-bold text-fg truncate">{g.product_title}</h3>
                   {g.giver && (
                     <p class="text-[11px] font-bold text-white/90 truncate mt-0.5">
-                      <i class="fa-solid fa-gift text-brand ml-1"></i>از طرف {g.giver}
+                      <i class="fa-solid fa-gift text-brand ml-1"></i>از طرف{" "}
+                      {g.giver_username ? (
+                        <a href={`/u/${g.giver_username}`} class="relative z-[2] pointer-events-auto underline decoration-white/40 underline-offset-4 hover:text-brand">{g.giver}</a>
+                      ) : (
+                        g.giver
+                      )}
                       {props.isMe && !g.giver_public && <span class="font-normal text-white/60"> · فقط شما می‌بینید</span>}
                     </p>
                   )}
                 </div>
-              </a>
+              </div>
             ))}
           </div>
         </section>

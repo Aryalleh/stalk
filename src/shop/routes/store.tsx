@@ -12,6 +12,7 @@ import {
   listProducts,
   productImages,
   productPackages,
+  PRODUCT_CODE,
   randomSlug,
   reportReceipt,
   reserveItem,
@@ -32,6 +33,11 @@ export const store = new Hono<Env>();
 // all products, or the search results for ?q= (searches stay on /).
 async function feed(c: C, cat = c.req.query("cat") ?? "") {
   const q = (c.req.query("q") ?? "").trim().slice(0, 100);
+  // A product code typed into search opens that product.
+  if (new RegExp(`^${PRODUCT_CODE}$`).test(q)) {
+    const hit = await c.env.DB.prepare("SELECT code FROM products WHERE code = ?").bind(q.toLowerCase()).first<{ code: string }>();
+    if (hit) return c.redirect(`/p/${hit.code}`);
+  }
   const categories = categoryList(c.get("settings"));
   const category = categories.includes(cat) ? cat : "";
   const page = pageParam(c);
@@ -74,8 +80,20 @@ store.get("/search", (c) => {
   return c.redirect(`/${qs}`, 301);
 });
 
+// The product page lives at /p/<code>; old /p/<id> links move there.
 store.get("/p/:id{[0-9]+}", async (c) => {
-  const id = intParam(c, "id");
+  const row = await c.env.DB.prepare("SELECT code FROM products WHERE id = ?").bind(intParam(c, "id")).first<{ code: string }>();
+  if (row?.code) return c.redirect(`/p/${row.code}${new URL(c.req.url).search}`, 301);
+  return productPage(c, intParam(c, "id"));
+});
+store.get(`/p/:code{${PRODUCT_CODE}}`, async (c) => {
+  const code = c.req.param("code");
+  if (code !== code.toLowerCase()) return c.redirect(`/p/${code.toLowerCase()}${new URL(c.req.url).search}`, 301);
+  const row = await c.env.DB.prepare("SELECT id FROM products WHERE code = ?").bind(code).first<{ id: number }>();
+  return row ? productPage(c, row.id) : c.notFound();
+});
+
+async function productPage(c: C, id: number) {
   const product = await getPublicProduct(c.env.DB, id);
   if (!product) return c.notFound();
   const user = c.get("user");
@@ -106,7 +124,7 @@ store.get("/p/:id{[0-9]+}", async (c) => {
       error={error}
     />,
   );
-});
+}
 
 // ---------- all shops ----------
 
@@ -182,13 +200,22 @@ store.get("/w/:slug", async (c) => {
 store.get("/u/:username", async (c) => {
   const db = c.env.DB;
   const person = await db
-    .prepare(`SELECT id, ${publicNameSql("users")} AS name, username, avatar_key, birth_date, show_received, show_givers, show_birthday FROM users WHERE username = ?`)
+    .prepare(`SELECT id, ${publicNameSql("users")} AS name, username, avatar_key, birth_date, show_received, show_givers, show_birthday, show_given_count, phone FROM users WHERE username = ?`)
     .bind(c.req.param("username").toLowerCase())
     .first<PublicPerson>();
   if (!person) return c.notFound();
   const viewer = c.get("user");
   const isMe = viewer?.id === person.id;
   const SOLD = "('paid', 'shipped', 'delivered')";
+  const given = person.show_given_count && person.phone
+    ? await db
+        .prepare(
+          `SELECT COUNT(DISTINCT w.user_id) AS n FROM orders o JOIN wishlists w ON w.id = o.wishlist_id
+           WHERE o.giver_phone = ? AND w.is_direct = 0 AND w.user_id <> ? AND o.status IN ${SOLD}`,
+        )
+        .bind(person.phone, person.id)
+        .first<{ n: number }>()
+    : null;
   const [lists, gifts] = await db.batch([
     db
       .prepare(
@@ -203,13 +230,14 @@ store.get("/u/:username", async (c) => {
       .bind(person.id),
     db
       .prepare(
-        // A buyer who didn't stay anonymous is named under the gift: for everyone while the recipient
+        // A buyer who didn't stay anonymous is named under the gift (linked to their profile): for everyone while the recipient
         // shows givers (on by default), and always for the recipient. Anonymous buyers are never named.
-        `SELECT o.product_id, o.product_title, COALESCE(p.image_key, '') AS image_key,
+        `SELECT o.product_id, COALESCE(p.code, '') AS product_code, o.product_title, COALESCE(p.image_key, '') AS image_key,
                 CASE WHEN o.is_anonymous = 1 THEN CASE WHEN ?3 = 1 THEN 'ناشناس' ELSE '' END
                      WHEN ?3 = 1 OR ?2 = 1 THEN COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست')
                      ELSE '' END AS giver,
-                (?2 = 1 AND o.is_anonymous = 0) AS giver_public
+                (?2 = 1 AND o.is_anonymous = 0) AS giver_public,
+                CASE WHEN o.is_anonymous = 0 AND (?3 = 1 OR ?2 = 1) THEN gu.username ELSE NULL END AS giver_username
          FROM orders o JOIN wishlists w ON w.id = o.wishlist_id LEFT JOIN products p ON p.id = o.product_id
          LEFT JOIN users gu ON gu.phone = o.giver_phone AND o.giver_phone <> ''
          WHERE w.user_id = ?1 AND w.is_direct = 0 AND o.status IN ${SOLD} ORDER BY o.paid_at DESC LIMIT 60`,
@@ -224,6 +252,7 @@ store.get("/u/:username", async (c) => {
       lists={lists.results as PublicList[]}
       gifts={person.show_received || isMe ? (gifts.results as ReceivedGift[]) : null}
       isMe={isMe}
+      givenTo={given ? given.n : null}
     />,
   );
 });

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { adjustStock, availableByVariant, normCity, now, productImages, productPackages, productStock, randomSlug, type Order, type Product, type Shop } from "../db";
+import { adjustStock, availableByVariant, normCity, now, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
 import { sizeNames } from "../sizes";
 import { developerHref, faqs } from "../../content";
 import { colorList, pickVariant, variantKey, variants, type Variant } from "../variants";
@@ -12,7 +12,7 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
@@ -336,10 +336,10 @@ async function variantInfo(db: D1Database, productId: number) {
 }
 
 async function productFormPage(c: C, product: Product | null, values: Record<string, string>, errors?: string[], status: 200 | 400 = 200) {
-  const [images, packages, stock, info] = product
-    ? await Promise.all([productImages(c.env.DB, product.id), productPackages(c.env.DB, product.id), productStock(c.env.DB, product.id), variantInfo(c.env.DB, product.id)])
-    : [[], [], {}, {}];
-  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} packages={packages} stock={stock} variantInfo={info} categories={categoryList(c.get("settings"))} errors={errors} />, status);
+  const [images, stock, info] = product
+    ? await Promise.all([productImages(c.env.DB, product.id), productStock(c.env.DB, product.id), variantInfo(c.env.DB, product.id)])
+    : [[], {}, {}];
+  return render(c, <ProductFormPage user={currentUser(c)} shop={shopOf(c)} product={product} values={values} images={images} stock={stock} variantInfo={info} categories={categoryList(c.get("settings"))} errors={errors} />, status);
 }
 
 async function saveProduct(c: C, product: Product | null) {
@@ -411,18 +411,6 @@ async function saveProduct(c: C, product: Product | null) {
   if (chartFile && !IMAGE_TYPES[chartFile.type]) errors.push("عکس راهنمای سایز باید JPG، PNG یا WebP باشد.");
   else if (chartFile && chartFile.size > MAX_IMAGE) errors.push("حجم عکس راهنمای سایز بیشتر از ۳ مگابایت است.");
 
-  // Packages: rows pkg_id_N / pkg_name_N / pkg_price_N; an empty name deletes the row.
-  const packages: { id: number | null; name: string; price: number }[] = [];
-  for (let n = 0; n < MAX_PACKAGES + 5; n++) {
-    const name = str(`pkg_name_${n}`).slice(0, 60);
-    const id = Number(str(`pkg_id_${n}`)) || null;
-    if (!name) continue;
-    const p = Number(normalizeDigits(str(`pkg_price_${n}`)).replace(/[,٬]/g, "") || "0");
-    if (!Number.isInteger(p) || p < 0) errors.push(`قیمت بسته‌بندی «${name}» نامعتبر است.`);
-    packages.push({ id, name, price: p });
-  }
-  if (packages.length > MAX_PACKAGES) errors.push(`حداکثر ${MAX_PACKAGES} بسته‌بندی.`);
-
   const existing = product ? await productImages(c.env.DB, product.id) : [];
   const removeIds = new Set(list("delete_image").map(Number));
   const files = (Array.isArray(body.images) ? body.images : [body.images]).filter((f): f is File => f instanceof File && f.size > 0);
@@ -457,9 +445,9 @@ async function saveProduct(c: C, product: Product | null) {
       .run();
   } else {
     const row = await db.prepare(
-      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, colors, track_stock, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+      "INSERT INTO products (shop_id, title, description, price, video_url, image_key, size_guide, size_guide_image, category, features, colors, track_stock, is_active, created_at, updated_at, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
     )
-      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, values.colors, Number(values.track_stock), Number(values.is_active), t, t)
+      .bind(shop.id, values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, values.colors, Number(values.track_stock), Number(values.is_active), t, t, productCode(shop.slug))
       .first<{ id: number }>();
     productId = row!.id;
   }
@@ -476,17 +464,6 @@ async function saveProduct(c: C, product: Product | null) {
         .bind(productId, r.size, r.color, r.quantity, r.sku, r.price, r.sale_price, r.min_stock),
     );
   }
-  const keepPkgIds = packages.map((p) => p.id).filter(Boolean);
-  stmts.push(
-    db.prepare(`DELETE FROM product_packages WHERE product_id = ? ${keepPkgIds.length ? `AND id NOT IN (${keepPkgIds.map(() => "?").join(",")})` : ""}`).bind(productId, ...keepPkgIds),
-  );
-  packages.forEach((p, n) =>
-    stmts.push(
-      p.id
-        ? db.prepare("UPDATE product_packages SET name = ?, price = ?, sort = ? WHERE id = ? AND product_id = ?").bind(p.name, p.price, n, p.id, productId)
-        : db.prepare("INSERT INTO product_packages (product_id, name, price, sort) VALUES (?, ?, ?, ?)").bind(productId, p.name, p.price, n),
-    ),
-  );
   await db.batch(stmts);
   const removedKeys = existing.filter((i) => removeIds.has(i.id)).map((i) => i.image_key);
   if (product?.size_guide_image && product.size_guide_image !== chartKey) removedKeys.push(product.size_guide_image);
@@ -565,12 +542,14 @@ async function saveSettings(c: C) {
   return { error: "" };
 }
 
-const settingsView = async (c: C, extra: { error?: string; ok?: string } = {}, status: 200 | 400 = 200) => {
+const settingsView = async (c: C, extra: { error?: string; ok?: string; pkgError?: string } = {}, status: 200 | 400 = 200) => {
   const shop = (await myShop(c))!;
+  const packages = await shopPackages(c.env.DB, shop.id);
   const tgImported = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE shop_id = ? AND tg_chat_id IS NOT NULL").bind(shop.id).first<{ n: number }>();
   return render(
     c,
-    <SettingsPage user={currentUser(c)} shop={shop} {...extra}>
+    <SettingsPage user={currentUser(c)} shop={shop} error={extra.error} ok={extra.ok}>
+      <PackagesSettings packages={packages} ok={c.req.query("pkg") === "saved" ? "بسته‌بندی‌ها ذخیره شد." : undefined} error={extra.pkgError} />
       <InstagramSettings
         shop={shop}
         webhookUrl={`${siteUrl(c)}/ig/webhook`}
@@ -598,6 +577,32 @@ panel.get("/panel/settings", (c) => settingsView(c));
 panel.post("/panel/settings", async (c) => {
   const { error } = await saveSettings(c);
   return settingsView(c, error ? { error } : { ok: "ذخیره شد." }, error ? 400 : 200);
+});
+
+// Gift-wrap packages for the whole shop: rows pkg_id_N / pkg_name_N / pkg_price_N; an empty name deletes the row.
+panel.post("/panel/settings/packages", async (c) => {
+  const shop = shopOf(c);
+  const f = await form(c);
+  const rows: { id: number | null; name: string; price: number }[] = [];
+  for (let n = 0; n < MAX_PACKAGES + 5; n++) {
+    const name = (f[`pkg_name_${n}`] ?? "").trim().slice(0, 60);
+    if (!name) continue;
+    const price = Number(normalizeDigits(f[`pkg_price_${n}`] ?? "").replace(/[,٬\s]/g, "") || "0");
+    if (!Number.isInteger(price) || price < 0) return settingsView(c, { pkgError: `قیمت بسته‌بندی «${name}» نامعتبر است.` }, 400);
+    rows.push({ id: Number(f[`pkg_id_${n}`]) || null, name, price });
+  }
+  if (rows.length > MAX_PACKAGES) return settingsView(c, { pkgError: `حداکثر ${MAX_PACKAGES} بسته‌بندی.` }, 400);
+  const db = c.env.DB;
+  const keep = rows.map((r) => r.id).filter(Boolean) as number[];
+  await db.batch([
+    db.prepare(`DELETE FROM shop_packages WHERE shop_id = ? ${keep.length ? `AND id NOT IN (${keep.map(() => "?").join(",")})` : ""}`).bind(shop.id, ...keep),
+    ...rows.map((r, n) =>
+      r.id
+        ? db.prepare("UPDATE shop_packages SET name = ?, price = ?, sort = ? WHERE id = ? AND shop_id = ?").bind(r.name, r.price, n, r.id, shop.id)
+        : db.prepare("INSERT INTO shop_packages (shop_id, name, price, sort) VALUES (?, ?, ?, ?)").bind(shop.id, r.name, r.price, n),
+    ),
+  ]);
+  return c.redirect("/panel/settings?pkg=saved#packages");
 });
 
 panel.post("/panel/settings/test", async (c) => {

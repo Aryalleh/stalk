@@ -33,11 +33,11 @@ export function fillTemplate(t: string, v: { name: string; title: string; price:
 async function productOffer(db: D1Database, shopId: number, productId: number) {
   return db
     .prepare(
-      `SELECT p.id, p.title, MIN(COALESCE(s.sale_price, s.price, p.price)) AS price FROM products p
+      `SELECT p.id, p.code, p.title, MIN(COALESCE(s.sale_price, s.price, p.price)) AS price FROM products p
        LEFT JOIN product_stock s ON s.product_id = p.id WHERE p.id = ? AND p.shop_id = ? GROUP BY p.id`,
     )
     .bind(productId, shopId)
-    .first<{ id: number; title: string; price: number }>();
+    .first<{ id: number; code: string; title: string; price: number }>();
 }
 
 /** One comment from the webhook. `siteUrl` builds the product link. */
@@ -80,7 +80,7 @@ export async function handleIgComment(db: D1Database, shop: Shop, cm: IgComment,
     name: customer?.name || (cm.username ? `@${cm.username}` : ""),
     title: product?.title ?? "",
     price: product ? toman(product.price) : "",
-    link: product ? `${siteUrl}/p/${product.id}` : `${siteUrl}/s/${shop.slug}`,
+    link: product ? `${siteUrl}/p/${product.code || product.id}` : `${siteUrl}/s/${shop.slug}`,
   };
   let error = "";
   if (link.dm_text.trim()) {

@@ -575,6 +575,7 @@ function SettingsBody(props: SettingsProps & { user: User }) {
             {toggle("show_received", u.show_received, "نمایش کادوهای دریافتی در پروفایل عمومی", "کادوهایی که گرفته‌اید زیر پروفایلتان دیده می‌شوند.")}
             {toggle("show_givers", u.show_givers, "نمایش نام هدیه‌دهندگان", "فقط کسانی که خودشان اجازه داده‌اند، با نام مستعارشان.")}
             {toggle("show_birthday", u.show_birthday, "نمایش روز تولد در پروفایل", "فقط روز و ماه؛ سال تولد هرگز نمایش داده نمی‌شود.")}
+            {toggle("show_given_count", u.show_given_count, "نمایش تعداد کسانی که به آن‌ها کادو داده‌ام", "در پروفایل عمومی نوشته می‌شود «به چند نفر کادو داده»؛ نام کسی نمایش داده نمی‌شود.")}
           </div>
         </section>
 
@@ -746,6 +747,84 @@ export function WishlistFormPage(props: {
           </table>
         </div>
       )}
+    </Layout>
+  );
+}
+
+export interface GiftRow {
+  token: string;
+  product_id: number;
+  product_code: string;
+  product_title: string;
+  image_key: string;
+  status: Order["status"];
+  cancel_kind: string;
+  at: string;
+  tracking_code: string;
+  gift_message: string;
+  person: string; // the giver (received) or the recipient (given); "" = anonymous
+  person_username: string | null;
+}
+
+/** "کادوهای من": gifts I received and gifts I gave, as two tabs. */
+export function MyGiftsPage(props: { user: User; tab: "received" | "given"; received: GiftRow[]; given: GiftRow[] }) {
+  const given = props.tab === "given";
+  const rows = given ? props.given : props.received;
+  const tab = (key: "received" | "given", icon: string, label: string, n: number) => (
+    <a
+      href={key === "given" ? "/me/gifts?tab=given" : "/me/gifts"}
+      aria-current={props.tab === key ? "page" : undefined}
+      class={`flex-1 py-2.5 rounded-xl text-xs font-bold text-center ${props.tab === key ? "bg-brand text-white shadow-lg shadow-brand/20" : "text-muted"}`}
+    >
+      <i class={`fa-solid ${icon} ml-1`}></i>
+      {label} <span class="opacity-70">({fa(n)})</span>
+    </a>
+  );
+  const person = (g: GiftRow) =>
+    !g.person ? <span>یک دوست ناشناس</span> : g.person_username ? <a href={`/u/${g.person_username}`} class="text-brand font-bold">{g.person}</a> : <b class="text-fg">{g.person}</b>;
+  return (
+    <Layout title="کادوهای من" user={props.user} nav="wishes" bare wide>
+      <div class="px-4 md:px-10 py-6 md:py-10">
+        <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">کادوهای من</h1>
+        <p class="text-sm text-muted mb-5">کادوهایی که از لیست آرزویتان برایتان خریده‌اند و کادوهایی که شما به دیگران داده‌اید.</p>
+        <div class="flex gap-1 p-1 bg-card rounded-2xl border border-fg/5 mb-6 max-w-md">
+          {tab("received", "fa-gift", "دریافتی", props.received.length)}
+          {tab("given", "fa-hand-holding-heart", "داده‌شده", props.given.length)}
+        </div>
+        {rows.length === 0 ? (
+          <div class="bg-card rounded-3xl p-8 text-center text-sm text-muted">
+            {given ? (
+              <>هنوز به کسی کادو نداده‌اید. لینک لیست آرزوی دوستانتان را باز کنید و کادو بدهید.</>
+            ) : (
+              <>هنوز کادویی نگرفته‌اید. <a href="/me/wishlists" class="text-brand font-bold">لیست آرزویتان</a> را برای دوستانتان بفرستید.</>
+            )}
+          </div>
+        ) : (
+          <div class="grid gap-3 md:grid-cols-2">
+            {rows.map((g) => (
+              <div class="bg-card rounded-2xl p-3 flex gap-3 items-center">
+                <a href={g.product_code ? `/p/${g.product_code}` : `/p/${g.product_id}`} class="w-16 h-16 rounded-xl overflow-hidden bg-ink shrink-0 flex items-center justify-center text-2xl">
+                  {g.image_key ? <img src={`/img/${g.image_key}`} alt={g.product_title} loading="lazy" class="w-full h-full object-cover" /> : "🎁"}
+                </a>
+                <div class="flex-1 min-w-0 text-xs leading-6">
+                  <h3 class="text-sm font-bold text-fg truncate">{g.product_title}</h3>
+                  <p class="text-muted truncate">{given ? <>برای {person(g)}</> : <>از طرف {person(g)}</>}</p>
+                  <p class="text-muted">
+                    <span class="inline-block px-2 rounded-md bg-ink text-fg/80">{orderStatusLabel(g)}</span>
+                    <span class="mr-2 dt">{formatJalali(g.at, false)}</span>
+                    {g.tracking_code && <span class="mr-2">کد رهگیری: <span class="dt ltr">{g.tracking_code}</span></span>}
+                  </p>
+                </div>
+                {given && (
+                  <a href={`/order/${g.token}`} aria-label="جزئیات سفارش" class="w-9 h-9 rounded-full bg-ink text-muted flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-chevron-left"></i>
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Layout>
   );
 }

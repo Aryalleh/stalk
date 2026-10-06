@@ -5,7 +5,7 @@
 //  - the bot puts "buy" and "add to wishlist" buttons under the post, opening the mini app.
 import { botUsername, deleteBotMessage, downloadBotFile, sendToChats, setButtons, type InlineKeyboard } from "../../bale/botapi";
 import type { Settings } from "../../settings";
-import { now, randomSlug, type Shop } from "../db";
+import { now, productCode, randomSlug, type Shop } from "../db";
 import { shopOwnerChats } from "../orders";
 import { parsePost } from "./parse";
 
@@ -157,11 +157,11 @@ export async function handleChannelPost(d: Deps, post: ChannelPost, edited: bool
   const t = now();
   const row = await d.db
     .prepare(
-      `INSERT INTO products (shop_id, title, description, price, image_key, colors, is_active, tg_chat_id, tg_message_id, tg_media_group, tg_photo_uid, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO products (shop_id, title, description, price, image_key, colors, is_active, tg_chat_id, tg_message_id, tg_media_group, tg_photo_uid, created_at, updated_at, code)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (tg_chat_id, tg_message_id) WHERE tg_chat_id IS NOT NULL DO NOTHING RETURNING id`,
     )
-    .bind(shop.id, parsed.title, parsed.description, parsed.price, cover, parsed.colors.join("\n"), chatId, post.message_id, post.media_group_id ?? null, photo.file_unique_id, t, t)
+    .bind(shop.id, parsed.title, parsed.description, parsed.price, cover, parsed.colors.join("\n"), chatId, post.message_id, post.media_group_id ?? null, photo.file_unique_id, t, t, productCode(shop.slug))
     .first<{ id: number }>();
   if (!row) return; // the same post delivered twice
   await d.db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(row.id, cover).run();
