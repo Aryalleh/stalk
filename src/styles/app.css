@@ -152,6 +152,9 @@
 .on-photo { color: #fff; }
 .on-photo .text-fg { color: #fff; }
 .on-photo .text-muted, .on-photo [class*="text-fg/"] { color: rgb(255 255 255 / 0.78); }
+/* A themed box placed on a photo (e.g. the owner's share box on a wishlist banner) keeps the theme's colors. */
+.on-photo .themed, .on-photo .themed .text-fg { color: rgb(var(--c-fg)); }
+.on-photo .themed .text-muted { color: rgb(var(--c-muted)); }
 
 /* On/off switch for a real checkbox (account privacy): the knob is a radial background that slides. */
 .switch {

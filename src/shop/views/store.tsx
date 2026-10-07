@@ -960,16 +960,16 @@ export function WishlistPublicPage(props: {
         {w.description && <p class="text-sm text-muted max-w-sm mx-auto leading-relaxed mt-2 whitespace-pre-wrap">{w.description}</p>}
         {props.items.length > 0 && <p class="text-xs text-muted mt-3">{fa(done)} از {fa(props.items.length)} آرزو برآورده شده</p>}
         {props.isOwner && (
-          <div class="mt-5 max-w-md mx-auto bg-ink/60 rounded-2xl p-3 text-right">
+          <div class="themed mt-5 max-w-md mx-auto bg-card/95 backdrop-blur-md border border-fg/10 rounded-2xl p-3 text-right shadow-lg">
             <p class="text-xs text-muted mb-2">این لیست خودتان است؛ این لینک را بفرستید:</p>
             <div class="flex gap-2">
-              <input readonly value={props.shareUrl} class="flex-1 min-w-0 bg-card rounded-xl px-3 py-2 text-xs ltr text-fg" onclick="this.select()" />
+              <input readonly value={props.shareUrl} class="flex-1 min-w-0 bg-ink border border-fg/10 rounded-xl px-3 py-2 text-xs ltr text-fg" onclick="this.select()" />
               <button type="button" data-copy={props.shareUrl} data-copied="کپی شد ✓" class="px-3 py-2 bg-brand text-white rounded-xl text-xs font-bold">کپی</button>
-              <a href={`/me/wishlists/${w.id}`} class="px-3 py-2 bg-card text-fg rounded-xl text-xs">ویرایش</a>
+              <a href={`/me/wishlists/${w.id}`} class="px-3 py-2 bg-ink text-fg border border-fg/10 rounded-xl text-xs font-bold">ویرایش</a>
             </div>
           </div>
         )}
-        {!w.is_open && <p class="mt-4 text-sm text-amber-200">این لیست بسته شده و فعلاً امکان خرید ندارد.</p>}
+        {!w.is_open && <p class="mt-4 text-sm font-bold text-amber-500">این لیست بسته شده و فعلاً امکان خرید ندارد.</p>}
       </ProfileHero>
       <section class="px-4">
         {props.items.length === 0 && <p class="text-center text-muted py-10">هنوز آرزویی اضافه نشده.</p>}
@@ -996,21 +996,21 @@ export function WishlistPublicPage(props: {
             return (
               <div class="item-card group relative bg-card rounded-3xl overflow-hidden shadow-lg">
                 <a href={`/p/${it.product_id}`}>
-                  <ImageOrGift imageKey={it.image_key} alt={it.title} class={`w-full h-auto block min-h-[160px] object-cover ${fulfilled ? "opacity-60" : ""}`} />
+                  <ImageOrGift imageKey={it.image_key} alt={it.title} class={`w-full h-auto block min-h-[160px] object-cover ${fulfilled ? "grayscale-[60%]" : ""}`} />
                 </a>
                 <div class="absolute inset-0 photo-scrim pointer-events-none"></div>
                 {fulfilled ? (
-                  <div class="absolute top-3 right-3 bg-ok px-2 py-1 rounded-lg text-[10px] text-white">✓ برآورده شد</div>
+                  <div class="absolute top-3 right-3 bg-emerald-600 px-2.5 py-1 rounded-lg text-[10px] font-bold text-white shadow-lg">✓ برآورده شد</div>
                 ) : it.quantity > 1 && it.bought > 0 ? (
-                  <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-brand border border-brand/20">
+                  <div class="absolute top-3 right-3 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-white border border-white/15">
                     {fa(it.bought)} از {fa(it.quantity)} خریده شده
                   </div>
                 ) : it.quantity > 1 ? (
-                  <div class="absolute top-3 right-3 bg-ink/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] text-fg">{fa(it.quantity)} عدد</div>
+                  <div class="absolute top-3 right-3 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-white border border-white/15">{fa(it.quantity)} عدد</div>
                 ) : null}
                 <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
                   <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{it.title}</h3>
-                  <div class={`text-[11px] font-bold ${fulfilled ? "text-muted" : "text-brand"}`}>{toman(it.price)}</div>
+                  <div class={`text-[11px] font-bold ${fulfilled ? "text-white/70 line-through" : "text-brand"}`}>{toman(it.price)}</div>
                   {variantLabel(it.size, it.color) && <div class="text-[10px] text-fg/80">{variantLabel(it.size, it.color)}</div>}
                   {it.note && <div class="text-[10px] text-muted truncate">{it.note}</div>}
                   {buyable && !fulfilled && !props.isOwner ? (
@@ -1018,7 +1018,7 @@ export function WishlistPublicPage(props: {
                       🎁 کادو بده
                     </a>
                   ) : status ? (
-                    <span class="mt-3 block w-full py-2 bg-plum text-muted text-center rounded-xl text-[10px] font-bold">{status}</span>
+                    <span class={`mt-3 block w-full py-2 text-center rounded-xl text-[10px] font-bold backdrop-blur-md border ${fulfilled ? "bg-emerald-600/85 text-white border-emerald-400/30" : "bg-black/50 text-white border-white/15"}`}>{status}</span>
                   ) : null}
                 </div>
               </div>
