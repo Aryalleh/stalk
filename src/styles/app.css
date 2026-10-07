@@ -22,20 +22,20 @@
 /* Tailwind colors (space-separated RGB so opacity modifiers work). Dark navy palette (light one below), pink brand;
    --c-brand is overridden by the brand color chosen in /admin/settings. */
 :root {
-  --c-ink: 13 19 32; --c-card: 23 32 51; --c-plum: 33 44 66; --c-fg: 231 237 247; --c-muted: 148 163 184; --c-brand: 255 92 147; --c-ok: 74 222 128;
+  --c-ink: 13 19 32; --c-card: 23 32 51; --c-plum: 33 44 66; --c-fg: 231 237 247; --c-muted: 148 163 184; --c-brand: 255 92 147;
 }
 /* Light theme: the default; people can switch to dark in their account settings. */
 .theme-light {
-  --c-ink: 244 246 250; --c-card: 255 255 255; --c-plum: 226 232 240; --c-fg: 15 23 42; --c-muted: 100 116 139; --c-ok: 21 128 61;
+  --c-ink: 244 246 250; --c-card: 255 255 255; --c-plum: 226 232 240; --c-fg: 15 23 42; --c-muted: 100 116 139;
 }
 /* Variables for the .ui components below. */
 :root {
   --bg: rgb(var(--c-ink)); --card: rgb(var(--c-card)); --fg: rgb(var(--c-fg)); --muted: rgb(var(--c-muted)); --line: rgb(var(--c-muted) / 0.14);
-  --field: rgb(var(--c-ink)); --accent: rgb(var(--c-brand)); --accent-fg: #fff; --ok: #1b7f3b; --ok-bg: rgb(27 127 59 / 0.15);
+  --field: rgb(var(--c-ink)); --accent: rgb(var(--c-brand)); --accent-fg: #fff; --ok: rgb(var(--c-brand)); --ok-bg: rgb(var(--c-brand) / 0.12);
   --warn-bg: rgb(255 176 32 / 0.12); --warn-fg: #ffcf7a; --err-bg: rgb(229 57 53 / 0.14); --err-fg: #ff8a80;
 }
 .theme-light {
-  --warn-fg: #b45309; --warn-bg: #fffbeb; --err-fg: #b91c1c; --err-bg: #fef2f2; --ok: #15803d; --ok-bg: #ecfdf5;
+  --warn-fg: #b45309; --warn-bg: #fffbeb; --err-fg: #b91c1c; --err-bg: #fef2f2;
 }
 /* Shop panel: light slate + blue, as in html/shoppanel.html */
 /* Panels (shop CRM and site admin): the sky palette of the UX Pilot designs. */
@@ -59,7 +59,6 @@
 /* Pastel status colors made for the dark theme get darker shades on light backgrounds; cards get a soft shadow. */
 .theme-light .text-amber-200 { color: #b45309; }
 .theme-light .text-red-300 { color: #b91c1c; }
-.theme-light .text-green-300 { color: #15803d; }
 .theme-light .bg-card { box-shadow: 0 1px 3px rgb(15 23 42 / 0.08); }
 
 @layer components {

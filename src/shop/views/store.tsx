@@ -801,7 +801,7 @@ export function ShopPage(props: {
             <div class="flex-1 min-w-0 mb-3">
               <div class="flex items-center gap-4 mb-2 flex-wrap">
                 <h1 class="text-4xl font-black truncate">{shop.name}</h1>
-                {verified && <span class="px-4 py-1.5 bg-emerald-500 text-white text-[11px] font-bold rounded-full shadow-lg"><i class="fa-solid fa-circle-check ml-1"></i>تأیید شده {site.site_name}</span>}
+                {verified && <span class="px-4 py-1.5 bg-brand text-white text-[11px] font-bold rounded-full shadow-lg"><i class="fa-solid fa-circle-check ml-1"></i>تأیید شده {site.site_name}</span>}
               </div>
               {shop.city && <p class="text-sm font-bold text-muted"><i class="fa-solid fa-location-dot text-brand ml-1"></i>{shop.city}</p>}
             </div>
@@ -823,7 +823,7 @@ export function ShopPage(props: {
             <div class="flex-1 min-w-0">
               <h1 class="text-xl font-black truncate">{shop.name}</h1>
               {shop.city && <p class="text-[11px] text-muted font-bold mt-1"><i class="fa-solid fa-location-dot text-brand ml-1"></i>{shop.city}</p>}
-              {verified && <p class="text-[10px] text-emerald-500 font-bold mt-1"><i class="fa-solid fa-circle-check ml-1"></i>تأیید شده</p>}
+              {verified && <p class="text-[10px] text-brand font-bold mt-1"><i class="fa-solid fa-circle-check ml-1"></i>تأیید شده</p>}
             </div>
             {shareBtn("w-10 h-10 !bg-brand/10 !text-brand rounded-xl flex items-center justify-center border border-brand/20 shrink-0")}
           </div>
@@ -1000,7 +1000,7 @@ export function WishlistPublicPage(props: {
                 </a>
                 <div class="absolute inset-0 photo-scrim pointer-events-none"></div>
                 {fulfilled ? (
-                  <div class="absolute top-3 right-3 bg-emerald-600 px-2.5 py-1 rounded-lg text-[10px] font-bold text-white shadow-lg">✓ برآورده شد</div>
+                  <div class="absolute top-3 right-3 bg-brand px-2.5 py-1 rounded-lg text-[10px] font-bold text-white shadow-lg">✓ برآورده شد</div>
                 ) : it.quantity > 1 && it.bought > 0 ? (
                   <div class="absolute top-3 right-3 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-bold text-white border border-white/15">
                     {fa(it.bought)} از {fa(it.quantity)} خریده شده
@@ -1018,7 +1018,7 @@ export function WishlistPublicPage(props: {
                       🎁 کادو بده
                     </a>
                   ) : status ? (
-                    <span class={`mt-3 block w-full py-2 text-center rounded-xl text-[10px] font-bold backdrop-blur-md border ${fulfilled ? "bg-emerald-600/85 text-white border-emerald-400/30" : "bg-black/50 text-white border-white/15"}`}>{status}</span>
+                    <span class={`mt-3 block w-full py-2 text-center rounded-xl text-[10px] font-bold backdrop-blur-md border ${fulfilled ? "bg-brand/85 text-white border-white/20" : "bg-black/50 text-white border-white/15"}`}>{status}</span>
                   ) : null}
                 </div>
               </div>
@@ -1367,7 +1367,7 @@ export function OrderPage(props: { user: User | null; order: OrderView; errors?:
           </div>
         )}
         {o.change_status === "accepted" && (
-          <div class="rounded-2xl bg-ok/15 text-green-300 px-4 py-3 text-sm">
+          <div class="rounded-2xl bg-brand/10 text-brand px-4 py-3 text-sm">
             ✓ تغییر پذیرفته شد{variantLabel(o.size, o.color) ? ` (${variantLabel(o.size, o.color)})` : ""}{o.change_reply ? `: ${o.change_reply}` : ""}.
           </div>
         )}

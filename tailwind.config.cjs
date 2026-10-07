@@ -12,9 +12,9 @@ module.exports = {
         fg: v("fg"), // text
         muted: v("muted"), // secondary text
         brand: v("brand"), // accent (blue by default)
-        ok: v("ok"), // success (lighter on the dark theme)
+        ok: v("brand"), // success: the brand color (the site palette has no green)
         tg: "#229ED9", // Telegram
-        bale: "#2db57d", // Bale
+        bale: v("brand"), // Bale buttons use the brand color too
       },
       fontFamily: { sans: ["Vazirmatn", "Tahoma", "sans-serif"] },
     },

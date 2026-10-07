@@ -517,7 +517,7 @@ function SettingsBody(props: SettingsProps & { user: User }) {
             </div>
           </AccountCard>
 
-          <AccountCard id="bot" icon="fa-robot" tint="bg-emerald-500/10 text-emerald-500" title="ربات‌های متصل">
+          <AccountCard id="bot" icon="fa-robot" tint="bg-brand/10 text-brand" title="ربات‌های متصل">
             <p class="text-[11px] text-muted leading-relaxed -mt-1">
               کد ورود، کادوها و سفارش‌ها به ربات‌های وصل‌شده می‌رسد. برای وصل کردن حساب دیگری «تغییر حساب» را بزنید و ربات را با همان حساب باز کنید.
             </p>
@@ -533,7 +533,7 @@ function SettingsBody(props: SettingsProps & { user: User }) {
                       </div>
                       <div class="min-w-0">
                         <p class="text-xs font-black text-fg">{style.name}</p>
-                        <p class={`text-[10px] font-bold ${b.connected ? "text-emerald-500" : "text-muted"}`}>{b.connected ? "متصل شده" : "متصل نیست"}</p>
+                        <p class={`text-[10px] font-bold ${b.connected ? "text-brand" : "text-muted"}`}>{b.connected ? "متصل شده" : "متصل نیست"}</p>
                       </div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
