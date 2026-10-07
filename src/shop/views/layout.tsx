@@ -118,9 +118,9 @@ function BottomNav(props: { active: NavKey; user: User | null }) {
     </a>
   );
   return (
-    <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/90 backdrop-blur-lg border-t border-card px-10 pt-3 safe-bottom flex items-center justify-between">
+    <nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/90 backdrop-blur-lg border-t border-card px-6 pt-3 safe-bottom grid grid-cols-3 items-center justify-items-center">
       {item("shops", "/shops", "fa-store", "فروشگاه‌ها")}
-      <div class="relative -top-6">
+      <div class="relative -top-6 flex justify-center">
         <a
           href="/"
           aria-label="خانه"
