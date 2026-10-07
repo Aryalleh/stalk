@@ -29,9 +29,11 @@ export function startTarget(param: string) {
   return { p: `/p/${id}`, b: `/p/${id}/buy`, h: `/p/${id}#wish`, s: `/s/${id}`, w: `/w/${id}` }[kind] ?? "";
 }
 
-const pageScript = (next: string) => `
+const pageScript = (next: string, fallback: string) => `
 (function () {
   var next = ${JSON.stringify(next).replace(/</g, "\\u003c")};
+  // The page a startapp link points to (shop, product, wishlist): opened even when sign-in can't happen.
+  var fallback = ${JSON.stringify(fallback).replace(/</g, "\\u003c")};
   function sdk() { return (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null) || (window.Bale && Bale.WebApp && Bale.WebApp.initData ? Bale.WebApp : null); }
   function fromHash() { var m = (location.hash || '').match(/tgWebAppData=([^&]*)/); return m ? decodeURIComponent(m[1]) : ''; }
   var tries = 0;
@@ -39,11 +41,15 @@ const pageScript = (next: string) => `
     var app = sdk(), data = app ? app.initData : fromHash();
     if (!data && tries++ < 15) return setTimeout(go, 100); // give the SDK script a moment to load
     if (app) { try { app.ready(); app.expand(); } catch (e) {} }
-    if (!data) { document.getElementById('outside').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden'); report('no initData (opened outside the app, or the messenger SDK did not load)'); return; }
+    if (!data) {
+      report('no initData (opened outside the app, or the messenger SDK did not load)' + (fallback ? '; opening ' + fallback : ''));
+      if (fallback) return location.replace(fallback);
+      document.getElementById('outside').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden'); return;
+    }
     fetch('/app/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ initData: data, next: next }) })
       .then(function (r) { return r.json().catch(function () { return { error: 'http_' + r.status }; }); })
-      .then(function (r) { if (r.next) location.replace(r.next); else fail(r.error || 'auth'); })
-      .catch(function (e) { fail('network: ' + (e && e.message || e)); report('network: ' + (e && e.message || e)); });
+      .then(function (r) { if (r.next) location.replace(r.next); else if (r.open) location.replace(r.open); else fail(r.error || 'auth'); })
+      .catch(function (e) { report('network: ' + (e && e.message || e)); if (fallback) location.replace(fallback); else fail('network: ' + (e && e.message || e)); });
   }
   function fail(code) {
     document.getElementById('failed').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden');
@@ -57,6 +63,8 @@ const pageScript = (next: string) => `
 
 miniapp.get("/app", (c) => {
   const next = safeNext(c.req.query("next"));
+  // Telegram adds the startapp value to the address of the main mini app as well as to initData.
+  const fallback = startTarget(c.req.query("tgWebAppStartParam") ?? c.req.query("startapp") ?? "");
   return render(
     c,
     <Layout title="ورود" user={null} nav="none" bare header={<></>}>
@@ -75,7 +83,7 @@ miniapp.get("/app", (c) => {
           <a href={`/login?next=${encodeURIComponent(next)}`} class="inline-block px-6 py-3 rounded-2xl bg-brand text-white font-bold">ورود با کد</a>
         </div>
       </div>
-      <script dangerouslySetInnerHTML={{ __html: pageScript(next) }} />
+      <script dangerouslySetInnerHTML={{ __html: pageScript(next, fallback) }} />
     </Layout>,
   );
 });
@@ -119,7 +127,9 @@ miniapp.post("/app/auth", async (c) => {
     // Name the likely cause: a valid-looking payload that no token verifies usually means the mini app
     // belongs to a different bot than the one whose token is in the admin settings.
     const code = problems.every((p) => p.endsWith(":no_token")) ? "no_bot_token" : problems.some((p) => p.endsWith(":expired")) ? "expired" : problems.some((p) => p.endsWith(":bad_hash")) ? "bad_signature" : problems[0] ?? "invalid";
-    return c.json({ error: code }, 401);
+    // Can't sign in, but a shop / product / wishlist link still opens (pages that need an account ask for it).
+    const open = startTarget(new URLSearchParams(raw).get("start_param") ?? "");
+    return c.json({ error: code, ...(open ? { open } : {}) }, 401);
   }
   const { kind, data } = found;
   const chatId = String(data.user.id); // a private chat's id is the user's id
@@ -145,6 +155,9 @@ miniapp.post("/app/auth", async (c) => {
   const name = [data.user.first_name, data.user.last_name].filter(Boolean).join(" ").slice(0, 80);
   await db.prepare("INSERT INTO miniapp_pending (token, kind, chat_id, name, created_at) VALUES (?, ?, ?, ?, ?)").bind(token, kind, chatId, name, Date.now()).run();
   setCookie(c, MINIAPP_COOKIE, token, cookieOptions(PENDING_TTL_MS / 1000, true));
-  await logAttempt(c, { kind, result: "needs_login", detail: "chat not linked to an account yet", chatId });
-  return c.json({ next: `/login?next=${encodeURIComponent(next)}` });
+  // A startapp link to a page anyone may see opens it straight away; signing in later still links this chat.
+  const target = startTarget(data.startParam);
+  const browse = !!target && !/\/buy$|#wish$/.test(target);
+  await logAttempt(c, { kind, result: "needs_login", detail: `chat not linked to an account yet${browse ? `; opening ${target}` : ""}`, chatId });
+  return c.json({ next: browse ? target : `/login?next=${encodeURIComponent(next)}` });
 });
