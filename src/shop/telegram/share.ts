@@ -1,11 +1,11 @@
-// Posting to the shop's Telegram channel from the panel: a product (cover photo, title, price,
+// Posting to the shop's Telegram or Bale channel from the panel: a product (cover photo, title, price,
 // description, buy / wishlist buttons) or the storefront (cover or logo, intro, "open the shop").
 // The bot must be an admin of the channel with "Post messages" (it already is once the channel is
 // connected). These posts carry no product tag, so the channel importer never turns them into products.
-import { sendBotMessage, sendBotPhoto, type InlineKeyboard } from "../../bale/botapi";
+import { sendBotMessage, sendBotPhoto, type BotKind, type InlineKeyboard } from "../../bale/botapi";
 import type { Settings } from "../../settings";
 import { now, toman, type Product, type Shop } from "../db";
-import { miniAppLink, postButtons } from "./channel";
+import { CHANNEL_COLS, miniAppLink, postButtons } from "./channel";
 
 interface Deps {
   db: D1Database;
@@ -21,7 +21,7 @@ export function shareError(e: unknown) {
   const m = String((e as Error)?.message ?? e);
   if (/not enough rights|need administrator|CHAT_ADMIN_REQUIRED/i.test(m)) return "بات در کانال اجازه ارسال پست ندارد؛ آن را ادمین با دسترسی «Post messages» کنید.";
   if (/chat not found|bot is not a member|kicked/i.test(m)) return "بات عضو کانال نیست یا از آن حذف شده؛ دوباره ادمینش کنید.";
-  if (/token is not configured/i.test(m)) return "بات تلگرام سایت تنظیم نشده است.";
+  if (/token is not configured/i.test(m)) return "بات این پیام‌رسان در تنظیمات سایت تنظیم نشده است.";
   return `ارسال به کانال ناموفق بود: ${m.slice(0, 200)}`;
 }
 
@@ -32,10 +32,13 @@ async function photoOf(images: R2Bucket, key: string) {
   return { data: await obj.arrayBuffer(), type: obj.httpMetadata?.contentType ?? "image/jpeg", name: key.split("/").pop() ?? "photo.jpg" };
 }
 
-async function send(d: Deps, chatId: string, imageKey: string, caption: string, markup: InlineKeyboard) {
+async function send(d: Deps, kind: BotKind, chatId: string, imageKey: string, caption: string, markup: InlineKeyboard) {
   const photo = await photoOf(d.images, imageKey).catch(() => null);
-  return photo ? sendBotPhoto(d.settings, "telegram", chatId, photo, caption, markup) : sendBotMessage(d.settings, "telegram", chatId, caption.slice(0, 4096), markup);
+  return photo ? sendBotPhoto(d.settings, kind, chatId, photo, caption, markup) : sendBotMessage(d.settings, kind, chatId, caption.slice(0, 4096), markup);
 }
+
+/** The shop's channel on this messenger ("" = not connected). */
+export const channelOf = (shop: Shop, kind: BotKind) => String(shop[CHANNEL_COLS[kind].id] ?? "");
 
 /** The lowest price a buyer can pay: a size/colour's own price when one is set lower than the product's. */
 async function lowestPrice(db: D1Database, p: Product) {
@@ -52,16 +55,19 @@ export function productCaption(p: Product, shop: Shop, price: { price: number; f
   return clip(lines.join("\n"), 1024);
 }
 
-/** Post one product to the shop's channel; returns the new message id. */
-export async function postProductToChannel(d: Deps, shop: Shop, p: Product) {
-  if (!shop.tg_channel_id) throw new Error("کانال تلگرام وصل نیست.");
+/** Post one product to the shop's Telegram or Bale channel; returns the new message id. */
+export async function postProductToChannel(d: Deps, shop: Shop, p: Product, kind: BotKind = "telegram") {
+  const channel = channelOf(shop, kind);
+  if (!channel) throw new Error(kind === "bale" ? "کانال بله وصل نیست." : "کانال تلگرام وصل نیست.");
   const price = await lowestPrice(d.db, p);
   const caption = productCaption(p, shop, price, `${d.siteUrl}/p/${p.code || p.id}`);
-  const msg = await send(d, shop.tg_channel_id, p.image_key, caption, postButtons(d.settings, d.siteUrl, p.id));
-  await d.db
-    .prepare("UPDATE products SET tg_shared_chat = ?, tg_shared_message = ?, tg_shared_at = ? WHERE id = ?")
-    .bind(shop.tg_channel_id, msg?.message_id ?? null, now(), p.id)
-    .run();
+  const msg = await send(d, kind, channel, p.image_key, caption, postButtons(d.settings, d.siteUrl, p.id, kind));
+  if (kind === "bale") await d.db.prepare("UPDATE products SET bale_shared_at = ? WHERE id = ?").bind(now(), p.id).run();
+  else
+    await d.db
+      .prepare("UPDATE products SET tg_shared_chat = ?, tg_shared_message = ?, tg_shared_at = ? WHERE id = ?")
+      .bind(channel, msg?.message_id ?? null, now(), p.id)
+      .run();
   return msg?.message_id ?? null;
 }
 
@@ -74,17 +80,18 @@ export function shopCaption(shop: Shop, products: number, link: string) {
 }
 
 /** Post the storefront (cover or logo, intro, "open the shop" button) to the shop's channel. */
-export async function postShopToChannel(d: Deps, shop: Shop) {
-  if (!shop.tg_channel_id) throw new Error("کانال تلگرام وصل نیست.");
+export async function postShopToChannel(d: Deps, shop: Shop, kind: BotKind = "telegram") {
+  const channel = channelOf(shop, kind);
+  if (!channel) throw new Error(kind === "bale" ? "کانال بله وصل نیست." : "کانال تلگرام وصل نیست.");
   const count = await d.db.prepare("SELECT COUNT(*) AS n FROM products WHERE shop_id = ? AND is_active = 1").bind(shop.id).first<{ n: number }>();
   const site = `${d.siteUrl}/s/${shop.slug}`;
-  const inApp = miniAppLink(d.settings, `s_${shop.slug}`);
+  const inApp = kind === "telegram" ? miniAppLink(d.settings, `s_${shop.slug}`) : "";
   const markup: InlineKeyboard = {
     inline_keyboard: inApp
       ? [[{ text: "🛍 ورود به ویترین", url: inApp }], [{ text: "🌐 مشاهده در سایت", url: site }]]
       : [[{ text: "🛍 ورود به ویترین", url: site }]],
   };
-  const msg = await send(d, shop.tg_channel_id, shop.cover_key || shop.logo_key, shopCaption(shop, count?.n ?? 0, site), markup);
-  await d.db.prepare("UPDATE shops SET tg_shop_post_at = ? WHERE id = ?").bind(now(), shop.id).run();
+  const msg = await send(d, kind, channel, shop.cover_key || shop.logo_key, shopCaption(shop, count?.n ?? 0, site), markup);
+  await d.db.prepare(`UPDATE shops SET ${kind === "bale" ? "bale_shop_post_at" : "tg_shop_post_at"} = ? WHERE id = ?`).bind(now(), shop.id).run();
   return msg?.message_id ?? null;
 }

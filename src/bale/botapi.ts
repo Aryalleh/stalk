@@ -7,12 +7,17 @@ const BOT_API = {
 } as const;
 export type BotKind = keyof typeof BOT_API;
 
-// Local tests only: TELEGRAM_API_BASE in .dev.vars points the Telegram calls at a mock server.
+// Local tests only: TELEGRAM_API_BASE / BALE_API_BASE in .dev.vars point the calls at a mock server.
 let telegramBase = "";
+let baleBase = "";
 export function setTelegramApiBase(base: string | undefined) {
   telegramBase = (base ?? "").replace(/\/$/, "");
 }
-const apiBase = (kind: BotKind) => (kind === "telegram" && telegramBase ? `${telegramBase}/bot` : BOT_API[kind]);
+export function setBaleApiBase(base: string | undefined) {
+  baleBase = (base ?? "").replace(/\/$/, "");
+}
+const testBase = (kind: BotKind) => (kind === "telegram" ? telegramBase : baleBase);
+const apiBase = (kind: BotKind) => (testBase(kind) ? `${testBase(kind)}/bot` : BOT_API[kind]);
 export const BOT_KINDS: BotKind[] = ["bale", "telegram"];
 
 export function botToken(s: Settings, kind: BotKind) {
@@ -79,7 +84,7 @@ export async function answerCallback(s: Settings, kind: BotKind, callbackId: str
 export async function downloadBotFile(s: Settings, kind: BotKind, fileId: string) {
   const f = (await callBot(s, kind, "getFile", { file_id: fileId })) as { file_path?: string; file_size?: number };
   if (!f.file_path) throw new Error("no file_path");
-  const host = kind === "bale" ? "https://tapi.bale.ai/file/bot" : telegramBase ? `${telegramBase}/file/bot` : "https://api.telegram.org/file/bot";
+  const host = testBase(kind) ? `${testBase(kind)}/file/bot` : kind === "bale" ? "https://tapi.bale.ai/file/bot" : "https://api.telegram.org/file/bot";
   const res = await fetch(`${host}${botToken(s, kind)}/${f.file_path}`);
   if (!res.ok) throw new Error(`download ${res.status}`);
   return { data: await res.arrayBuffer(), path: f.file_path };

@@ -42,8 +42,8 @@ import {
   type NewOrderItem,
   type Stage,
 } from "./db";
-import { newLinkCode } from "../telegram/channel";
-import { postShopToChannel, shareError } from "../telegram/share";
+import { CHANNEL_COLS, newLinkCode } from "../telegram/channel";
+import { channelOf, postShopToChannel, shareError } from "../telegram/share";
 import { authorizeUrl, exchangeCode, fetchAccount, listMedia, sendDm, type IgMedia } from "./instagram";
 import type { MediaLink } from "./comments";
 import {
@@ -878,28 +878,31 @@ crmPanel.get("/panel/settings/instagram/callback", async (c) => {
   return igBack(c, "ok", `وصل شد: @${me.username}`);
 });
 
-// ---------- Telegram channel → products (admins) ----------
+// ---------- Telegram / Bale channel → products (admins) ----------
 
-crmPanel.post("/panel/settings/telegram", async (c) => {
+crmPanel.post("/panel/settings/:kind{telegram|bale}", async (c) => {
   const shop = shopOf(c);
   const f = await form(c);
-  const back = (kind: "ok" | "error", msg: string) => c.redirect(`/panel/settings?tg_${kind}=${encodeURIComponent(msg)}#telegram`);
+  const ch = c.req.param("kind") as "telegram" | "bale";
+  const prefix = ch === "bale" ? "bale" : "tg";
+  const cols = CHANNEL_COLS[ch];
+  const back = (kind: "ok" | "error", msg: string) => c.redirect(`/panel/settings?${prefix}_${kind}=${encodeURIComponent(msg)}#${ch}`);
   if (f.do === "code") {
     await db(c).prepare("UPDATE shops SET tg_link_code = ? WHERE id = ?").bind(newLinkCode(), shop.id).run();
     return back("ok", "کد ساخته شد؛ آن را در کانال پست کنید.");
   }
   if (f.do === "post_shop") {
-    if (!shop.tg_channel_id) return back("error", "اول کانال را وصل کنید.");
+    if (!channelOf(shop, ch)) return back("error", "اول کانال را وصل کنید.");
     try {
-      await postShopToChannel({ db: db(c), images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, shop);
+      await postShopToChannel({ db: db(c), images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, shop, ch);
     } catch (e) {
       return back("error", shareError(e));
     }
     return back("ok", "ویترین فروشگاه در کانال پست شد.");
   }
   if (f.do === "disconnect") {
-    await db(c).prepare("UPDATE shops SET tg_channel_id = '', tg_channel_title = '', tg_channel_username = '', tg_last_error = '' WHERE id = ?").bind(shop.id).run();
-    await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, "telegram channel disconnected");
+    await db(c).prepare(`UPDATE shops SET ${cols.id} = '', ${cols.title} = '', ${cols.username} = '', ${cols.error} = '' WHERE id = ?`).bind(shop.id).run();
+    await logActivity(db(c), shop.id, currentUser(c).id, "update", "shop", shop.id, `${ch} channel disconnected`);
     return back("ok", "اتصال کانال قطع شد.");
   }
   const tag = (f.tg_tag ?? "").replace(/\s+/g, "").replace(/^#*/, "#").slice(0, 40);

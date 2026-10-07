@@ -68,6 +68,11 @@ export interface Shop {
   tg_buttons: number;
   tg_last_error: string;
   tg_shop_post_at: string | null;
+  bale_channel_id: string;
+  bale_channel_title: string;
+  bale_channel_username: string;
+  bale_last_error: string;
+  bale_shop_post_at: string | null;
   bale_chat_id: string;
   telegram_chat_id: string;
   created_at: string;
@@ -92,6 +97,7 @@ export interface Product {
   tg_shared_chat: string; // the channel this product was posted to from the panel
   tg_shared_message: number | null;
   tg_shared_at: string | null;
+  bale_shared_at: string | null;
   created_at: string;
 }
 export type ProductWithShop = Product & { shop_name: string; shop_slug: string };

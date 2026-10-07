@@ -17,7 +17,7 @@ import { AdminContentPage, AdminDeleteShopPage, type MiniappLogRow, AdminPageFor
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
-import { postProductToChannel, shareError } from "../telegram/share";
+import { channelOf, postProductToChannel, shareError } from "../telegram/share";
 import { InstagramSettings, TelegramSettings } from "../crm/views";
 import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
@@ -307,19 +307,21 @@ panel.post("/panel/products/:id{[0-9]+}/stock", async (c) => {
   return c.redirect("/panel/products");
 });
 
-// Post a product to the shop's connected Telegram channel (photo, price, buy / wishlist buttons).
-panel.post("/panel/products/:id{[0-9]+}/telegram", async (c) => {
+// Post a product to the shop's connected Telegram or Bale channel (photo, price, buy / wishlist buttons).
+panel.post("/panel/products/:id{[0-9]+}/:kind{telegram|bale}", async (c) => {
   const p = await ownProduct(c);
   if (!p) return c.notFound();
+  const kind = c.req.param("kind") as BotKind;
+  const name = kind === "bale" ? "بله" : "تلگرام";
   const back = (await form(c)).back === "form" ? `/panel/products/${p.id}` : "/panel/products";
   const shop = shopOf(c);
-  if (!shop.tg_channel_id) return c.redirect(`${back}?tg_error=${encodeURIComponent("اول کانال تلگرام را در تنظیمات وصل کنید.")}`);
+  if (!channelOf(shop, kind)) return c.redirect(`${back}?tg_error=${encodeURIComponent(`اول کانال ${name} را در تنظیمات وصل کنید.`)}`);
   try {
-    await postProductToChannel({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, shop, p);
+    await postProductToChannel({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, shop, p, kind);
   } catch (e) {
     return c.redirect(`${back}?tg_error=${encodeURIComponent(shareError(e))}`);
   }
-  return c.redirect(`${back}?tg_ok=${encodeURIComponent(`«${p.title}» در کانال پست شد.`)}`);
+  return c.redirect(`${back}?tg_ok=${encodeURIComponent(`«${p.title}» در کانال ${name} پست شد.`)}`);
 });
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -546,7 +548,11 @@ async function saveSettings(c: C) {
 const settingsView = async (c: C, extra: { error?: string; ok?: string; pkgError?: string } = {}, status: 200 | 400 = 200) => {
   const shop = (await myShop(c))!;
   const packages = await shopPackages(c.env.DB, shop.id);
-  const tgImported = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE shop_id = ? AND tg_chat_id IS NOT NULL").bind(shop.id).first<{ n: number }>();
+  const imported = await c.env.DB.prepare(
+    "SELECT SUM(tg_chat_id NOT LIKE 'bale:%') AS tg, SUM(tg_chat_id LIKE 'bale:%') AS bale FROM products WHERE shop_id = ? AND tg_chat_id IS NOT NULL",
+  )
+    .bind(shop.id)
+    .first<{ tg: number | null; bale: number | null }>();
   return render(
     c,
     <SettingsPage user={currentUser(c)} shop={shop} error={extra.error} ok={extra.ok}>
@@ -564,9 +570,18 @@ const settingsView = async (c: C, extra: { error?: string; ok?: string; pkgError
         shop={shop}
         botUsername={botUsername(c.get("settings"), "telegram")}
         storeLink={miniAppLink(c.get("settings"), `s_${shop.slug}`)}
-        imported={tgImported?.n ?? 0}
+        imported={imported?.tg ?? 0}
         ok={c.req.query("tg_ok")?.slice(0, 300)}
         error={c.req.query("tg_error")?.slice(0, 300)}
+      />
+      <TelegramSettings
+        kind="bale"
+        shop={shop}
+        botUsername={botUsername(c.get("settings"), "bale")}
+        storeLink=""
+        imported={imported?.bale ?? 0}
+        ok={c.req.query("bale_ok")?.slice(0, 300)}
+        error={c.req.query("bale_error")?.slice(0, 300)}
       />
     </SettingsPage>,
     status,

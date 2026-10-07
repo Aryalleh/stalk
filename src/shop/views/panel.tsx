@@ -538,7 +538,11 @@ function StockBadge(props: { p: Product & { stock_total: number } }) {
 }
 
 export function ProductsPage(props: { user: User; shop: Shop; products: (Product & { stock_total: number; has_sizes: number })[]; tgOk?: string; tgError?: string }) {
-  const channel = !!props.shop.tg_channel_id;
+  // Connected channels a product can be posted to: [kind, label, icon, last post time].
+  const channels = ([
+    ["telegram", "تلگرام", "fa-brands fa-telegram", !!props.shop.tg_channel_id],
+    ["bale", "بله", "fa-solid fa-comment-dots", !!props.shop.bale_channel_id],
+  ] as const).filter((x) => x[3]);
   return (
     <PanelShell title="محصولات" user={props.user} shop={props.shop} on="products">
       <div class="flex items-center justify-between mb-4">
@@ -575,12 +579,19 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
                 </form>
               )}
             </div>
-            {channel && p.is_active ? (
-              <form method="post" action={`/panel/products/${p.id}/telegram`} class="px-3 pb-3 -mt-1">
-                <button class="w-full !py-1.5 !text-[11px] !rounded-lg secondary" title={p.tg_shared_at ? `آخرین ارسال: ${formatJalali(p.tg_shared_at)}` : "ارسال به کانال تلگرام"}>
-                  <i class="fa-brands fa-telegram ml-1"></i>{p.tg_shared_at ? "ارسال دوباره به کانال" : "ارسال به کانال"}
-                </button>
-              </form>
+            {channels.length > 0 && p.is_active ? (
+              <div class="px-3 pb-3 -mt-1 flex gap-1.5">
+                {channels.map(([kind, label, icon]) => {
+                  const last = kind === "bale" ? p.bale_shared_at : p.tg_shared_at;
+                  return (
+                    <form method="post" action={`/panel/products/${p.id}/${kind}`} class="flex-1 m-0">
+                      <button class="w-full !py-1.5 !text-[11px] !rounded-lg secondary" title={last ? `آخرین ارسال: ${formatJalali(last)}` : `ارسال به کانال ${label}`}>
+                        <i class={`${icon} ml-1`}></i>{channels.length > 1 ? label : last ? "ارسال دوباره به کانال" : "ارسال به کانال"}
+                      </button>
+                    </form>
+                  );
+                })}
+              </div>
             ) : null}
           </div>
         ))}
@@ -660,17 +671,24 @@ export function ProductFormPage(props: {
       {v.saved && <div class="okbox">ذخیره شد.</div>}
       {v.tg_ok && <div class="okbox">{v.tg_ok}</div>}
       <Errors errors={[...(props.errors ?? []), v.tg_error]} />
-      {p && props.shop.tg_channel_id && p.is_active ? (
-        <form method="post" action={`/panel/products/${p.id}/telegram`} class="card row" style="justify-content:space-between">
-          <input type="hidden" name="back" value="form" />
-          <span class="small">
-            <i class="fa-brands fa-telegram ml-1 text-sky-500"></i>
-            ارسال این محصول به کانال «{props.shop.tg_channel_title || "تلگرام"}» با عکس، قیمت و دکمه خرید
-            {p.tg_shared_at && <span class="muted"> · آخرین ارسال: <span class="dt">{formatJalali(p.tg_shared_at)}</span></span>}
-          </span>
-          <button class="small">{p.tg_shared_at ? "ارسال دوباره" : "ارسال به کانال"}</button>
-        </form>
-      ) : null}
+      {p && p.is_active
+        ? ([
+            ["telegram", "تلگرام", "fa-brands fa-telegram", props.shop.tg_channel_id, props.shop.tg_channel_title, p.tg_shared_at],
+            ["bale", "بله", "fa-solid fa-comment-dots", props.shop.bale_channel_id, props.shop.bale_channel_title, p.bale_shared_at],
+          ] as const)
+            .filter((x) => x[3])
+            .map(([kind, label, icon, , title, last]) => (
+              <form method="post" action={`/panel/products/${p.id}/${kind}`} class="card row" style="justify-content:space-between">
+                <input type="hidden" name="back" value="form" />
+                <span class="small">
+                  <i class={`${icon} ml-1 text-sky-500`}></i>
+                  ارسال این محصول به کانال {label} «{title || label}» با عکس، قیمت و دکمه خرید
+                  {last && <span class="muted"> · آخرین ارسال: <span class="dt">{formatJalali(last)}</span></span>}
+                </span>
+                <button class="small">{last ? "ارسال دوباره" : "ارسال به کانال"}</button>
+              </form>
+            ))
+        : null}
       <form method="post" action={p ? `/panel/products/${p.id}` : "/panel/products/new"} enctype="multipart/form-data">
         <div class="card two">
           <div>

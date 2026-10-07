@@ -13,15 +13,16 @@ import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
 //  - "/start <token>": connect the chat to the site account that opened the bot from /connect.
 //  - A shared contact (Bale): link that phone to the chat, so the CRM can message it for free.
 //  - Receipt buttons (pay:ok:<id> / pay:no:<id>): the shop confirms or rejects a transfer.
-//  - Channel posts (Telegram): a connected shop channel's tagged posts become products.
+//  - Channel posts (Telegram and Bale): a connected shop channel's tagged posts become products.
 
 export const bot = new Hono<Env>();
 
 interface Update {
   channel_post?: ChannelPost;
   edited_channel_post?: ChannelPost;
+  edited_message?: ChannelPost;
   message?: {
-    chat?: { id?: number };
+    chat?: { id?: number; type?: string };
     from?: { id?: number; first_name?: string; last_name?: string; username?: string };
     text?: string;
     contact?: { phone_number?: string; user_id?: number };
@@ -48,11 +49,14 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     return c.text("forbidden", 403);
   }
   const update = (await c.req.json().catch(() => null)) as Update | null;
-  const post = update?.channel_post ?? update?.edited_channel_post;
-  if (post && kind === "telegram") {
-    // A shop's channel: tagged posts become products (src/shop/telegram/channel.ts).
+  // A shop's channel: tagged posts become products (src/shop/telegram/channel.ts). Telegram sends
+  // channel_post; Bale may also send a channel's posts as message / edited_message from a "channel" chat.
+  const asChannel = (m: unknown) => (m && (m as ChannelPost).chat?.type === "channel" ? (m as ChannelPost) : undefined);
+  const fresh = update?.channel_post ?? asChannel(update?.message);
+  const post = fresh ?? update?.edited_channel_post ?? asChannel(update?.edited_message);
+  if (post) {
     const deps = { db: c.env.DB, images: c.env.IMAGES, settings: s, siteUrl: siteUrl(c) };
-    c.executionCtx.waitUntil(handleChannelPost(deps, post, !update?.channel_post).catch((e) => console.error("channel post", e)));
+    c.executionCtx.waitUntil(handleChannelPost(deps, post, !fresh, kind).catch((e) => console.error(`${kind} channel post`, e)));
     return c.json({ ok: true });
   }
   if (update?.callback_query) {

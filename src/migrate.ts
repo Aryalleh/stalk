@@ -22,6 +22,7 @@ import m0018 from "../migrations/0018_shop_packages_codes.sql";
 import m0019 from "../migrations/0019_profile_banner.sql";
 import m0020 from "../migrations/0020_pages.sql";
 import m0021 from "../migrations/0021_miniapp_log.sql";
+import m0022 from "../migrations/0022_bale_channel.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -47,6 +48,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0019_profile_banner.sql", m0019],
   ["0020_pages.sql", m0020],
   ["0021_miniapp_log.sql", m0021],
+  ["0022_bale_channel.sql", m0022],
 ];
 
 let done: Promise<void> | null = null;

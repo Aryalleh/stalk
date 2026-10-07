@@ -9,6 +9,7 @@ export type Bindings = {
   IMAGES: R2Bucket;
   /** Local tests only (.dev.vars): a mock Telegram Bot API. Never set in production. */
   TELEGRAM_API_BASE?: string;
+  BALE_API_BASE?: string;
   /** Shared secret of a reverse proxy in front of the Worker (wrangler secret put PROXY_SECRET); see src/proxy.ts. */
   PROXY_SECRET?: string;
 };
