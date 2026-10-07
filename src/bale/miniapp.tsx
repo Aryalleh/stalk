@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { createSession } from "../../lib/auth";
-import { verifyInitData, type InitData } from "../../lib/initdata";
+import { checkInitData, type InitData } from "../../lib/initdata";
 import type { Env } from "../env";
 import { render } from "../render";
 import { SESSION_COOKIE } from "../session";
@@ -39,11 +39,18 @@ const pageScript = (next: string) => `
     var app = sdk(), data = app ? app.initData : fromHash();
     if (!data && tries++ < 15) return setTimeout(go, 100); // give the SDK script a moment to load
     if (app) { try { app.ready(); app.expand(); } catch (e) {} }
-    if (!data) { document.getElementById('outside').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden'); return; }
+    if (!data) { document.getElementById('outside').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden'); report('no initData (opened outside the app, or the messenger SDK did not load)'); return; }
     fetch('/app/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ initData: data, next: next }) })
-      .then(function (r) { return r.json(); })
-      .then(function (r) { if (r.next) location.replace(r.next); else throw new Error(r.error || 'auth'); })
-      .catch(function () { document.getElementById('failed').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden'); });
+      .then(function (r) { return r.json().catch(function () { return { error: 'http_' + r.status }; }); })
+      .then(function (r) { if (r.next) location.replace(r.next); else fail(r.error || 'auth'); })
+      .catch(function (e) { fail('network: ' + (e && e.message || e)); report('network: ' + (e && e.message || e)); });
+  }
+  function fail(code) {
+    document.getElementById('failed').classList.remove('hidden'); document.getElementById('wait').classList.add('hidden');
+    var c = document.getElementById('fail-code'); if (c) c.textContent = code;
+  }
+  function report(detail) {
+    try { navigator.sendBeacon('/app/log', JSON.stringify({ detail: String(detail).slice(0, 300), sdk: !!sdk(), hash: !!fromHash() })); } catch (e) {}
   }
   go();
 })();`;
@@ -64,6 +71,7 @@ miniapp.get("/app", (c) => {
         </div>
         <div id="failed" class="hidden space-y-4">
           <p class="text-sm text-muted">ورود خودکار انجام نشد. با شماره موبایل وارد شوید.</p>
+          <p class="text-[11px] text-muted/70">کد خطا: <span id="fail-code" class="ltr font-mono"></span></p>
           <a href={`/login?next=${encodeURIComponent(next)}`} class="inline-block px-6 py-3 rounded-2xl bg-brand text-white font-bold">ورود با کد</a>
         </div>
       </div>
@@ -72,19 +80,47 @@ miniapp.get("/app", (c) => {
   );
 });
 
+/** Keep a record of mini-app sign-ins (shown in /admin/settings) and print it to the Worker log. */
+async function logAttempt(c: Parameters<typeof render>[0], row: { kind?: string; result: string; detail?: string; chatId?: string }) {
+  const entry = { kind: row.kind ?? "", result: row.result, detail: (row.detail ?? "").slice(0, 400), chat_id: row.chatId ?? "" };
+  console.log(JSON.stringify({ event: "miniapp_auth", ...entry }));
+  const ua = (c.req.header("user-agent") ?? "").slice(0, 200);
+  await c.env.DB.batch([
+    c.env.DB.prepare("INSERT INTO miniapp_log (at, kind, result, detail, chat_id, user_agent) VALUES (?, ?, ?, ?, ?, ?)").bind(new Date().toISOString(), entry.kind, entry.result, entry.detail, entry.chat_id, ua),
+    c.env.DB.prepare("DELETE FROM miniapp_log WHERE id <= (SELECT MAX(id) - 200 FROM miniapp_log)"),
+  ]).catch((e) => console.error("miniapp_log", e));
+}
+
+// Errors the page itself hits (no initData, network): logged too.
+miniapp.post("/app/log", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { detail?: string; sdk?: boolean; hash?: boolean };
+  await logAttempt(c, { result: "client_error", detail: `${String(body.detail ?? "").slice(0, 300)} (sdk=${!!body.sdk}, hash=${!!body.hash})` });
+  return c.body(null, 204);
+});
+
 miniapp.post("/app/auth", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { initData?: string; next?: string };
   const s = c.get("settings");
+  const raw = String(body.initData ?? "");
   // The data is signed by one of the site's bots; whichever token verifies it tells us which messenger.
   let found: { kind: BotKind; data: InitData } | null = null;
+  const problems: string[] = [];
   for (const kind of BOT_KINDS) {
-    const data = await verifyInitData(String(body.initData ?? ""), botToken(s, kind));
-    if (data) {
-      found = { kind, data };
+    const r = await checkInitData(raw, botToken(s, kind));
+    if (r.data) {
+      found = { kind, data: r.data };
       break;
     }
+    problems.push(`${kind}:${r.problem}`);
   }
-  if (!found) return c.json({ error: "invalid" }, 401);
+  if (!found) {
+    const fields = [...new URLSearchParams(raw).keys()].join(",");
+    await logAttempt(c, { result: "failed", detail: `${problems.join(" ")} | fields=${fields} | length=${raw.length}` });
+    // Name the likely cause: a valid-looking payload that no token verifies usually means the mini app
+    // belongs to a different bot than the one whose token is in the admin settings.
+    const code = problems.every((p) => p.endsWith(":no_token")) ? "no_bot_token" : problems.some((p) => p.endsWith(":expired")) ? "expired" : problems.some((p) => p.endsWith(":bad_hash")) ? "bad_signature" : problems[0] ?? "invalid";
+    return c.json({ error: code }, 401);
+  }
   const { kind, data } = found;
   const chatId = String(data.user.id); // a private chat's id is the user's id
   const next = startTarget(data.startParam) || safeNext(body.next);
@@ -95,11 +131,13 @@ miniapp.post("/app/auth", async (c) => {
   if (current && (!owner || owner.id === current.id)) {
     // Already signed in here: make sure this chat is connected to the account.
     if (!owner) await linkChat(db, kind, chatId, current.id);
+    await logAttempt(c, { kind, result: "linked", detail: `user ${current.id}`, chatId });
     return c.json({ next });
   }
   if (owner) {
     const { token, maxAge } = await createSession(db, owner.id);
     setCookie(c, SESSION_COOKIE, token, cookieOptions(maxAge, true));
+    await logAttempt(c, { kind, result: "signed_in", detail: `user ${owner.id}`, chatId });
     return c.json({ next });
   }
   // Unknown chat: remember it for this browser and link it after the one-time-code sign-in.
@@ -107,5 +145,6 @@ miniapp.post("/app/auth", async (c) => {
   const name = [data.user.first_name, data.user.last_name].filter(Boolean).join(" ").slice(0, 80);
   await db.prepare("INSERT INTO miniapp_pending (token, kind, chat_id, name, created_at) VALUES (?, ?, ?, ?, ?)").bind(token, kind, chatId, name, Date.now()).run();
   setCookie(c, MINIAPP_COOKIE, token, cookieOptions(PENDING_TTL_MS / 1000, true));
+  await logAttempt(c, { kind, result: "needs_login", detail: "chat not linked to an account yet", chatId });
   return c.json({ next: `/login?next=${encodeURIComponent(next)}` });
 });

@@ -13,7 +13,7 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
@@ -882,7 +882,8 @@ async function settingsPage(c: C, extra: { error?: string; ok?: string } = {}, s
   const s = await loadSettings(c.env.DB);
   c.set("settings", s); // reflect just-saved values (e.g. site name) in the layout
   const linked = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM bale_links").first<{ n: number }>();
-  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} igVerifyToken={await igVerifyToken(c.env.DB, s)} igRedirect={`${(s.site_url || new URL(c.req.url).origin).replace(/\/$/, "")}/panel/settings/instagram/callback`} {...extra} />, status);
+  const { results: miniappLog } = await c.env.DB.prepare("SELECT at, kind, result, detail, chat_id, user_agent FROM miniapp_log ORDER BY id DESC LIMIT 30").all<MiniappLogRow>();
+  return render(c, <AdminSettingsPage user={currentUser(c)} s={s} miniappLog={miniappLog} webhookBase={new URL(c.req.url).origin} linkedCount={linked?.n ?? 0} igVerifyToken={await igVerifyToken(c.env.DB, s)} igRedirect={`${(s.site_url || new URL(c.req.url).origin).replace(/\/$/, "")}/panel/settings/instagram/callback`} {...extra} />, status);
 }
 
 admin.get("/admin/settings", (c) => settingsPage(c));

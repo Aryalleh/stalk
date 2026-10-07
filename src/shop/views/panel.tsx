@@ -1250,9 +1250,64 @@ function AdminShell(props: { title: string; user: User; on: string; children?: C
   );
 }
 
+export interface MiniappLogRow {
+  at: string;
+  kind: string;
+  result: string;
+  detail: string;
+  chat_id: string;
+  user_agent: string;
+}
+
+const MINIAPP_RESULT: Record<string, [string, string]> = {
+  signed_in: ["ورود خودکار", "ok"],
+  linked: ["اتصال به حساب فعلی", "ok"],
+  needs_login: ["چت ناشناس؛ ورود با کد", ""],
+  failed: ["رد شد", "err"],
+  client_error: ["خطای مرورگر", "err"],
+};
+
+/** Mini-app sign-in log (Bale / Telegram), newest first. */
+function MiniappLog(props: { rows: MiniappLogRow[] }) {
+  return (
+    <div class="card" id="miniapp-log">
+      <h2>گزارش ورود از مینی‌اپ (بله / تلگرام)</h2>
+      <p class="muted small" style="margin-top:0">
+        ۳۰ تلاش آخر. «bad_hash» یعنی داده با توکن هیچ‌کدام از بات‌ها تأیید نشد: مینی‌اپ را روی همان باتی بسازید که توکنش اینجا ثبت شده (BotFather ←
+        /mybots ← Bot Settings ← Configure Mini App یا Menu Button، آدرس <span class="ltr">{"<site>/app"}</span>). «expired» یعنی ساعت گوشی یا داده قدیمی
+        است. «no initData» یعنی صفحه بیرون از پیام‌رسان باز شده یا اسکریپت تلگرام بارگذاری نشده.
+      </p>
+      {props.rows.length === 0 ? (
+        <p class="muted small">هنوز تلاشی ثبت نشده.</p>
+      ) : (
+        <div class="wrap">
+          <table>
+            <thead><tr><th>زمان</th><th>پیام‌رسان</th><th>نتیجه</th><th>جزئیات</th><th>چت</th></tr></thead>
+            <tbody>
+              {props.rows.map((r) => {
+                const [label, tone] = MINIAPP_RESULT[r.result] ?? [r.result, ""];
+                return (
+                  <tr>
+                    <td class="dt small">{formatJalali(r.at)}</td>
+                    <td>{r.kind === "telegram" ? "تلگرام" : r.kind === "bale" ? "بله" : "—"}</td>
+                    <td><span class={`tag ${tone}`}>{label}</span></td>
+                    <td class="small ltr" style="max-width:420px;word-break:break-all" title={r.user_agent}>{r.detail}</td>
+                    <td class="small ltr">{r.chat_id}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminSettingsPage(props: {
   user: User;
   s: Settings;
+  miniappLog: MiniappLogRow[];
   webhookBase: string;
   linkedCount: number;
   igVerifyToken: string;
@@ -1396,6 +1451,7 @@ export function AdminSettingsPage(props: {
 
         <p style="margin-top:20px"><button>ذخیره</button></p>
       </form>
+      <MiniappLog rows={props.miniappLog} />
     </AdminShell>
   );
 }

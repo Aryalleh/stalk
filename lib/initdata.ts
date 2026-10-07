@@ -25,10 +25,14 @@ async function hmac(key: ArrayBuffer | Uint8Array, data: string) {
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
-/** The signature a bot with `botToken` would put on these fields (exported for tests). */
-export async function signInitData(fields: Record<string, string>, botToken: string) {
+/**
+ * The signature a bot with `botToken` would put on these fields (exported for tests). Telegram (Bot API
+ * 8.0+) also sends a "signature" field (for Ed25519 checks by third parties) and its HMAC hash covers it;
+ * pass dropSignature to sign without it, as older clients and Bale do.
+ */
+export async function signInitData(fields: Record<string, string>, botToken: string, dropSignature = false) {
   const check = Object.keys(fields)
-    .filter((k) => k !== "hash" && k !== "signature")
+    .filter((k) => k !== "hash" && !(dropSignature && k === "signature"))
     .sort()
     .map((k) => `${k}=${fields[k]}`)
     .join("\n");
@@ -36,26 +40,46 @@ export async function signInitData(fields: Record<string, string>, botToken: str
   return hex(await hmac(secret, check));
 }
 
-/** Verify initData against a bot token. Returns null when it is forged, malformed or older than maxAgeSec. */
-export async function verifyInitData(raw: string, botToken: string, maxAgeSec = 86400, nowSec = Math.floor(Date.now() / 1000)): Promise<InitData | null> {
-  if (!raw || !botToken || raw.length > 4096) return null;
+/** Why initData was refused (logged, and shown to the person as a short code). */
+export type InitDataProblem = "empty" | "no_token" | "too_long" | "no_hash" | "bad_hash" | "expired" | "future" | "bad_user";
+
+const sameHex = (a: string, b: string) => {
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < 64; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+};
+
+/** Check initData against a bot token: the data, or why it was refused. */
+export async function checkInitData(
+  raw: string,
+  botToken: string,
+  maxAgeSec = 86400,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<{ data: InitData; problem?: undefined } | { data?: undefined; problem: InitDataProblem }> {
+  if (!raw) return { problem: "empty" };
+  if (!botToken) return { problem: "no_token" };
+  if (raw.length > 8192) return { problem: "too_long" };
   const params = new URLSearchParams(raw);
-  const hash = params.get("hash") ?? "";
-  if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+  const hash = (params.get("hash") ?? "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hash)) return { problem: "no_hash" };
   const fields: Record<string, string> = {};
   for (const [k, v] of params) fields[k] = v;
-  const expected = await signInitData(fields, botToken);
-  let diff = 0;
-  for (let i = 0; i < 64; i++) diff |= expected.charCodeAt(i) ^ hash.charCodeAt(i);
-  if (diff !== 0) return null;
+  const ok = sameHex(await signInitData(fields, botToken), hash) || ("signature" in fields && sameHex(await signInitData(fields, botToken, true), hash));
+  if (!ok) return { problem: "bad_hash" };
   const authDate = Number(fields.auth_date);
-  if (!Number.isFinite(authDate) || nowSec - authDate > maxAgeSec || authDate - nowSec > 300) return null;
+  if (!Number.isFinite(authDate) || nowSec - authDate > maxAgeSec) return { problem: "expired" };
+  if (authDate - nowSec > 300) return { problem: "future" };
   let user: MiniAppUser;
   try {
     user = JSON.parse(fields.user ?? "");
   } catch {
-    return null;
+    return { problem: "bad_user" };
   }
-  if (!user || !Number.isSafeInteger(user.id) || user.id <= 0) return null;
-  return { user, authDate, startParam: fields.start_param ?? "" };
+  if (!user || !Number.isSafeInteger(user.id) || user.id <= 0) return { problem: "bad_user" };
+  return { data: { user, authDate, startParam: fields.start_param ?? "" } };
+}
+
+/** Verify initData against a bot token. Returns null when it is forged, malformed or older than maxAgeSec. */
+export async function verifyInitData(raw: string, botToken: string, maxAgeSec = 86400, nowSec = Math.floor(Date.now() / 1000)): Promise<InitData | null> {
+  return (await checkInitData(raw, botToken, maxAgeSec, nowSec)).data ?? null;
 }
