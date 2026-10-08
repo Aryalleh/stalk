@@ -54,7 +54,7 @@ if command -v nginx >/dev/null; then
         proxy_ssl_name $WORKER;
         proxy_set_header Host $WORKER;
         proxy_set_header X-Forwarded-Host \$host;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Proto \$gs_proto;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Proxy-Secret $SECRET;
         proxy_redirect off;
@@ -65,8 +65,13 @@ if command -v nginx >/dev/null; then
         proxy_next_upstream_tries 2;
     }"
   CONF=/etc/nginx/sites-available/gift-shop-proxy
+  # Behind a CDN (e.g. ArvanCloud with the proxy on) the CDN may reach this server over plain HTTP:
+  # pass on the protocol the visitor used (the CDN's X-Forwarded-Proto), not this hop's, or the site
+  # would think it is on http:// and keep redirecting to https://.
+  PROTO_MAP='map $http_x_forwarded_proto $gs_proto { default $scheme; https https; http http; }'
   if [ -f "$CERT" ]; then
     cat >"$CONF" <<NGINX
+$PROTO_MAP
 server {
     listen 80;
     server_name $DOMAIN;
@@ -78,11 +83,14 @@ server {
     server_name $DOMAIN;
     ssl_certificate $CERT;
     ssl_certificate_key $KEY;
+    # Certificate renewals still work when a CDN forwards the check over HTTPS.
+    location /.well-known/acme-challenge/ { root /var/www/html; }
 $PROXY
 }
 NGINX
   else
     cat >"$CONF" <<NGINX
+$PROTO_MAP
 server {
     listen 80;
     server_name $DOMAIN;
