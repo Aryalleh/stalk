@@ -11,7 +11,8 @@
     "test": "vitest run",
     "css": "node scripts/fa-subset.mjs && tailwindcss -i src/styles/app.css -o src/static/app.css --minify",
     "demo:seed": "node scripts/demo.mjs seed --remote",
-    "demo:clear": "node scripts/demo.mjs clear --remote"
+    "demo:clear": "node scripts/demo.mjs clear --remote",
+    "arvan-proxy:build": "node scripts/arvan-proxy-build.mjs"
   },
   "dependencies": {
     "hono": "^4.13.12"
