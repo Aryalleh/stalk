@@ -127,6 +127,10 @@ $DOMAIN {
 		header_up X-Proxy-Secret $SECRET
 		transport http {
 			tls_server_name $WORKER
+			# HTTP/1.1 to Cloudflare: HTTP/2 streams were reset mid-upload ("PROTOCOL_ERROR"), failing photo uploads
+			versions 1.1
+			dial_timeout 30s
+			response_header_timeout 300s
 		}
 	}
 }
