@@ -36,6 +36,18 @@ export function variants(p: { size_guide: string; colors: string }): Variant[] {
 /** The product has a choice to make (more than one size or color). */
 export const hasChoice = (p: { size_guide: string; colors: string }) => sizeNames(p.size_guide).length > 0 || colorList(p.colors).length > 0;
 
+/** The product's sizes and colors, each listed once (for the two dropdowns buyers pick from). */
+export function sizesAndColors(p: { size_guide: string; colors: string }) {
+  return { sizes: sizeNames(p.size_guide), colors: colorList(p.colors) };
+}
+
+/** The "size|color" a form sent: the size and color dropdowns (v_size, v_color), or one combined "variant" field. */
+export function variantFromForm(f: Record<string, string | undefined>) {
+  if (f.variant !== undefined && f.variant !== "") return f.variant;
+  if (f.v_size === undefined && f.v_color === undefined) return undefined;
+  return variantKey(f.v_size ?? "", f.v_color ?? "");
+}
+
 /** The variant a form picked ("size|color"), if it is one of the product's. */
 export function pickVariant(p: { size_guide: string; colors: string }, value: string | undefined) {
   return variants(p).find((v) => v.key === (value ?? "")) ?? null;

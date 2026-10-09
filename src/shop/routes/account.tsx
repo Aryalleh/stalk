@@ -6,7 +6,7 @@ import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { availableByVariant, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
 import { upsertCustomer } from "../../crm/sync";
-import { hasChoice, pickVariant } from "../variants";
+import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
 import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile, publicNameSql } from "../../session";
 import { birthDate, fullName } from "../../../lib/people";
@@ -451,7 +451,7 @@ account.post("/p/:id{[0-9]+}/wish", async (c) => {
   if (!w) return notFoundPage(c, "این لیست آرزو پیدا نشد یا مال شما نیست.");
   const qty = Math.min(20, Math.max(1, Math.floor(Number(f.quantity) || 1)));
   const options = await productOptions(c.env.DB, intParam(c, "id"));
-  const v = pickVariant(options, hasChoice(options) ? f.variant : "|");
+  const v = pickVariant(options, hasChoice(options) ? variantFromForm(f) : "|");
   if (!v) return c.redirect(`/p/${intParam(c, "id")}?err=size`);
   await addItem(c.env.DB, w.id, intParam(c, "id"), qty, (f.note ?? "").slice(0, 200), v.size, v.color);
   return c.redirect(`/p/${intParam(c, "id")}?added=${encodeURIComponent(w.title)}`);
@@ -486,7 +486,7 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
   if (!product) return c.notFound();
   const f = await form(c);
   const { values, errors } = cleanWishlist({ ...f, title: `خرید مستقیم: ${product.title}`.slice(0, 120), is_open: "1" });
-  const v = pickVariant(product, hasChoice(product) ? f.variant : "|");
+  const v = pickVariant(product, hasChoice(product) ? variantFromForm(f) : "|");
   if (!v) errors.push("سایز / رنگ را انتخاب کنید.");
   const available = await availableByVariant(c.env.DB, product);
   if (v && available && !errors.length && !available[v.key]) errors.push(v.label ? `${v.label} ناموجود است.` : "این محصول ناموجود است.");

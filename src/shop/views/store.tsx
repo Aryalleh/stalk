@@ -20,7 +20,7 @@ import {
 import { CITIES } from "../cities";
 import { DELIVERY_LABEL } from "../notify";
 import { readSizeGuide, type SizeGuide } from "../sizes";
-import { colorList, variantLabel, variants } from "../variants";
+import { colorList, sizesAndColors, variantLabel, variants } from "../variants";
 import type { User } from "../../session";
 import { useSite } from "../../render";
 import { siteDescription } from "../../settings";
@@ -321,6 +321,67 @@ function SizeGuideBox(props: { guide: SizeGuide | null; image: string }) {
 
 const field = "w-full bg-ink border border-plum rounded-xl px-3 py-2.5 text-sm text-fg outline-hidden focus:border-brand";
 
+/**
+ * Size and color as two dropdowns (v_size, v_color). Sold-out combinations are marked as the buyer
+ * picks: choosing a size updates which colors are available, and the other way round.
+ */
+function VariantPicker(props: {
+  product: { size_guide: string; colors: string };
+  available?: Record<string, number> | null;
+  selected?: string; // "size|color"
+  field: string; // class of the selects
+  label: string; // class of the labels
+  /** Sold-out choices can't be picked (buying); for a wishlist they stay pickable. */
+  strict?: boolean;
+}) {
+  const { sizes, colors } = sizesAndColors(props.product);
+  if (!sizes.length && !colors.length) return null;
+  const avail = props.available ?? null;
+  const [selSize, selColor] = (props.selected ?? "|").split("|");
+  const free = (size: string, color: string) => !avail || (avail[`${size}|${color}`] ?? 0) > 0;
+  const sizeFree = (s: string) => (colors.length ? colors : [""]).some((c) => free(s, c));
+  const colorFree = (c: string) => (sizes.length ? sizes : [""]).some((s) => free(s, c));
+  const soldOut = props.strict ? " — ناموجود" : " (فعلاً ناموجود)";
+  const script = avail
+    ? `(function(w){var a=JSON.parse(w.getAttribute('data-avail')),s=w.querySelector('[name=v_size]'),c=w.querySelector('[name=v_color]'),strict=${props.strict ? "true" : "false"};
+  function mark(sel,other,key){if(!sel)return;Array.prototype.forEach.call(sel.options,function(o){if(!o.value)return;var k=key(o.value,other?other.value:''),ok=(!other||!other.value)?o.getAttribute('data-any')==='1':(a[k]||0)>0;
+    o.textContent=o.getAttribute('data-name')+(ok?'':${JSON.stringify(soldOut)});if(strict)o.disabled=!ok;});}
+  function upd(){mark(c,s,function(v,o){return (o||'')+'|'+v;});mark(s,c,function(v,o){return v+'|'+(o||'');});}
+  if(s)s.addEventListener('change',upd);if(c)c.addEventListener('change',upd);upd();})(document.currentScript.parentNode);`
+    : "";
+  return (
+    <div class={`grid gap-3 ${sizes.length && colors.length ? "grid-cols-2" : "grid-cols-1"}`} data-avail={avail ? JSON.stringify(avail) : undefined}>
+      {sizes.length > 0 && (
+        <div>
+          <label class={props.label}>سایز</label>
+          <select name="v_size" required class={props.field}>
+            <option value="">انتخاب سایز…</option>
+            {sizes.map((s) => (
+              <option value={s} data-name={s} data-any={sizeFree(s) ? "1" : "0"} selected={selSize === s} disabled={props.strict && !sizeFree(s)}>
+                {s}{sizeFree(s) ? "" : soldOut}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {colors.length > 0 && (
+        <div>
+          <label class={props.label}>رنگ</label>
+          <select name="v_color" required class={props.field}>
+            <option value="">انتخاب رنگ…</option>
+            {colors.map((c) => (
+              <option value={c} data-name={c} data-any={colorFree(c) ? "1" : "0"} selected={selColor === c} disabled={props.strict && !colorFree(c)}>
+                {c}{colorFree(c) ? "" : soldOut}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {script && <script dangerouslySetInnerHTML={{ __html: script }} />}
+    </div>
+  );
+}
+
 export interface ProductShopInfo {
   logo_key: string;
   sales: number;
@@ -605,15 +666,7 @@ export function ProductPage(props: {
             <select name="wishlist_id" class={field}>
               {props.wishlists.map((w) => <option value={String(w.id)}>{w.title}</option>)}
             </select>
-            {opts.length > 0 && (
-              <>
-                <label class="block text-xs text-muted">سایز / رنگ</label>
-                <select name="variant" required class={field}>
-                  <option value="">انتخاب کنید…</option>
-                  {opts.map((o) => <option value={o.key}>{o.label}{avail && !avail[o.key] ? " (فعلاً ناموجود)" : ""}</option>)}
-                </select>
-              </>
-            )}
+            <VariantPicker product={p} available={avail} field={field} label="block text-xs text-muted mb-1" />
             <div class="flex gap-3">
               <div class="w-24">
                 <label class="block text-xs text-muted mb-1">تعداد</label>
@@ -1425,19 +1478,7 @@ export function DirectBuyPage(props: {
           </div>
         </section>
         <Errors errors={props.errors} />
-        {opts.length > 0 && (
-          <div>
-            <label class={label}>سایز / رنگ</label>
-            <select name="variant" required class={input}>
-              <option value="">انتخاب کنید…</option>
-              {opts.map((o) => (
-                <option value={o.key} selected={v.variant === o.key} disabled={!!avail && !avail[o.key]}>
-                  {o.label}{avail && !avail[o.key] ? " — ناموجود" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <VariantPicker product={p} available={avail} selected={v.variant ?? (v.v_size !== undefined || v.v_color !== undefined ? `${v.v_size ?? ""}|${v.v_color ?? ""}` : undefined)} field={input} label={label} strict />
         <section class="space-y-4">
           <h3 class="text-sm font-bold px-1">ارسال به</h3>
           <div>
