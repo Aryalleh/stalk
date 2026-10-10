@@ -376,14 +376,14 @@ account.get("/me/wishlists/new", async (c) => {
   const values: Record<string, string> = last
     ? { recipient_name: last.recipient_name, recipient_phone: last.recipient_phone, address: last.address, postal_code: last.postal_code, city: last.city }
     : { recipient_name: user.name, recipient_phone: user.phone };
-  return render(c, <WishlistFormPage user={user} wishlist={null} values={values} productId={c.req.query("product")} siteUrl={siteUrl(c)} />);
+  return render(c, <WishlistFormPage user={user} wishlist={null} values={values} productId={c.req.query("product")} variant={c.req.query("v")} siteUrl={siteUrl(c)} />);
 });
 
 account.post("/me/wishlists/new", async (c) => {
   const user = currentUser(c);
   const f = await form(c);
   const { values, errors } = cleanWishlist({ ...f, is_open: "1" });
-  if (errors.length) return render(c, <WishlistFormPage user={user} wishlist={null} values={values} errors={errors} productId={f.product} siteUrl={siteUrl(c)} />, 400);
+  if (errors.length) return render(c, <WishlistFormPage user={user} wishlist={null} values={values} errors={errors} productId={f.product} variant={f.v} siteUrl={siteUrl(c)} />, 400);
   const row = await c.env.DB.prepare(
     `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -391,9 +391,12 @@ account.post("/me/wishlists/new", async (c) => {
     .bind(user.id, randomSlug(), values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, now())
     .first<{ id: number }>();
   if (f.product) {
-    // A product with sizes needs the owner to pick one, so send them back to the product page for it.
-    if (hasChoice(await productOptions(c.env.DB, Number(f.product)))) return c.redirect(`/p/${Number(f.product)}?pick=1`);
-    await addItem(c.env.DB, row!.id, Number(f.product));
+    // A product with sizes needs a pick (made on the product page and passed as v); without one,
+    // send them back to the product page for it.
+    const options = await productOptions(c.env.DB, Number(f.product));
+    const v = hasChoice(options) ? pickVariant(options, f.v || undefined) : null;
+    if (hasChoice(options) && !v) return c.redirect(`/p/${Number(f.product)}?pick=1`);
+    await addItem(c.env.DB, row!.id, Number(f.product), 1, "", v?.size ?? "", v?.color ?? "");
   }
   return c.redirect(`/me/wishlists/${row!.id}?saved=1`);
 });
@@ -476,6 +479,9 @@ account.get("/p/:id{[0-9]+}/buy", async (c) => {
   const values: Record<string, string> = last?.is_direct
     ? { recipient_name: last.recipient_name, recipient_phone: last.recipient_phone, address: last.address, postal_code: last.postal_code, city: last.city }
     : { recipient_name: user.name, recipient_phone: user.phone, city: last?.city ?? "" };
+  // The size/color picked on the product page comes along as ?v=size|color.
+  const picked = c.req.query("v");
+  if (picked && picked.length <= 200) values.variant = picked;
   return directBuyPage(c, values);
 });
 

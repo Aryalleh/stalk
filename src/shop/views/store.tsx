@@ -20,7 +20,7 @@ import {
 import { CITIES } from "../cities";
 import { DELIVERY_LABEL } from "../notify";
 import { readSizeGuide, type SizeGuide } from "../sizes";
-import { colorList, sizesAndColors, variantLabel, variants } from "../variants";
+import { sizesAndColors, variantLabel, variants } from "../variants";
 import type { User } from "../../session";
 import { useSite } from "../../render";
 import { siteDescription } from "../../settings";
@@ -382,6 +382,75 @@ function VariantPicker(props: {
   );
 }
 
+/**
+ * Size and color chosen on the product page itself, as tappable pills. The choice is copied into the
+ * wishlist sheet's dropdowns and onto the buy links (?v=size|color) by the page script below.
+ * The page renders it twice (desktop hero / mobile content); both stay in sync.
+ */
+function PagePicker(props: { product: { size_guide: string; colors: string }; available: Record<string, number> | null; where: string; class?: string; error?: string }) {
+  const { sizes, colors } = sizesAndColors(props.product);
+  if (!sizes.length && !colors.length) return null;
+  const avail = props.available;
+  const free = (size: string, color: string) => !avail || (avail[`${size}|${color}`] ?? 0) > 0;
+  const row = (kind: "size" | "color", title: string, values: string[], any: (v: string) => boolean) => (
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-black text-fg">{title}</span>
+        <span class="text-[11px] text-muted" data-pick-show={kind}></span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {values.map((v) => (
+          <label class="cursor-pointer">
+            <input type="radio" name={`pk_${kind}_${props.where}`} value={v} data-pick={kind} data-any={any(v) ? "1" : "0"} class="peer sr-only" />
+            <span class="inline-flex items-center min-w-11 justify-center px-3.5 py-2 rounded-xl border-2 border-fg/10 bg-card text-sm font-bold text-fg transition-colors peer-checked:border-brand peer-checked:bg-brand/10 peer-checked:text-brand peer-focus-visible:ring-2 peer-focus-visible:ring-brand/40">
+              {v}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div data-picker class={`space-y-4 ${props.class ?? ""}`}>
+      {sizes.length > 0 && row("size", "سایز", sizes, (s) => (colors.length ? colors : [""]).some((c) => free(s, c)))}
+      {colors.length > 0 && row("color", "رنگ", colors, (c) => (sizes.length ? sizes : [""]).some((s) => free(s, c)))}
+      <p data-picker-error class={`${props.error ? "" : "hidden "}text-xs font-bold text-brand`}>
+        <i class="fa-solid fa-circle-exclamation ml-1"></i>
+        {props.error || "اول سایز و رنگ را انتخاب کنید."}
+      </p>
+    </div>
+  );
+}
+
+/** Wires the PagePickers: sync, sold-out marks, buy links with ?v=, and guards on buy / wishlist. */
+function pickerScript(o: { sizes: boolean; colors: boolean; avail: Record<string, number> | null; buy: string; loggedIn: boolean }) {
+  return `(function(){var A=${JSON.stringify(o.avail)},NS=${o.sizes},NC=${o.colors},BUY=${JSON.stringify(o.buy)},IN=${o.loggedIn};
+var st={size:'',color:''},q=function(s){return Array.prototype.slice.call(document.querySelectorAll(s));};
+function ok(s,c){return !A||(A[s+'|'+c]||0)>0;}
+function done(){return (!NS||st.size)&&(!NC||st.color);}
+function key(){return st.size+'|'+st.color;}
+function render(){
+  q('[data-pick]').forEach(function(i){var k=i.getAttribute('data-pick'),v=i.value,other=k==='size'?st.color:st.size,
+    free=other?(k==='size'?ok(v,other):ok(other,v)):i.getAttribute('data-any')==='1';
+    i.checked=st[k]===v;var sp=i.nextElementSibling;sp.classList.toggle('line-through',!free);sp.classList.toggle('opacity-40',!free);
+    sp.title=free?'':'فعلاً ناموجود';});
+  q('[data-pick-show]').forEach(function(e){var k=e.getAttribute('data-pick-show'),v=st[k];
+    e.textContent=v?(v+((NS&&NC&&st.size&&st.color&&!ok(st.size,st.color))?' — ناموجود':'')):'';});
+  var url=BUY+(done()?'?v='+encodeURIComponent(key()):'');
+  q('[data-buy]').forEach(function(a){if(a.getAttribute('aria-disabled'))return;a.href=IN?url:'/login?next='+encodeURIComponent(url);});
+  q('[data-wish]').forEach(function(a){var n=a.getAttribute('data-wish');if(n!=='1')a.href=n+(done()?'&v='+encodeURIComponent(key()):'');});
+  var f=document.getElementById('wish-form');if(f){var s=f.querySelector('[name=v_size]'),c=f.querySelector('[name=v_color]');
+    if(s){s.value=st.size;s.dispatchEvent(new Event('change'));}if(c){c.value=st.color;c.dispatchEvent(new Event('change'));}}
+  q('[data-pick-summary]').forEach(function(e){e.textContent=[st.size,st.color].filter(Boolean).join(' · ');});
+  if(done())q('[data-picker-error]').forEach(function(e){e.classList.add('hidden');});}
+q('[data-pick]').forEach(function(i){i.addEventListener('change',function(){st[i.getAttribute('data-pick')]=i.value;render();});});
+q('[data-pick-hide]').forEach(function(e){e.classList.add('hidden');});
+function guard(ev){if(done())return;ev.preventDefault();q('[data-picker-error]').forEach(function(e){e.classList.remove('hidden');});
+  var p=q('[data-picker]').filter(function(e){return e.offsetParent!==null;})[0];if(p)p.scrollIntoView({behavior:'smooth',block:'center'});}
+q('[data-buy],[data-wish]').forEach(function(a){a.addEventListener('click',guard);});
+render();})();`;
+}
+
 export interface ProductShopInfo {
   logo_key: string;
   sales: number;
@@ -433,8 +502,6 @@ export function ProductPage(props: {
 }) {
   const p = props.product;
   const guide = readSizeGuide(p.size_guide);
-  const opts = variants(p).filter((x) => x.label); // the size/color combinations to choose from
-  const colors = colorList(p.colors);
   const avail = props.available ?? null;
   const totalLeft = avail ? Object.values(avail).reduce((a, b) => a + b, 0) : Infinity;
   const soldOut = totalLeft <= 0;
@@ -442,7 +509,13 @@ export function ProductPage(props: {
   const loginHref = `/login?next=/p/${p.id}`;
   const nofollow = props.user ? undefined : "nofollow";
   const wishHref = !props.user ? loginHref : props.wishlists.length ? "#wish" : `/me/wishlists/new?product=${p.id}`;
-  const sheetOpen = !!props.error;
+  const choice = sizesAndColors(p);
+  const hasPicker = choice.sizes.length > 0 || choice.colors.length > 0;
+  // A missing size/color is shown next to the picker; other wishlist errors open the sheet.
+  const pickError = props.error && hasPicker && /سایز|رنگ/.test(props.error) ? props.error : undefined;
+  const sheetOpen = !!props.error && !pickError;
+  const buyHref = props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`;
+  const wishAttrs = props.user ? { "data-wish": props.wishlists.length ? "1" : `/me/wishlists/new?product=${p.id}` } : {};
   const site = useSite();
   const images = props.images.length ? props.images.map((i) => i.image_key) : p.image_key ? [p.image_key] : [];
   const url = `${site.origin}${productPath(p)}`;
@@ -559,9 +632,11 @@ export function ProductPage(props: {
               <i class="fa-solid fa-circle-check ml-1"></i> به لیست «{props.added}» اضافه شد. <a class="underline" href="/me/wishlists">مشاهده لیست‌ها</a>
             </div>
           )}
+          {hasPicker && !soldOut && <PagePicker product={p} available={avail} where="d" class="mb-6 p-5 bg-card border border-fg/5 rounded-3xl" error={pickError} />}
           <div class="space-y-3">
             <a
-              href={soldOut ? "#" : props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`}
+              href={soldOut ? "#" : buyHref}
+              data-buy
               rel={nofollow}
               aria-disabled={soldOut ? "true" : undefined}
               class={`${soldOut ? "opacity-40 pointer-events-none " : ""}w-full py-4 bg-brand text-white rounded-[28px] text-base font-black shadow-xl shadow-brand/25 hover:brightness-110 transition-all flex items-center justify-center gap-3`}
@@ -569,7 +644,7 @@ export function ProductPage(props: {
               <i class="fa-solid fa-bag-shopping"></i>
               {soldOut ? "ناموجود" : "خرید مستقیم"}
             </a>
-            <a href={wishHref} rel={nofollow} class="w-full py-4 border-2 border-brand text-brand hover:bg-brand/5 rounded-[28px] text-base font-black transition-all flex items-center justify-center gap-3">
+            <a href={wishHref} rel={nofollow} {...wishAttrs} class="w-full py-4 border-2 border-brand text-brand hover:bg-brand/5 rounded-[28px] text-base font-black transition-all flex items-center justify-center gap-3">
               <i class="fa-solid fa-gift"></i>
               {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
             </a>
@@ -582,6 +657,7 @@ export function ProductPage(props: {
             <i class="fa-solid fa-circle-check ml-1"></i> به لیست «{props.added}» اضافه شد. <a class="underline" href="/me/wishlists">مشاهده لیست‌ها</a>
           </div>
         )}
+        {hasPicker && !soldOut && <PagePicker product={p} available={avail} where="m" class="md:hidden" error={pickError} />}
         {p.description && (
           <div class="md:hidden">
             <h2 class="text-sm font-bold text-fg mb-2">توضیحات محصول</h2>
@@ -606,20 +682,6 @@ export function ProductPage(props: {
             </a>
           );
         })()}
-        {colors.length > 0 && (
-          <div class="flex flex-wrap items-center gap-2 text-xs">
-            <span class="text-muted">رنگ‌ها:</span>
-            {colors.map((c) => <span class="px-2.5 py-1 rounded-lg bg-card text-fg">{c}</span>)}
-          </div>
-        )}
-        {avail && opts.length > 0 && (
-          <div class="flex flex-wrap gap-2 text-xs">
-            <span class="text-muted">موجود:</span>
-            {opts.map((o) => (
-              <span class={`px-2 py-0.5 rounded-lg bg-card ${avail[o.key] ? "text-fg" : "text-muted line-through"}`}>{o.label.replace(/^سایز |رنگ /g, "")}</span>
-            ))}
-          </div>
-        )}
         <SizeGuideBox guide={guide} image={p.size_guide_image} />
         {props.packages.length > 0 && (
           <div class="bg-card rounded-2xl p-4">
@@ -656,7 +718,7 @@ export function ProductPage(props: {
       {props.user && props.wishlists.length > 0 && (
         <div id="wish" class={`${sheetOpen ? "flex" : "hidden"} target:flex fixed inset-0 z-[60] bg-black/60 items-end md:items-center justify-center`}>
           <a href="#" class="absolute inset-0" aria-label="بستن"></a>
-          <form method="post" action={`/p/${p.id}/wish`} class="relative w-full max-w-md bg-card rounded-t-3xl md:rounded-3xl p-6 space-y-3">
+          <form method="post" action={`/p/${p.id}/wish`} id="wish-form" class="relative w-full max-w-md bg-card rounded-t-3xl md:rounded-3xl p-6 space-y-3">
             <div class="flex items-center justify-between">
               <h2 class="font-bold">افزودن به لیست آرزو</h2>
               <a href="#" class="text-muted" aria-label="بستن"><i class="fa-solid fa-xmark"></i></a>
@@ -666,7 +728,14 @@ export function ProductPage(props: {
             <select name="wishlist_id" class={field}>
               {props.wishlists.map((w) => <option value={String(w.id)}>{w.title}</option>)}
             </select>
-            <VariantPicker product={p} available={avail} field={field} label="block text-xs text-muted mb-1" />
+            {hasPicker && (
+              <p class="text-xs text-muted">
+                انتخاب شما: <b class="text-fg" data-pick-summary></b>
+              </p>
+            )}
+            <div data-pick-hide>
+              <VariantPicker product={p} available={avail} field={field} label="block text-xs text-muted mb-1" />
+            </div>
             <div class="flex gap-3">
               <div class="w-24">
                 <label class="block text-xs text-muted mb-1">تعداد</label>
@@ -685,14 +754,17 @@ export function ProductPage(props: {
 
       <div class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur-lg border-t border-card">
         <div class="max-w-3xl mx-auto p-4 safe-bottom flex gap-3">
-          <a href={wishHref} rel={nofollow} class="flex-[2] py-4 bg-brand text-white text-center rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform">
+          <a href={wishHref} rel={nofollow} {...wishAttrs} class="flex-[2] py-4 bg-brand text-white text-center rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
           </a>
-          <a href={soldOut ? "#" : props.user ? `/p/${p.id}/buy` : `/login?next=/p/${p.id}/buy`} rel={nofollow} aria-disabled={soldOut ? "true" : undefined} class={`${soldOut ? "opacity-40 pointer-events-none " : ""}flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform`}>
+          <a href={soldOut ? "#" : buyHref} data-buy rel={nofollow} aria-disabled={soldOut ? "true" : undefined} class={`${soldOut ? "opacity-40 pointer-events-none " : ""}flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform`}>
             <i class="fa-solid fa-bag-shopping ml-1"></i> {soldOut ? "ناموجود" : "خرید مستقیم"}
           </a>
         </div>
       </div>
+      {hasPicker && !soldOut && (
+        <script dangerouslySetInnerHTML={{ __html: pickerScript({ sizes: choice.sizes.length > 0, colors: choice.colors.length > 0, avail, buy: `/p/${p.id}/buy`, loggedIn: !!props.user }) }} />
+      )}
     </Layout>
   );
 }

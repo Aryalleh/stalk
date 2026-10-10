@@ -677,6 +677,8 @@ export function WishlistFormPage(props: {
   values: Record<string, string>;
   errors?: string[];
   productId?: string;
+  /** "size|color" picked on the product page, kept with the product. */
+  variant?: string;
   items?: ItemView[];
   gifts?: Order[];
   siteUrl: string;
@@ -701,6 +703,7 @@ export function WishlistFormPage(props: {
       <Errors errors={props.errors} />
       <form method="post" action={action} class="card">
         {props.productId && <input type="hidden" name="product" value={props.productId} />}
+        {props.productId && props.variant && <input type="hidden" name="v" value={props.variant.slice(0, 200)} />}
         <div class="two">
           <div>
             <h2>مشخصات لیست</h2>
