@@ -537,6 +537,34 @@ function StockBadge(props: { p: Product & { stock_total: number } }) {
   );
 }
 
+/** Change every product price in the shop by a percentage (variant prices too). */
+function RepriceCard(props: { count: number }) {
+  const confirm = `const p=this.percent.value;return confirm('قیمت همه ${props.count} محصول '+p+'٪ '+(Number(p.replace(/[۰-۹]/g,function(d){return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)}))<0?'کاهش':'افزایش')+' پیدا می‌کند. ادامه می‌دهید؟')`;
+  return (
+    <details class="card mb-4" id="reprice">
+      <summary class="cursor-pointer font-bold text-sm"><i class="fa-solid fa-percent ml-1 text-sky-600"></i> تغییر درصدی قیمت همه محصولات</summary>
+      <form method="post" action="/panel/products/reprice" onsubmit={confirm} class="mt-3">
+        <p class="muted small" style="margin:0 0 8px">قیمت همه محصولات فروشگاه (و قیمت‌های جداگانه سایز/رنگ) با این درصد تغییر می‌کند. برای کاهش، عدد منفی بنویسید (مثلاً ‎-10).</p>
+        <div class="two">
+          <div>
+            <label>درصد تغییر</label>
+            <input name="percent" inputmode="decimal" required placeholder="مثلاً 15" class="ltr" />
+          </div>
+          <div>
+            <label>گرد کردن قیمت</label>
+            <select name="round">
+              <option value="1000">به ۱,۰۰۰ تومان</option>
+              <option value="10000">به ۱۰,۰۰۰ تومان</option>
+              <option value="1">گرد نکن</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn small mt-3">اعمال روی همه محصولات</button>
+      </form>
+    </details>
+  );
+}
+
 export function ProductsPage(props: { user: User; shop: Shop; products: (Product & { stock_total: number; has_sizes: number })[]; tgOk?: string; tgError?: string }) {
   // Connected channels a product can be posted to: [kind, label, icon, last post time].
   const channels = ([
@@ -552,6 +580,7 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
       {props.tgOk && <div class="okbox">{props.tgOk}</div>}
       <Errors errors={[props.tgError]} />
       {props.products.length === 0 && <div class="card text-center text-sm muted py-10">هنوز محصولی ثبت نشده.</div>}
+      {props.products.length > 0 && <RepriceCard count={props.products.length} />}
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         {props.products.map((p) => (
           <div class="bg-white rounded-2xl border border-sky-100 shadow-xs overflow-hidden">

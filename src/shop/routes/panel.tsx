@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { render } from "../../render";
-import { cardNumberError, normalizeDigits, normalizePhone } from "../../../lib/normalize";
+import { cardNumberError, normalizeDigits, normalizePhone, toLatinDigits } from "../../../lib/normalize";
 import { adjustStock, availableByVariant, normCity, now, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
 import { sizeNames } from "../sizes";
 import { developerHref, faqs } from "../../content";
@@ -293,6 +293,43 @@ panel.get("/panel/products", async (c) => {
     .bind(shopOf(c).id)
     .all<Product & { stock_total: number; has_sizes: number }>();
   return render(c, <ProductsPage user={currentUser(c)} shop={shopOf(c)} products={results} tgOk={c.req.query("tg_ok")} tgError={c.req.query("tg_error")} />);
+});
+
+/** New price after a percentage change, rounded to `step` Toman (never below 1). */
+export function repriced(price: number, percent: number, step: number) {
+  const raw = price * (1 + percent / 100);
+  const rounded = step > 1 ? Math.round(raw / step) * step : Math.round(raw);
+  return Math.max(1, rounded);
+}
+
+// Raise (or lower) every product price in the shop by a percentage, variant prices included.
+panel.post("/panel/products/reprice", async (c) => {
+  const f = await form(c);
+  const raw = toLatinDigits(f.percent ?? "").replace(/[\s%٪\u200e\u200f]/g, "").replace(/[٫,/]/g, ".").replace(/[−–]/g, "-");
+  const percent = /^[+-]?\d+(\.\d+)?$/.test(raw) ? Number(raw) : NaN;
+  const step = [1, 1000, 10000].includes(Number(f.round)) ? Number(f.round) : 1;
+  const back = (msg: string, ok: boolean) => c.redirect(`/panel/products?${ok ? "tg_ok" : "tg_error"}=${encodeURIComponent(msg)}`);
+  if (!Number.isFinite(percent) || percent === 0 || percent < -90 || percent > 300) return back("درصد را بین ‎-۹۰ و ۳۰۰ (غیر از صفر) وارد کنید.", false);
+  const shopId = shopOf(c).id;
+  const db = c.env.DB;
+  const { results: products } = await db.prepare("SELECT id, price FROM products WHERE shop_id = ?").bind(shopId).all<{ id: number; price: number }>();
+  const { results: rows } = await db
+    .prepare("SELECT s.product_id, s.size, s.color, s.price, s.sale_price FROM product_stock s JOIN products p ON p.id = s.product_id WHERE p.shop_id = ? AND (s.price IS NOT NULL OR s.sale_price IS NOT NULL)")
+    .bind(shopId)
+    .all<{ product_id: number; size: string; color: string; price: number | null; sale_price: number | null }>();
+  if (!products.length) return back("محصولی برای تغییر قیمت نیست.", false);
+  const t = now();
+  const stmts = [
+    ...products.map((x) => db.prepare("UPDATE products SET price = ?, updated_at = ? WHERE id = ?").bind(repriced(x.price, percent, step), t, x.id)),
+    ...rows.map((r) =>
+      db
+        .prepare("UPDATE product_stock SET price = ?, sale_price = ? WHERE product_id = ? AND size = ? AND color = ?")
+        .bind(r.price === null ? null : repriced(r.price, percent, step), r.sale_price === null ? null : repriced(r.sale_price, percent, step), r.product_id, r.size, r.color),
+    ),
+  ];
+  for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+  const pct = new Intl.NumberFormat("fa-IR").format(Math.abs(percent));
+  return back(`قیمت ${new Intl.NumberFormat("fa-IR").format(products.length)} محصول ${pct}٪ ${percent > 0 ? "افزایش" : "کاهش"} یافت.`, true);
 });
 
 // Quick +/- from the products list (products without sizes).
