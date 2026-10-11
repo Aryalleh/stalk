@@ -122,6 +122,7 @@ export interface Product {
   added_by: number | null;
   /** 1 = added from Instagram and the page hasn't set a price yet (price holds a placeholder). */
   awaiting_price: number;
+  deleted_at: string | null;
   created_at: string;
 }
 export type ProductWithShop = Product & { shop_name: string; shop_slug: string };
@@ -171,8 +172,36 @@ export type ItemView = {
   in_stock: number; // 1 if the shop has a unit of this product/size to sell
 };
 
-/** Products visible to the public: active and from an approved shop. */
-const PUBLIC_PRODUCT = "p.is_active = 1 AND s.status = 'approved'";
+/** Products visible to the public: active, not deleted, and from an approved shop. */
+const PUBLIC_PRODUCT = "p.is_active = 1 AND p.deleted_at IS NULL AND s.status = 'approved'";
+
+/**
+ * Delete a product. One that was ordered (gift or direct sale) is archived instead, so orders keep
+ * pointing at it: inactive and hidden everywhere. Either way the wishes for it that nobody bought
+ * are removed. Returns what happened.
+ */
+export async function deleteProduct(db: D1Database, images: R2Bucket, productId: number): Promise<"deleted" | "archived"> {
+  const used = await db
+    .prepare("SELECT (SELECT COUNT(*) FROM orders WHERE product_id = ?1) + (SELECT COUNT(*) FROM crm_order_items WHERE product_id = ?1) AS n")
+    .bind(productId)
+    .first<{ n: number }>();
+  const unbought = db.prepare("DELETE FROM wishlist_items WHERE product_id = ? AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.item_id = wishlist_items.id)").bind(productId);
+  if (used?.n) {
+    await db.batch([unbought, db.prepare("UPDATE products SET is_active = 0, deleted_at = ?, updated_at = ? WHERE id = ?").bind(now(), now(), productId)]);
+    return "archived";
+  }
+  const { results: pics } = await db.prepare("SELECT image_key FROM product_images WHERE product_id = ?").bind(productId).all<{ image_key: string }>();
+  const own = await db.prepare("SELECT image_key, size_guide_image FROM products WHERE id = ?").bind(productId).first<{ image_key: string; size_guide_image: string }>();
+  await db.batch([
+    unbought,
+    db.prepare("DELETE FROM product_interests WHERE product_id = ?").bind(productId),
+    db.prepare("DELETE FROM chat_cards WHERE product_id = ?").bind(productId),
+    db.prepare("DELETE FROM products WHERE id = ?").bind(productId), // images, stock, packages and reel links follow (ON DELETE)
+  ]);
+  const keys = [...new Set([...pics.map((x) => x.image_key), own?.image_key ?? "", own?.size_guide_image ?? ""].filter(Boolean))];
+  if (keys.length) await images.delete(keys).catch((e) => console.error("delete product images", e));
+  return "deleted";
+}
 
 export async function listProducts(db: D1Database, opts: { q?: string; shopId?: number; category?: string; limit: number; offset: number }) {
   const where = [PUBLIC_PRODUCT];

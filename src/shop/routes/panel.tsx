@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone, toLatinDigits } from "../../../lib/normalize";
-import { adjustStock, availableByVariant, normCity, now, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
+import { adjustStock, availableByVariant, deleteProduct, normCity, now, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
 import { sizeNames } from "../sizes";
 import { developerHref, faqs } from "../../content";
 import { colorList, pickVariant, variantKey, variants, type Variant } from "../variants";
@@ -295,7 +295,7 @@ panel.get("/panel/products", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT p.*, (SELECT COALESCE(SUM(quantity), 0) FROM product_stock s WHERE s.product_id = p.id) AS stock_total,
             (p.size_guide <> '' OR p.colors <> '') AS has_sizes
-     FROM products p WHERE p.shop_id = ? ORDER BY p.created_at DESC`,
+     FROM products p WHERE p.shop_id = ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC`,
   )
     .bind(shopOf(c).id)
     .all<Product & { stock_total: number; has_sizes: number }>();
@@ -522,7 +522,24 @@ panel.get("/panel/products/new", (c) => productFormPage(c, null, {}));
 panel.post("/panel/products/new", (c) => saveProduct(c, null));
 
 const ownProduct = (c: C) =>
-  c.env.DB.prepare("SELECT * FROM products WHERE id = ? AND shop_id = ?").bind(intParam(c, "id"), shopOf(c).id).first<Product>();
+  c.env.DB.prepare("SELECT * FROM products WHERE id = ? AND shop_id = ? AND deleted_at IS NULL").bind(intParam(c, "id"), shopOf(c).id).first<Product>();
+
+// Show or hide a product on the site (from the products list).
+panel.post("/panel/products/:id{[0-9]+}/active", async (c) => {
+  const p = await ownProduct(c);
+  if (!p) return c.notFound();
+  const on = (await form(c)).active === "1" ? 1 : 0;
+  await c.env.DB.prepare("UPDATE products SET is_active = ?, updated_at = ? WHERE id = ?").bind(on, now(), p.id).run();
+  return c.redirect(`/panel/products?tg_ok=${encodeURIComponent(on ? `«${p.title}» دوباره در سایت نمایش داده می‌شود.` : `«${p.title}» غیرفعال شد و در سایت نمایش داده نمی‌شود.`)}`);
+});
+
+panel.post("/panel/products/:id{[0-9]+}/delete", async (c) => {
+  const p = await ownProduct(c);
+  if (!p) return c.notFound();
+  const how = await deleteProduct(c.env.DB, c.env.IMAGES, p.id);
+  const msg = how === "deleted" ? `«${p.title}» حذف شد.` : `«${p.title}» حذف شد (سفارش‌های قبلی‌اش در سوابق می‌ماند).`;
+  return c.redirect(`/panel/products?tg_ok=${encodeURIComponent(msg)}`);
+});
 
 panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   const p = await ownProduct(c);
@@ -808,6 +825,22 @@ admin.get("/admin/users", async (c) => {
       error={c.req.query("error") ?? ""}
     />,
   );
+});
+
+// Moderation from the product page: hide or delete any product (e.g. a junk item added from Instagram).
+admin.post("/admin/products/:id{[0-9]+}/active", async (c) => {
+  const p = await c.env.DB.prepare("SELECT id, code FROM products WHERE id = ? AND deleted_at IS NULL").bind(intParam(c, "id")).first<{ id: number; code: string }>();
+  if (!p) return c.notFound();
+  const on = (await form(c)).active === "1" ? 1 : 0;
+  await c.env.DB.prepare("UPDATE products SET is_active = ?, updated_at = ? WHERE id = ?").bind(on, now(), p.id).run();
+  return c.redirect(`/p/${p.code || p.id}`);
+});
+
+admin.post("/admin/products/:id{[0-9]+}/delete", async (c) => {
+  const p = await c.env.DB.prepare("SELECT id, title FROM products WHERE id = ? AND deleted_at IS NULL").bind(intParam(c, "id")).first<{ id: number; title: string }>();
+  if (!p) return c.notFound();
+  await deleteProduct(c.env.DB, c.env.IMAGES, p.id);
+  return c.redirect(`/?deleted=${encodeURIComponent(p.title)}`);
 });
 
 admin.post("/admin/users/:id{[0-9]+}/login-as", async (c) => {

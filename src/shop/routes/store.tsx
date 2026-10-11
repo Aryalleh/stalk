@@ -18,6 +18,7 @@ import {
   reserveItem,
   wishlistItems,
   type ItemView,
+  type ProductWithShop,
   type Shop,
   type Wishlist,
 } from "../db";
@@ -94,9 +95,16 @@ store.get(`/p/:code{${PRODUCT_CODE}}`, async (c) => {
 });
 
 async function productPage(c: C, id: number) {
-  const product = await getPublicProduct(c.env.DB, id);
-  if (!product) return c.notFound();
   const user = c.get("user");
+  // Admins also see hidden (inactive) products, to turn them back on.
+  const product =
+    (await getPublicProduct(c.env.DB, id)) ??
+    (user?.is_admin
+      ? await c.env.DB.prepare("SELECT p.*, s.name AS shop_name, s.slug AS shop_slug FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ? AND p.deleted_at IS NULL")
+          .bind(id)
+          .first<ProductWithShop>()
+      : null);
+  if (!product) return c.notFound();
   const [wishlists, images, packages, shop] = await Promise.all([
     user ? c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY created_at DESC").bind(user.id).all<Wishlist>().then((r) => r.results) : [],
     productImages(c.env.DB, id),

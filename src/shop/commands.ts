@@ -3,7 +3,7 @@
 // Each command returns the reply text.
 import { cardNumberError, formatCard, toLatinDigits } from "../../lib/normalize";
 import { cancelForStock, confirmOrder, rejectOrder, shipOrder, type Deps } from "./orders";
-import { now, randomSlug, toman, type Order, type Shop } from "./db";
+import { deleteProduct, now, randomSlug, toman, type Order, type Shop } from "./db";
 import { variantLabel } from "./variants";
 import { cancelCode, issueCode, verifyCode } from "../bale/otp";
 import { SafirError, sendSafirOtp } from "../bale/safir";
@@ -19,6 +19,7 @@ export const COMMANDS_HELP = [
   "🛍 محصولات — فهرست محصولات با شماره‌شان",
   "🏷 قیمت 12 850000 — قیمت محصول ۱۲ به تومان",
   "🚫 ناموجود 12 — و «موجود 12» برای برگرداندن",
+  "🗑 حذف 12 — حذف محصول (با تأیید)",
   "📦 سفارش‌ها — سفارش‌های باز",
   "🔎 سفارش 34 — جزئیات سفارش و آدرس گیرنده",
   "✅ تایید 34 — واریز به کارتتان رسید",
@@ -53,7 +54,7 @@ export function normalizeCommand(text: string) {
 /** What a shop still has to do before its wished-for items can be bought. */
 export async function setupTodo(db: D1Database, shop: Shop) {
   const { results } = await db
-    .prepare("SELECT id, title, source_url FROM products WHERE shop_id = ? AND awaiting_price = 1 AND is_active = 1 ORDER BY id")
+    .prepare("SELECT id, title, source_url FROM products WHERE shop_id = ? AND deleted_at IS NULL AND awaiting_price = 1 AND is_active = 1 ORDER BY id")
     .bind(shop.id)
     .all<{ id: number; title: string; source_url: string }>();
   const lines: string[] = [];
@@ -113,7 +114,7 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
 
   if (/^(محصولات|کالاها|products)$/i.test(t)) {
     const { results } = await db
-      .prepare("SELECT id, title, price, awaiting_price, is_active, (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes FROM products p WHERE shop_id = ? ORDER BY id DESC LIMIT 30")
+      .prepare("SELECT id, title, price, awaiting_price, is_active, (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes FROM products p WHERE shop_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 30")
       .bind(shop.id)
       .all<{ id: number; title: string; price: number; awaiting_price: number; is_active: number; wishes: number }>();
     if (!results.length) return "هنوز محصولی ندارید.";
@@ -130,7 +131,7 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
     let id = m[1] ? Number(m[1]) : 0;
     let price = Number(m[2].replace(/[,٬]/g, "")) * (m[3] ? 1000 : 1);
     if (!id) {
-      const { results } = await db.prepare("SELECT id FROM products WHERE shop_id = ? AND awaiting_price = 1").bind(shop.id).all<{ id: number }>();
+      const { results } = await db.prepare("SELECT id FROM products WHERE shop_id = ? AND deleted_at IS NULL AND awaiting_price = 1").bind(shop.id).all<{ id: number }>();
       if (results.length !== 1) return "شماره محصول را هم بنویسید، مثلاً: قیمت 12 850000\nفهرست: محصولات";
       id = results[0].id;
     }
@@ -291,7 +292,7 @@ async function productCards(db: D1Database, shop: Shop): Promise<ProductCard[]> 
   const { results } = await db
     .prepare(
       `SELECT id, title, price, awaiting_price, is_active, image_key, source_url, (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes
-       FROM products p WHERE shop_id = ? ORDER BY awaiting_price DESC, id DESC LIMIT 10`,
+       FROM products p WHERE shop_id = ? AND deleted_at IS NULL ORDER BY awaiting_price DESC, id DESC LIMIT 10`,
     )
     .bind(shop.id)
     .all<{ id: number; title: string; price: number; awaiting_price: number; is_active: number; image_key: string; source_url: string; wishes: number }>();
@@ -303,7 +304,7 @@ async function productCards(db: D1Database, shop: Shop): Promise<ProductCard[]> 
       `🛍 ${p.title}`,
       `${p.awaiting_price ? "🏷 هنوز قیمت ندارد" : `🏷 ${toman(p.price)}`}${p.is_active ? "" : " — ناموجود"} — ${n(p.wishes)} آرزو`,
       p.source_url ? `🔗 ${p.source_url}` : "",
-      `↩️ برای ${p.awaiting_price ? "ثبت" : "تغییر"} قیمت، روی همین پیام ریپلای کنید و فقط مبلغ را بنویسید.`,
+      `↩️ برای ${p.awaiting_price ? "ثبت" : "تغییر"} قیمت، روی همین پیام ریپلای کنید و فقط مبلغ را بنویسید (یا «ناموجود» / «حذف»).`,
     ]
       .filter(Boolean)
       .join("\n"),
@@ -337,7 +338,7 @@ async function setState(db: D1Database, shop: Shop, state: string) {
 export async function buttonsFor(db: D1Database, shop: Shop): Promise<ChatButton[]> {
   const [orders, unpriced] = await db.batch([
     db.prepare("SELECT id, status FROM orders WHERE shop_id = ? AND status IN ('awaiting', 'paid') ORDER BY (status = 'awaiting') DESC, id LIMIT 4").bind(shop.id),
-    db.prepare("SELECT id, title FROM products WHERE shop_id = ? AND awaiting_price = 1 AND is_active = 1 ORDER BY id LIMIT 3").bind(shop.id),
+    db.prepare("SELECT id, title FROM products WHERE shop_id = ? AND deleted_at IS NULL AND awaiting_price = 1 AND is_active = 1 ORDER BY id LIMIT 3").bind(shop.id),
   ]);
   const b: ChatButton[] = [];
   for (const o of orders.results as { id: number; status: string }[]) {
@@ -353,7 +354,7 @@ export async function buttonsFor(db: D1Database, shop: Shop): Promise<ChatButton
 }
 
 const CANCEL: ChatButton = { title: "انصراف", payload: "x" };
-const COMMAND_WORD = /^(کارت|card|قیمت|price|سفارش|order|تایید|تأیید|ok|confirm|رد|reject|ارسال|ship|لغو|cancel|محصولات|کالاها|products|راهنما|help|منو|menu|عضویت|join|موجود|ناموجود)(\s|$)/i;
+const COMMAND_WORD = /^(حذف|delete|کارت|card|قیمت|price|سفارش|order|تایید|تأیید|ok|confirm|رد|reject|ارسال|ship|لغو|cancel|محصولات|کالاها|products|راهنما|help|منو|menu|عضویت|join|موجود|ناموجود)(\s|$)/i;
 
 /** A message or a button press from the shop's chat: run it and say what's next. */
 export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; payload?: string; replyTo?: number }): Promise<ChatReply> {
@@ -406,6 +407,12 @@ export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; p
         return ask("signup", "📱 شماره موبایلتان را بفرستید (مثل 09121234567). یک کد در «بله» برایتان می‌آید که همین‌جا می‌فرستید.");
       case "x":
         return { text: "لغو شد. 👇", buttons: await buttonsFor(db, shop) };
+      case "del": {
+        const p = await db.prepare("SELECT id, title FROM products WHERE id = ? AND shop_id = ? AND deleted_at IS NULL").bind(id, shop.id).first<{ id: number; title: string }>();
+        if (!p) return { text: "این محصول پیدا نشد.", buttons: await buttonsFor(db, shop) };
+        const how = await deleteProduct(db, d.images, p.id);
+        return { text: `🗑 «${p.title}» حذف شد${how === "archived" ? " (سفارش‌های قبلی‌اش در سوابق می‌ماند)" : ""}.`, buttons: await buttonsFor(db, shop) };
+      }
     }
   }
   // A reply to a product card: an amount is its price, "ناموجود" / "موجود" its availability.
@@ -413,7 +420,7 @@ export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; p
     const t = normalizeCommand(input.text ?? "");
     const p = await db.prepare("SELECT id FROM products WHERE id = ? AND shop_id = ?").bind(input.replyTo, shop.id).first<{ id: number }>();
     if (p && /^[\d,٬]+\s*(هزار|k)?\s*(تومان)?$/i.test(t)) command = `قیمت ${p.id} ${t}`;
-    else if (p && /^(ناموجود|موجود)$/.test(t)) command = `${t} ${p.id}`;
+    else if (p && /^(ناموجود|موجود|حذف)$/.test(t)) command = `${t} ${p.id}`;
     if (command && shop.chat_state) await setState(db, shop, "");
   }
   if (!command) {
@@ -427,6 +434,13 @@ export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; p
     if (shop.chat_state) await setState(db, shop, ""); // the question is answered (or set aside for a typed command)
   }
   const after = () => db.prepare("SELECT * FROM shops WHERE id = ?").bind(shop.id).first<Shop>().then((x) => x ?? shop);
+  // Deleting asks first.
+  const del = normalizeCommand(command).match(/^(?:حذف|delete)\s+(\d+)$/i);
+  if (del) {
+    const p = await db.prepare("SELECT id, title FROM products WHERE id = ? AND shop_id = ? AND deleted_at IS NULL").bind(Number(del[1]), shop.id).first<{ id: number; title: string }>();
+    if (!p) return { text: `محصول ${n(Number(del[1]))} پیدا نشد.`, buttons: await buttonsFor(db, shop) };
+    return { text: `🗑 «${p.title}» حذف شود؟ از لیست‌های آرزویی که هنوز خریده نشده‌اند هم برداشته می‌شود.`, buttons: [{ title: "بله، حذف شود", payload: `del:${p.id}` }, CANCEL] };
+  }
   // The products as cards (photo + caption) to reply to, rather than a list of numbers.
   if (/^(محصولات|کالاها|products)$/i.test(normalizeCommand(command))) {
     const cards = await productCards(db, shop);

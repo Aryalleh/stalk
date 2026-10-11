@@ -421,7 +421,7 @@ account.post("/me/instagram", async (c) => {
   const db = c.env.DB;
   // The same post added again (by anyone) is the same product, so its wishes add up.
   let product = await db
-    .prepare("SELECT p.id, p.shop_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND s.status <> 'suspended' ORDER BY s.is_external LIMIT 1")
+    .prepare("SELECT p.id, p.shop_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND p.deleted_at IS NULL AND s.status <> 'suspended' ORDER BY s.is_external LIMIT 1")
     .bind(postUrl)
     .first<{ id: number; shop_id: number }>();
   if (!product) {

@@ -608,6 +608,19 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
                 </form>
               )}
             </div>
+            <div class="px-3 pb-3 -mt-1 flex gap-1.5">
+              <form method="post" action={`/panel/products/${p.id}/active`} class="flex-1 m-0">
+                <input type="hidden" name="active" value={p.is_active ? "0" : "1"} />
+                <button class="w-full !py-1.5 !text-[11px] !rounded-lg secondary" title={p.is_active ? "در سایت نمایش داده نشود" : "دوباره در سایت نمایش داده شود"}>
+                  <i class={`fa-solid ${p.is_active ? "fa-eye-slash" : "fa-eye"} ml-1`}></i>{p.is_active ? "غیرفعال کردن" : "فعال کردن"}
+                </button>
+              </form>
+              <form method="post" action={`/panel/products/${p.id}/delete`} class="m-0" onsubmit={`return confirm(${JSON.stringify(`«${p.title}» حذف شود؟`)})`}>
+                <button class="!py-1.5 !px-3 !text-[11px] !rounded-lg !bg-red-50 !text-red-600 !border-red-100" aria-label="حذف محصول" title="حذف محصول">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </form>
+            </div>
             {channels.length > 0 && p.is_active ? (
               <div class="px-3 pb-3 -mt-1 flex gap-1.5">
                 {channels.map(([kind, label, icon]) => {
@@ -788,6 +801,12 @@ export function ProductFormPage(props: {
         </div>
         <p><button>{p ? "ذخیره" : "ثبت محصول"}</button></p>
       </form>
+      {p && (
+        <form method="post" action={`/panel/products/${p.id}/delete`} class="card row" style="justify-content:space-between" onsubmit={`return confirm(${JSON.stringify(`«${p.title}» حذف شود؟`)})`}>
+          <span class="small muted">حذف این محصول از فروشگاه و از لیست‌های آرزویی که هنوز خریده نشده‌اند. سفارش‌های قبلی در سوابق می‌مانند.</span>
+          <button class="small !bg-red-500 !border-red-500"><i class="fa-solid fa-trash-can ml-1"></i> حذف محصول</button>
+        </form>
+      )}
       <script dangerouslySetInnerHTML={{ __html: productFormScript(props.images?.length ?? 0) }} />
     </PanelShell>
   );

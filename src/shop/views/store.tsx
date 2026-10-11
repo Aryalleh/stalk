@@ -659,6 +659,18 @@ export function ProductPage(props: {
         </div>
       </section>
       <div class="px-6 md:px-12 py-8 pb-36 md:pb-10 space-y-6 md:max-w-6xl md:mx-auto">
+        {props.user?.is_admin ? (
+          <div class="flex flex-wrap items-center gap-2 p-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-xs">
+            <span class="font-bold text-fg"><i class="fa-solid fa-shield-halved ml-1"></i>مدیر سایت{p.is_active ? "" : " — این محصول غیرفعال است و دیده نمی‌شود"}</span>
+            <form method="post" action={`/admin/products/${p.id}/active`} class="m-0 mr-auto">
+              <input type="hidden" name="active" value={p.is_active ? "0" : "1"} />
+              <button class="px-3 py-1.5 rounded-xl bg-card border border-fg/10 font-bold text-fg">{p.is_active ? "غیرفعال کردن" : "فعال کردن"}</button>
+            </form>
+            <form method="post" action={`/admin/products/${p.id}/delete`} class="m-0" onsubmit="return confirm('این محصول برای همیشه حذف شود؟')">
+              <button class="px-3 py-1.5 rounded-xl bg-red-500 text-white font-bold"><i class="fa-solid fa-trash-can ml-1"></i>حذف</button>
+            </form>
+          </div>
+        ) : null}
         {props.added && (
           <div class="md:hidden rounded-2xl bg-ok/15 text-ok px-4 py-3 text-sm">
             <i class="fa-solid fa-circle-check ml-1"></i> به لیست «{props.added}» اضافه شد. <a class="underline" href="/me/wishlists">مشاهده لیست‌ها</a>
