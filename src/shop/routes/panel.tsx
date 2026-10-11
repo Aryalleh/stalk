@@ -90,6 +90,9 @@ const requireShop = async (c: C, next: () => Promise<void>) => {
   c.set("shop", shop);
   await next();
 };
+// The site's own Instagram login returns to the shops' callback address (handled before requireShop,
+// as the platform admin may have no shop).
+panel.get("/panel/settings/instagram/callback", (c, next) => platformIgCallback(c, next));
 panel.use("/panel", requireShop);
 panel.use("/panel/*", requireShop);
 // The CRM screens (inbox, customers, tasks, direct sales, automation, team); its admin-only guards
@@ -849,7 +852,9 @@ admin.get("/admin/instagram", async (c) => {
   );
 });
 
-const igBack = (c: C, msg: string, ok = true) => c.redirect(`/admin/instagram?${ok ? "ok" : "error"}=${encodeURIComponent(msg)}`);
+function igBack(c: C, msg: string, ok = true) {
+  return c.redirect(`/admin/instagram?${ok ? "ok" : "error"}=${encodeURIComponent(msg)}`);
+}
 
 admin.post("/admin/instagram/settings", async (c) => {
   const f = await form(c);
@@ -876,27 +881,30 @@ admin.post("/admin/instagram/settings", async (c) => {
 });
 
 // "Login with Instagram" for the site's own account (same Instagram Business Login as the shops').
-// The redirect URI must also be listed in the Meta app: <site>/admin/instagram/callback.
+// It comes back to the shops' callback address, which is already listed in the Meta app; the state
+// cookie tells the two apart (see the route registered before requireShop above).
 const PLATFORM_IG_STATE = "ig_platform_oauth";
-const platformRedirect = (c: C) => `${siteUrl(c)}/admin/instagram/callback`;
+const platformRedirect = (c: C) => `${siteUrl(c)}/panel/settings/instagram/callback`;
 
 admin.get("/admin/instagram/connect", (c) => {
   const s = c.get("settings");
   if (!s.ig_app_id || !s.meta_app_secret) return igBack(c, "اول Instagram app ID و App secret را در «تنظیمات سایت» وارد کنید.", false);
   const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-  setCookie(c, PLATFORM_IG_STATE, state, { httpOnly: true, secure: true, sameSite: "Lax", path: "/admin/instagram", maxAge: 600 });
+  setCookie(c, PLATFORM_IG_STATE, state, { httpOnly: true, secure: true, sameSite: "Lax", path: "/panel/settings/instagram", maxAge: 600 });
   return c.redirect(authorizeUrl(s.ig_app_id, platformRedirect(c), state));
 });
 
-admin.get("/admin/instagram/callback", async (c) => {
-  const s = c.get("settings");
+/** The site account's login coming back; anything else (a shop connecting) goes on to the shops' handler. */
+async function platformIgCallback(c: C, next: () => Promise<void>) {
   const expected = getCookie(c, PLATFORM_IG_STATE);
-  deleteCookie(c, PLATFORM_IG_STATE, { path: "/admin/instagram" });
+  if (!expected || c.req.query("state") !== expected || !currentUser(c)?.is_admin) return next();
+  const s = c.get("settings");
+  deleteCookie(c, PLATFORM_IG_STATE, { path: "/panel/settings/instagram" });
   if (c.req.query("error")) {
     return igBack(c, c.req.query("error_reason") === "user_denied" ? "اجازه دسترسی داده نشد." : `اینستاگرام: ${(c.req.query("error_description") ?? c.req.query("error") ?? "").slice(0, 200)}`, false);
   }
   const code = c.req.query("code") ?? "";
-  if (!code || !expected || c.req.query("state") !== expected) return igBack(c, "درخواست ورود منقضی یا نامعتبر بود؛ دوباره «ورود با اینستاگرام» را بزنید.", false);
+  if (!code) return igBack(c, "درخواست ورود نامعتبر بود؛ دوباره «ورود با اینستاگرام» را بزنید.", false);
   try {
     const token = await exchangeCode(s.ig_app_id, s.meta_app_secret, platformRedirect(c), code);
     const me = await fetchAccount(token);
@@ -911,7 +919,7 @@ admin.get("/admin/instagram/callback", async (c) => {
   } catch (e) {
     return igBack(c, `ورود ناموفق بود: ${(e as Error).message.slice(0, 200)}`, false);
   }
-});
+}
 
 admin.post("/admin/instagram/disconnect", async (c) => {
   await saveSiteSettings(c.env.DB, { platform_ig_token: "", platform_ig_token_refreshed_at: "" });

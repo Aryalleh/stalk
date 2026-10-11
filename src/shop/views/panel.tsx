@@ -1851,7 +1851,7 @@ export function AdminInstagramPage(props: {
         </div>
         <p class="small muted" style="margin-top:0;line-height:1.9">
           فروشگاه‌ها به این صفحه دایرکت می‌دهند. با دکمه بالا وارد صفحه‌ی اینستاگرام سایت شوید (همان اپ متا و وبهوک <span class="ltr">/ig/webhook</span> فروشگاه‌ها).
-          آدرس <span class="ltr">{props.site}/admin/instagram/callback</span> را هم در Valid OAuth Redirect URIs اپ اضافه کنید. اگر ورود ممکن نبود، توکن را دستی پایین‌تر بگذارید.
+          آدرس برگشت همان آدرس اتصال فروشگاه‌هاست (<span class="ltr">{props.site}/panel/settings/instagram/callback</span>) که در Valid OAuth Redirect URIs اپ هست. اگر ورود ممکن نبود، توکن را دستی پایین‌تر بگذارید.
         </p>
         <div class="two">
           <div>
