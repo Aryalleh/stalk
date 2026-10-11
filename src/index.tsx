@@ -21,21 +21,32 @@ import { igWebhook, refreshIgTokens } from "./shop/crm/webhook";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { pageRoute, seo } from "./seo";
-import { fromTrustedProxy } from "./proxy";
+import { PLAIN_HTTP, fromTrustedProxy } from "./proxy";
 import { actingAdmin } from "./impersonate";
 import { notFoundPage } from "./errorpage";
 
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
 
-// Plain-http visits get a permanent redirect to https (local development excepted).
+// Plain-http visits get a permanent redirect to https (local development excepted), except those our
+// proxy took on its extra plain-http port (deploy/proxy, e.g. :3030): those stay on http, and their
+// cookies drop the Secure flag so signing in works there.
 app.use(async (c, next) => {
   const url = new URL(c.req.url);
-  if (url.protocol === "http:" && !["localhost", "127.0.0.1"].includes(url.hostname)) {
+  const plain = c.req.header(PLAIN_HTTP) === "1";
+  if (url.protocol === "http:" && !plain && !["localhost", "127.0.0.1"].includes(url.hostname)) {
     url.protocol = "https:";
     return c.redirect(url.toString(), 301);
   }
   await next();
+  if (plain) {
+    const cookies = c.res.headers.getSetCookie();
+    if (cookies.length) {
+      c.res.headers.delete("Set-Cookie");
+      for (const k of cookies) c.res.headers.append("Set-Cookie", k.replace(/;\s*Secure/gi, "").replace(/;\s*Partitioned/gi, "").replace(/SameSite=None/gi, "SameSite=Lax"));
+    }
+    c.res.headers.delete("Strict-Transport-Security");
+  }
 });
 
 // Static files that need neither the database nor a session.
@@ -72,7 +83,8 @@ app.use(async (c, next) => {
 const ANY_HOST = /^\/(bot\/|ig\/|login|logout|setup|admin\/settings|connect|me\/complete|static\/|webfonts\/)/;
 app.use(async (c, next) => {
   const canonical = c.get("settings").site_url;
-  if (canonical && !ANY_HOST.test(c.req.path)) {
+  // (The proxy's plain-http port is another address for the site on purpose.)
+  if (canonical && !ANY_HOST.test(c.req.path) && c.req.header(PLAIN_HTTP) !== "1") {
     const url = new URL(c.req.url);
     const target = new URL(canonical);
     if (url.host !== target.host) {

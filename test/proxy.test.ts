@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromTrustedProxy } from "../src/proxy";
+import { PLAIN_HTTP, fromTrustedProxy } from "../src/proxy";
 
 const viaProxy = (secret: string, extra: Record<string, string> = {}) =>
   new Request("https://gift-shop.example.workers.dev/p/1?x=1", {
@@ -27,5 +27,17 @@ describe("trusted reverse proxy", () => {
     expect(fromTrustedProxy(viaProxy("k"), undefined)).toBeInstanceOf(Request);
     expect((fromTrustedProxy(viaProxy("k"), undefined) as Request).url).toContain("workers.dev");
     expect((fromTrustedProxy(viaProxy("wrong"), "k") as Response).status).toBe(403);
+  });
+
+  it("marks visits over the proxy's plain-http port, and only those", () => {
+    const plain = fromTrustedProxy(viaProxy("k", { "x-forwarded-host": "87.106.5.192:3030", "x-forwarded-proto": "http" }), "k") as Request;
+    expect(plain.url).toBe("http://87.106.5.192:3030/p/1?x=1");
+    expect(plain.headers.get(PLAIN_HTTP)).toBe("1");
+    expect((fromTrustedProxy(viaProxy("k"), "k") as Request).headers.get(PLAIN_HTTP)).toBeNull();
+    // nobody else can claim it
+    const spoofed = fromTrustedProxy(new Request("https://w.workers.dev/", { headers: { [PLAIN_HTTP]: "1" } }), "k") as Request;
+    expect(spoofed.headers.get(PLAIN_HTTP)).toBeNull();
+    const spoofedViaProxy = fromTrustedProxy(viaProxy("k", { [PLAIN_HTTP]: "1" }), "k") as Request;
+    expect(spoofedViaProxy.headers.get(PLAIN_HTTP)).toBeNull();
   });
 });
