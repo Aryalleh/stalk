@@ -185,10 +185,8 @@ export async function listProducts(db: D1Database, opts: { q?: string; shopId?: 
   if (opts.shopId) {
     where.push("p.shop_id = ?");
     binds.push(opts.shopId);
-  } else {
-    // Items from Instagram pages not on the site, and any item still waiting for its price, stay out of explore/search.
-    where.push("s.is_external = 0", "p.awaiting_price = 0");
   }
+  // Items added from Instagram (even before the page has priced them) are part of explore too.
   if (opts.category) {
     where.push("p.category = ?");
     binds.push(opts.category);

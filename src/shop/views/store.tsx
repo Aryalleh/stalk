@@ -50,6 +50,11 @@ function ProductCard(props: { p: ProductWithShop }) {
     <a href={productPath(p)} class="group relative block bg-card rounded-3xl overflow-hidden shadow-lg transition-transform active:scale-95">
       <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-500" />
       <div class="absolute inset-0 photo-scrim"></div>
+      {p.source_url && (
+        <span class="absolute top-3 left-3 w-7 h-7 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center text-sm" title="از اینستاگرام">
+          <i class="fa-brands fa-instagram"></i>
+        </span>
+      )}
       <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
         <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{p.title}</h3>
         <div class="text-[11px] text-brand font-bold">{priceLabel(p)}</div>
