@@ -13,7 +13,7 @@ import { PageText, SLUG_RE, allPages, getPage } from "./pages";
 export const seo = new Hono<Env>();
 
 /** Paths with personal or transactional content: never crawled. */
-const PRIVATE = ["/me", "/panel", "/admin", "/crm", "/login", "/connect", "/setup", "/order/", "/gift/", "/w/", "/app", "/bot/", "/offline"];
+const PRIVATE = ["/me", "/panel", "/admin", "/crm", "/login", "/connect", "/setup", "/order/", "/gift/", "/w/", "/app", "/bot/", "/offline", "/l/", "/claim/"];
 
 seo.get("/robots.txt", (c) => {
   const origin = siteOrigin(c);

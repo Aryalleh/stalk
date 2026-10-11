@@ -185,6 +185,16 @@ export function PanelShell(props: { title: string; user: User; shop: Shop; on: P
   return (
     <Layout title={props.title} user={props.user} panel header={header} sidebar={sidebar} wide full={props.full}>
       <div class="pb-20 md:pb-0">
+        {s.is_external ? (
+          <div class="card" style="border:1px solid #fbbf24;line-height:1.9">
+            <b>👋 به پنل فروشگاه {s.name} خوش آمدید!</b>
+            <div class="small muted">
+              این ورود موقت است (با لینک دایرکت اینستاگرام). اطلاعات فروشگاه را در <a href="/panel/settings">تنظیمات</a> کامل کنید و برای حساب دائمی و تجربه‌ی کامل
+              (ورود با شماره، دریافت سفارش‌ها در بات، CRM) شماره موبایلتان را ثبت کنید.
+            </div>
+            <a class="btn small" href="/panel/join" style="margin-top:6px"><i class="fa-solid fa-mobile-screen ml-1"></i> ثبت شماره موبایل</a>
+          </div>
+        ) : null}
         {s.status === "pending" && <div class="warnbox">فروشگاه در انتظار تأیید است. می‌توانید محصولات را اضافه کنید؛ بعد از تأیید نمایش داده می‌شوند.</div>}
         {s.status === "suspended" && <div class="errbox">فروشگاه معلق است و محصولاتش نمایش داده نمی‌شود.</div>}
         {!s.card_number && (
@@ -1954,5 +1964,36 @@ export function AdminInstagramPage(props: {
         <p><button>ذخیره</button></p>
       </form>
     </AdminShell>
+  );
+}
+
+/** An Instagram page signed in with its one-time link verifies a phone number: its own account takes the shop. */
+export function JoinPhonePage(props: { user: User; shop: Shop; phone?: string; error?: string }) {
+  return (
+    <PanelShell title="ثبت شماره موبایل" user={props.user} shop={props.shop} on="settings">
+      <h1>📱 ثبت شماره موبایل</h1>
+      <Errors errors={[props.error]} />
+      <div class="card small muted" style="line-height:1.9">
+        با ثبت شماره، فروشگاه با همه‌ی محصولات، آرزوها، سفارش‌ها و کارت بانکی به حساب خودتان منتقل می‌شود و از این به بعد با همین شماره وارد می‌شوید.
+        کد تأیید در پیام‌رسان «بله» برای این شماره فرستاده می‌شود.
+      </div>
+      {props.phone ? (
+        <form method="post" action="/panel/join/verify" class="card">
+          <input type="hidden" name="phone" value={props.phone} />
+          <label style="margin-top:0">کد ۶ رقمی ارسال‌شده به {props.phone}</label>
+          <input name="code" class="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength={6} required />
+          <p class="row" style="gap:8px">
+            <button>تأیید و ساخت حساب</button>
+            <a class="btn secondary" href="/panel/join">تغییر شماره</a>
+          </p>
+        </form>
+      ) : (
+        <form method="post" action="/panel/join" class="card">
+          <label style="margin-top:0">شماره موبایل</label>
+          <input name="phone" class="ltr" inputmode="tel" placeholder="09121234567" required />
+          <p><button>ارسال کد</button></p>
+        </form>
+      )}
+    </PanelShell>
   );
 }

@@ -6,7 +6,7 @@ import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { availableByVariant, getPublicProduct, normCity, now, productCode, productImages, randomSlug, toman, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
 import { inlineKeyboard } from "../commands";
-import { dmPage, mentionPage, downloadImage, externalShop, fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl } from "../instagram-shops";
+import { dmPage, enrichShop, mentionPage, downloadImage, externalShop, fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl, useLoginLink } from "../instagram-shops";
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
@@ -433,6 +433,8 @@ account.post("/me/instagram", async (c) => {
     // otherwise its stand-in shop.
     const member = await memberShopFor(db, handle);
     const shop = member ? (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(member.id).first<Shop>())! : await externalShop(db, handle);
+    // The page's name and profile photo, from Instagram (in the background).
+    if (shop.is_external && !shop.logo_key) c.executionCtx.waitUntil(enrichShop(db, c.env.IMAGES, shop.id).catch((e) => console.error("enrich shop", e)));
     if (shop.status === "suspended") return page({ errors: ["افزودن از این صفحه فعلاً ممکن نیست."] });
     let image = "";
     if (photo) image = await storeImage(c.env.IMAGES, photo, "p");
@@ -485,6 +487,13 @@ account.post("/me/instagram", async (c) => {
     ]),
   );
   return c.redirect(`/me/instagram?added=${product!.id}&list=${list!.id}`);
+});
+
+// A one-time link from the shop's chat ("پنل"): signs an Instagram page into its shop's web panel.
+account.get("/l/:token{[A-Za-z0-9]{24,64}}", async (c) => {
+  const userId = await useLoginLink(c.env.DB, c.req.param("token"));
+  if (!userId) return notFoundPage(c, "این لینک ورود منقضی شده یا قبلاً استفاده شده است؛ از دایرکت، دکمه‌ی «پنل وب فروشگاه» را دوباره بزنید.");
+  return startSession(c, userId, "/panel?welcome=1");
 });
 
 // An Instagram page takes its stand-in shop over as its own (link from the "عضویت" chat command).

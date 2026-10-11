@@ -15,6 +15,7 @@ import { now, randomSlug, type Shop } from "./db";
 import { fetchProfile, instagramWeb, publishPhoto, sendDm, sendImageDm, type IgEvent } from "./crm/instagram";
 import { buttonsFor, cardProduct, rememberCard, runShopChat, setupTodo, type ProductCard } from "./commands";
 import type { Deps } from "./orders";
+import { assignUsername } from "../session";
 
 const HANDLE_RE = /^[a-z0-9._]{1,30}$/;
 
@@ -177,6 +178,87 @@ export async function externalShop(db: D1Database, handle: string): Promise<Shop
   return shop!;
 }
 
+/**
+ * Fill in a stand-in shop's name and logo from Instagram (only what is still the default): from
+ * the page's public profile, or from its profile in the DMs (`profile`).
+ */
+export async function enrichShop(db: D1Database, images: R2Bucket, shopId: number, profile?: { name?: string; profilePic?: string }) {
+  const shop = await db.prepare("SELECT id, name, instagram, logo_key, description FROM shops WHERE id = ? AND is_external = 1").bind(shopId).first<{ id: number; name: string; instagram: string; logo_key: string; description: string }>();
+  if (!shop) return;
+  let name = profile?.name ?? "";
+  let pic = profile?.profilePic ?? "";
+  if (!name || !pic) {
+    try {
+      const res = await fetch(`${instagramWeb()}/${shop.instagram}/`, {
+        headers: { "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "Accept-Language": "en-US,en" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        const html = (await res.text()).slice(0, 400_000);
+        // "Nice Shop (@nice.shop) • Instagram photos and videos"
+        name ||= meta(html, "og:title").match(/^(.+?)\s*\(@[a-z0-9._]+\)/i)?.[1]?.trim() ?? "";
+        pic ||= meta(html, "og:image");
+      }
+    } catch {
+      // best effort
+    }
+  }
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (name && shop.name === `@${shop.instagram}`) {
+    sets.push("name = ?");
+    binds.push(`${name.slice(0, 60)} (@${shop.instagram})`);
+  }
+  if (pic && !shop.logo_key && /^https?:\/\//.test(pic)) {
+    const img = await downloadImage(pic);
+    if (img) {
+      const key = `s/${shop.id}/${randomSlug(16)}.${img.type === "image/png" ? "png" : img.type === "image/webp" ? "webp" : "jpg"}`;
+      await images.put(key, img.data, { httpMetadata: { contentType: img.type } });
+      sets.push("logo_key = ?");
+      binds.push(key);
+    }
+  }
+  if (sets.length) await db.prepare(`UPDATE shops SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, shop.id).run();
+}
+
+const sha256 = async (s: string) =>
+  Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s))), (b) => b.toString(16).padStart(2, "0")).join("");
+
+/** A one-time link (30 minutes) that signs the page into its shop's web panel. */
+export async function loginLink(db: D1Database, site: string, shop: { owner_id: number }) {
+  const token = randomSlug(32);
+  await db.batch([
+    db.prepare("DELETE FROM login_links WHERE expires_at < ?").bind(Date.now()),
+    db.prepare("INSERT INTO login_links (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(token), shop.owner_id, Date.now() + 30 * 60_000),
+  ]);
+  return `${site}/l/${token}`;
+}
+
+/** Use a login link: the account it signs in to, or null (unknown, used or expired). */
+export async function useLoginLink(db: D1Database, token: string) {
+  const row = await db.prepare("DELETE FROM login_links WHERE token_hash = ? RETURNING user_id, expires_at").bind(await sha256(token)).first<{ user_id: number; expires_at: number }>();
+  return row && row.expires_at > Date.now() ? row.user_id : null;
+}
+
+/**
+ * The page's own account for its verified phone number (created if new); the stand-in shop is
+ * handed over to it. Returns the user id, or an error message.
+ */
+export async function joinWithPhone(db: D1Database, shop: Shop, phone: string): Promise<number | string> {
+  let user = await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+  if (!user) {
+    user = await db
+      .prepare("INSERT INTO users (phone, name, first_name, password_hash, created_at) VALUES (?, ?, ?, '!', ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
+      .bind(phone, shop.name, shop.name, now())
+      .first<{ id: number }>();
+    user ??= await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+    await assignUsername(db, user!.id);
+  }
+  const error = await handOver(db, shop.id, user!.id);
+  await db.prepare("UPDATE shops SET claim_phone = '' WHERE id = ?").bind(shop.id).run();
+  return error ?? user!.id;
+}
+
 /** Fill {placeholders} in an admin-written message. */
 export function fill(template: string, vars: Record<string, string>) {
   return template.replace(/\{([a-z_]+)\}/g, (all, k: string) => (k in vars ? vars[k] : all));
@@ -310,6 +392,8 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
     if (!handle) return log("no_username", ev.customerId, ev.body.slice(0, 120));
     shop = await db.prepare("SELECT * FROM shops WHERE is_external = 1 AND instagram = ?").bind(handle).first<Shop>();
     if (!shop) return log("no_wishes", `${ev.customerId} @${handle}`, ev.body.slice(0, 120)); // left for a person to answer
+    await enrichShop(db, d.images, shop.id, profile).catch((e) => console.error("enrich shop", e));
+    shop = (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(shop.id).first<Shop>())!;
     await db.prepare("UPDATE shops SET ig_contact_id = '' WHERE ig_contact_id = ?").bind(ev.customerId).run();
     first = true;
   }

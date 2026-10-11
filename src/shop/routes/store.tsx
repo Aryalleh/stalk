@@ -141,9 +141,9 @@ store.get("/shops", async (c) => {
   const q = (c.req.query("q") ?? "").trim().slice(0, 60);
   const like = `%${q.replace(/[%_]/g, "")}%`;
   const { results } = await c.env.DB.prepare(
-    `SELECT s.id, s.name, s.slug, s.city, s.description, s.logo_key, s.cover_key,
-            (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id AND p.is_active = 1) AS products
-     FROM shops s WHERE s.status = 'approved' AND s.is_external = 0 ${q ? "AND (s.name LIKE ?1 OR s.city LIKE ?1 OR s.description LIKE ?1)" : ""}
+    `SELECT s.id, s.name, s.slug, s.city, s.description, s.logo_key, s.cover_key, s.is_external, s.instagram,
+            (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id AND p.is_active = 1 AND p.deleted_at IS NULL) AS products
+     FROM shops s WHERE s.status = 'approved' ${q ? "AND (s.name LIKE ?1 OR s.city LIKE ?1 OR s.description LIKE ?1)" : ""}
      ORDER BY (s.id = ${Number(c.get("settings").featured_shop_id) || 0}) DESC, products DESC, s.created_at DESC LIMIT 300`,
   )
     .bind(...(q ? [like] : []))

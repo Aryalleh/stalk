@@ -812,6 +812,9 @@ export interface ShopCard {
   logo_key: string;
   cover_key: string;
   products: number;
+  /** An Instagram page not on the site yet (its items were added by users). */
+  is_external: number;
+  instagram: string;
 }
 
 /** /shops: every approved shop as a card (cover, logo, name, city, product count), searchable. */
@@ -845,8 +848,13 @@ export function ShopsPage(props: { user: User | null; shops: ShopCard[]; q: stri
                   <div class="absolute inset-0 photo-scrim-soft"></div>
                 </div>
                 <div class="px-4 pb-4 pt-2 relative flex items-end gap-3">
-                  <div class="-mt-10 w-16 h-16 rounded-2xl bg-ink overflow-hidden flex items-center justify-center text-2xl font-bold text-brand shrink-0 border-4 border-card shadow-md">
+                  <div class="-mt-10 w-16 h-16 rounded-2xl bg-ink overflow-hidden flex items-center justify-center text-2xl font-bold text-brand shrink-0 border-4 border-card shadow-md relative">
                     {s.logo_key ? <img src={`/img/${s.logo_key}`} alt={s.name} loading="lazy" class="w-full h-full object-cover" /> : s.name.charAt(0)}
+                    {s.is_external ? (
+                      <span class="absolute -bottom-1 -left-1 w-6 h-6 rounded-full bg-card text-brand flex items-center justify-center text-xs shadow" title="فروشگاه اینستاگرامی">
+                        <i class="fa-brands fa-instagram"></i>
+                      </span>
+                    ) : null}
                   </div>
                   <div class="min-w-0 flex-1 pb-0.5">
                     <h2 class="text-sm font-black truncate">{s.name}</h2>

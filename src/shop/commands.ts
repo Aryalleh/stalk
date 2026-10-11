@@ -3,12 +3,11 @@
 // Each command returns the reply text.
 import { cardNumberError, formatCard, toLatinDigits } from "../../lib/normalize";
 import { cancelForStock, confirmOrder, rejectOrder, shipOrder, type Deps } from "./orders";
-import { deleteProduct, now, randomSlug, toman, type Order, type Shop } from "./db";
+import { deleteProduct, now, toman, type Order, type Shop } from "./db";
 import { variantLabel } from "./variants";
 import { cancelCode, issueCode, verifyCode } from "../bale/otp";
 import { SafirError, sendSafirOtp } from "../bale/safir";
-import { assignUsername } from "../session";
-import { handOver } from "./instagram-shops";
+import { joinWithPhone, loginLink } from "./instagram-shops";
 
 const n = (x: number) => x.toLocaleString("fa-IR", { useGrouping: false });
 
@@ -27,7 +26,7 @@ export const COMMANDS_HELP = [
   "🚚 ارسال 34 کدرهگیری — ثبت ارسال و کد رهگیری",
   "⛔️ لغو 34 دلیل — لغو سفارش (کالا تمام شده)",
   "📱 شماره موبایلتان (مثل 09121234567) — ثبت‌نام و فروشگاه کامل خودتان در سایت",
-  "🏪 عضویت — همین کار با لینک",
+  "🔗 پنل — لینک ورود به پنل وب فروشگاه (تکمیل اطلاعات و ثبت‌نام)",
 ].join("\n");
 
 const STATUS: Record<string, string> = {
@@ -225,18 +224,8 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
     const phone = shop.claim_phone;
     const ok = await verifyCode(db, phone, m[1]);
     if (ok !== true) return `❌ ${ok}`;
-    let user = await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
-    if (!user) {
-      user = await db
-        .prepare("INSERT INTO users (phone, name, first_name, password_hash, created_at) VALUES (?, ?, ?, '!', ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
-        .bind(phone, shop.name, shop.name, now())
-        .first<{ id: number }>();
-      user ??= await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
-      await assignUsername(db, user!.id);
-    }
-    const error = await handOver(db, shop.id, user!.id);
-    await db.prepare("UPDATE shops SET claim_phone = '' WHERE id = ?").bind(shop.id).run();
-    if (error) return `❌ ${error}`;
+    const joined = await joinWithPhone(db, shop, phone);
+    if (typeof joined === "string") return `❌ ${joined}`;
     return [
       "🎉 ثبت‌نام انجام شد و فروشگاه کامل شما در سایت آماده است!",
       `ورود به پنل: ${d.siteUrl}/panel (با شماره ${phone})`,
@@ -245,18 +234,14 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
     ].join("\n");
   }
 
-  if (/^(عضویت|join|فروشگاه|پنل|panel)$/i.test(t)) {
+  // The web panel: a one-time sign-in link (the page completes its details and its phone there).
+  if (/^(عضویت|join|فروشگاه|پنل|panel|ورود|وب|web)$/i.test(t)) {
     if (!shop.is_external) return `فروشگاه شما در سایت فعال است: ${d.siteUrl}/panel`;
-    let token = shop.claim_token;
-    if (!token) {
-      token = randomSlug(24);
-      await db.prepare("UPDATE shops SET claim_token = ? WHERE id = ?").bind(token, shop.id).run();
-    }
     return [
-      "🏪 فروشگاه کامل خودتان در سایت: پنل مدیریت، همه محصولات، دریافت سفارش‌ها در بات بله/تلگرام و CRM.",
-      "محصولات، آرزوها و سفارش‌های فعلی هم منتقل می‌شوند.",
+      "🔗 ورود به پنل وب فروشگاه شما (یک‌بار مصرف، تا ۳۰ دقیقه):",
+      await loginLink(db, d.siteUrl, shop),
       "",
-      `این لینک را باز کنید و با شماره موبایل خودتان وارد شوید:\n${d.siteUrl}/claim/${token}`,
+      "آنجا اطلاعات فروشگاه (نام، توضیح، شهر، تلفن، روش ارسال، لوگو) را کامل کنید، محصول اضافه کنید و با ثبت شماره موبایل، حساب دائمی و فروشگاه کامل خودتان را داشته باشید: پنل، CRM و دریافت سفارش‌ها در بات بله/تلگرام.",
       "",
       "این لینک مخصوص شماست؛ آن را برای کسی نفرستید.",
     ].join("\n");
@@ -348,7 +333,7 @@ export async function buttonsFor(db: D1Database, shop: Shop): Promise<ChatButton
   if (!shop.card_number) b.push({ title: "💳 ثبت شماره کارت", payload: "card" });
   for (const p of unpriced.results as { id: number; title: string }[]) b.push({ title: `🏷 قیمت ${short(p.title, 12)}`, payload: `pr:${p.id}` });
   b.push({ title: "📦 سفارش‌ها", payload: "o" }, { title: "🛍 محصولات", payload: "p" });
-  if (shop.is_external) b.push({ title: "📱 ثبت‌نام در سایت", payload: "su" });
+  if (shop.is_external) b.push({ title: "🔗 پنل وب فروشگاه", payload: "web" }, { title: "📱 ثبت‌نام در سایت", payload: "su" });
   b.push({ title: "❓ راهنما", payload: "h" });
   return b.slice(0, 13);
 }
@@ -392,7 +377,8 @@ export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; p
         command = `ارسال ${id}`;
         break;
       case "join":
-        command = "عضویت";
+      case "web":
+        command = "پنل";
         break;
       case "card":
         return ask("card", "💳 شماره کارت ۱۶ رقمی و نام صاحب کارت را بفرستید، مثلاً:\n6037991234567890 علی رضایی");

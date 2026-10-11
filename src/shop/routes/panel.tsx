@@ -10,12 +10,12 @@ import type { C, Env } from "../../env";
 import { SOCIAL_KEYS, categoryList, loadSettings, saveSettings as saveSiteSettings, webhookSecret, igVerifyToken, type Settings } from "../../settings";
 import { fileField, imageError, storeImage } from "../images";
 import { BUILTIN_PAGES, RESERVED_SLUGS, SLUG_RE, allPages, footerIndex, getPage, type Page } from "../../pages";
-import { sendSafirText } from "../../bale/safir";
+import { SafirError, sendSafirOtp, sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, AdminInstagramPage, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
-import { currentUser, form, intParam, siteUrl } from "./helpers";
+import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { currentUser, form, intParam, siteUrl, startSession } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
 import { channelOf, postProductToChannel, shareError } from "../telegram/share";
@@ -24,7 +24,8 @@ import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
-import { handOver, igLog, inviteText } from "../instagram-shops";
+import { handOver, igLog, inviteText, joinWithPhone } from "../instagram-shops";
+import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { PLATFORM_IG_SCOPES, authorizeUrl, exchangeCode, fetchAccount, subscribeWebhook } from "../crm/instagram";
 import { cleanIgToken } from "../crm/routes";
 
@@ -287,6 +288,58 @@ panel.post("/panel/orders/:id{[0-9]+}/delivered", async (c) => {
   if (!order || order.status !== "shipped") return c.notFound();
   await c.env.DB.prepare("UPDATE orders SET status = 'delivered' WHERE id = ?").bind(order.id).run();
   return c.redirect(`/panel/orders/${order.id}?done=saved`);
+});
+
+// ---------- an Instagram page's stand-in shop: its own account by phone ----------
+
+panel.get("/panel/join", (c) => {
+  const shop = shopOf(c);
+  if (!shop.is_external) return c.redirect("/panel");
+  const phone = normalizePhone(c.req.query("phone") ?? "");
+  return render(c, <JoinPhonePage user={currentUser(c)} shop={shop} phone={/^09\d{9}$/.test(phone) && phone === shop.claim_phone ? phone : undefined} />);
+});
+
+panel.post("/panel/join", async (c) => {
+  const shop = shopOf(c);
+  if (!shop.is_external) return c.redirect("/panel");
+  const phone = normalizePhone((await form(c)).phone ?? "");
+  const fail = (error: string) => render(c, <JoinPhonePage user={currentUser(c)} shop={shop} error={error} />, 400);
+  if (!/^09\d{9}$/.test(phone)) return fail("شماره موبایل را درست وارد کنید (مثل 09121234567).");
+  const owner = await c.env.DB.prepare("SELECT id, shop_id FROM users WHERE phone = ?").bind(phone).first<{ id: number; shop_id: number | null }>();
+  if (owner && (owner.shop_id || (await c.env.DB.prepare("SELECT 1 AS x FROM shops WHERE owner_id = ?").bind(owner.id).first()))) {
+    return fail("این شماره از قبل فروشگاه دیگری در سایت دارد.");
+  }
+  const issued = await issueCode(c.env.DB, phone);
+  if ("wait" in issued) return fail(issued.wait);
+  try {
+    await sendSafirOtp(c.get("settings"), phone, issued.code);
+  } catch (e) {
+    if (!["localhost", "127.0.0.1"].includes(new URL(c.req.url).hostname)) {
+      await cancelCode(c.env.DB, phone);
+      return fail(e instanceof SafirError ? e.message : "ارسال کد ناموفق بود؛ دوباره تلاش کنید.");
+    }
+    console.log(`[dev] login code for ${phone}: ${issued.code}`); // local development only
+  }
+  await c.env.DB.prepare("UPDATE shops SET claim_phone = ? WHERE id = ?").bind(phone, shop.id).run();
+  return c.redirect(`/panel/join?phone=${phone}`);
+});
+
+panel.post("/panel/join/verify", async (c) => {
+  const shop = shopOf(c);
+  if (!shop.is_external) return c.redirect("/panel");
+  const f = await form(c);
+  const phone = normalizePhone(f.phone ?? "");
+  const again = (error: string) => render(c, <JoinPhonePage user={currentUser(c)} shop={shop} phone={phone} error={error} />, 400);
+  if (phone !== shop.claim_phone) return c.redirect("/panel/join");
+  const ok = await verifyCode(c.env.DB, phone, normalizeDigits(f.code ?? ""));
+  if (ok !== true) return again(ok);
+  const joined = await joinWithPhone(c.env.DB, shop, phone);
+  if (typeof joined === "string") return again(joined);
+  c.executionCtx.waitUntil(
+    notifyAdmins(c.env.DB, c.get("settings"), `🏪 صفحه‌ی اینستاگرام @${shop.instagram} با شماره ${phone} ثبت‌نام کرد و فروشگاهش را تحویل گرفت.`).catch(() => undefined),
+  );
+  // Now signed in as the page's own account (it completes its name and birthday first, once).
+  return startSession(c, joined, "/panel?joined=1");
 });
 
 // ---------- products ----------

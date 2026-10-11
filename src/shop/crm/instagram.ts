@@ -120,12 +120,12 @@ export async function sendImageDm(token: string, accountId: string, recipientId:
 }
 
 /** Username and name of an Instagram user who messaged the account (best effort). */
-export async function fetchProfile(token: string, igsid: string) {
+export async function fetchProfile(token: string, igsid: string): Promise<{ name?: string; username?: string; profilePic?: string }> {
   try {
-    const res = await fetch(`${GRAPH}/${encodeURIComponent(igsid)}?fields=name,username`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${GRAPH}/${encodeURIComponent(igsid)}?fields=name,username,profile_pic`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return {};
-    const d = (await res.json()) as { name?: string; username?: string };
-    return { name: d.name ?? "", username: d.username ?? "" };
+    const d = (await res.json()) as { name?: string; username?: string; profile_pic?: string };
+    return { name: d.name ?? "", username: d.username ?? "", profilePic: d.profile_pic ?? "" };
   } catch {
     return {};
   }
