@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone, toLatinDigits } from "../../../lib/normalize";
 import { adjustStock, availableByVariant, normCity, now, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
@@ -24,7 +25,7 @@ import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
 import { handOver, inviteText } from "../instagram-shops";
-import { fetchAccount } from "../crm/instagram";
+import { authorizeUrl, exchangeCode, fetchAccount } from "../crm/instagram";
 import { cleanIgToken } from "../crm/routes";
 
 export const panel = new Hono<Env>();
@@ -844,7 +845,7 @@ admin.get("/admin/instagram", async (c) => {
   }));
   return render(
     c,
-    <AdminInstagramPage user={currentUser(c)} settings={s} shops={shopRows} orders={orders.results as ExternalOrderRow[]} ok={c.req.query("ok")} error={c.req.query("error")} />,
+    <AdminInstagramPage user={currentUser(c)} site={site} settings={s} shops={shopRows} orders={orders.results as ExternalOrderRow[]} ok={c.req.query("ok")} error={c.req.query("error")} />,
   );
 });
 
@@ -872,6 +873,49 @@ admin.post("/admin/instagram/settings", async (c) => {
   }
   await saveSiteSettings(c.env.DB, values);
   return igBack(c, "ذخیره شد.");
+});
+
+// "Login with Instagram" for the site's own account (same Instagram Business Login as the shops').
+// The redirect URI must also be listed in the Meta app: <site>/admin/instagram/callback.
+const PLATFORM_IG_STATE = "ig_platform_oauth";
+const platformRedirect = (c: C) => `${siteUrl(c)}/admin/instagram/callback`;
+
+admin.get("/admin/instagram/connect", (c) => {
+  const s = c.get("settings");
+  if (!s.ig_app_id || !s.meta_app_secret) return igBack(c, "اول Instagram app ID و App secret را در «تنظیمات سایت» وارد کنید.", false);
+  const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  setCookie(c, PLATFORM_IG_STATE, state, { httpOnly: true, secure: true, sameSite: "Lax", path: "/admin/instagram", maxAge: 600 });
+  return c.redirect(authorizeUrl(s.ig_app_id, platformRedirect(c), state));
+});
+
+admin.get("/admin/instagram/callback", async (c) => {
+  const s = c.get("settings");
+  const expected = getCookie(c, PLATFORM_IG_STATE);
+  deleteCookie(c, PLATFORM_IG_STATE, { path: "/admin/instagram" });
+  if (c.req.query("error")) {
+    return igBack(c, c.req.query("error_reason") === "user_denied" ? "اجازه دسترسی داده نشد." : `اینستاگرام: ${(c.req.query("error_description") ?? c.req.query("error") ?? "").slice(0, 200)}`, false);
+  }
+  const code = c.req.query("code") ?? "";
+  if (!code || !expected || c.req.query("state") !== expected) return igBack(c, "درخواست ورود منقضی یا نامعتبر بود؛ دوباره «ورود با اینستاگرام» را بزنید.", false);
+  try {
+    const token = await exchangeCode(s.ig_app_id, s.meta_app_secret, platformRedirect(c), code);
+    const me = await fetchAccount(token);
+    if (!me.accountId) return igBack(c, "شناسه حساب اینستاگرام دریافت نشد.", false);
+    await saveSiteSettings(c.env.DB, {
+      platform_ig_token: token,
+      platform_ig_account_id: me.accountId,
+      platform_instagram: me.username.toLowerCase(),
+      platform_ig_token_refreshed_at: new Date().toISOString(),
+    });
+    return igBack(c, `وصل شد: @${me.username}`);
+  } catch (e) {
+    return igBack(c, `ورود ناموفق بود: ${(e as Error).message.slice(0, 200)}`, false);
+  }
+});
+
+admin.post("/admin/instagram/disconnect", async (c) => {
+  await saveSiteSettings(c.env.DB, { platform_ig_token: "", platform_ig_token_refreshed_at: "" });
+  return igBack(c, "صفحه‌ی اینستاگرام سایت جدا شد.");
 });
 
 admin.post("/admin/instagram/:id{[0-9]+}/invite", async (c) => {

@@ -1732,6 +1732,7 @@ const INVITE_LABEL: Record<string, string> = { "": "خبر داده نشده", i
 /** Instagram pages that aren't on the site: their status, the message to send them, joining. */
 export function AdminInstagramPage(props: {
   user: User;
+  site: string;
   settings: Settings;
   shops: ExternalShopRow[];
   orders: ExternalOrderRow[];
@@ -1835,9 +1836,22 @@ export function AdminInstagramPage(props: {
 
       <form method="post" action="/admin/instagram/settings" class="card">
         <h2><i class="fa-solid fa-plug ml-1"></i> صفحه‌ی اینستاگرام سایت</h2>
+        <div class="row" style="gap:8px;align-items:center;margin-bottom:8px">
+          {connected ? (
+            <>
+              <span class="tag ok">✅ وصل است{s.platform_instagram ? ` — @${s.platform_instagram}` : ""}</span>
+              <a class="btn small secondary" href="/admin/instagram/connect"><i class="fa-brands fa-instagram"></i> ورود دوباره</a>
+              <button class="small secondary" formaction="/admin/instagram/disconnect" formnovalidate>جدا کردن</button>
+            </>
+          ) : (
+            <a class="btn !bg-gradient-to-l !from-fuchsia-500 !to-amber-400 !border-0" href="/admin/instagram/connect">
+              <i class="fa-brands fa-instagram"></i> ورود با اینستاگرام
+            </a>
+          )}
+        </div>
         <p class="small muted" style="margin-top:0;line-height:1.9">
-          فروشگاه‌ها به این صفحه دایرکت می‌دهند. همان اپ متا و وبهوک <span class="ltr">/ig/webhook</span> فروشگاه‌ها استفاده می‌شود؛ این حساب را هم در اپ اضافه کنید،
-          توکن آن را از بخش «Generate token» بگیرید و اینجا بگذارید. {connected ? "✅ وصل است." : ""}
+          فروشگاه‌ها به این صفحه دایرکت می‌دهند. با دکمه بالا وارد صفحه‌ی اینستاگرام سایت شوید (همان اپ متا و وبهوک <span class="ltr">/ig/webhook</span> فروشگاه‌ها).
+          آدرس <span class="ltr">{props.site}/admin/instagram/callback</span> را هم در Valid OAuth Redirect URIs اپ اضافه کنید. اگر ورود ممکن نبود، توکن را دستی پایین‌تر بگذارید.
         </p>
         <div class="two">
           <div>
@@ -1849,7 +1863,7 @@ export function AdminInstagramPage(props: {
             <input name="platform_ig_account_id" class="ltr" inputmode="numeric" value={s.platform_ig_account_id} />
           </div>
         </div>
-        <label>توکن دسترسی {s.platform_ig_token ? "(برای تغییر وارد کنید)" : ""}</label>
+        <label>توکن دسترسی (دستی، اختیاری) {s.platform_ig_token ? "— برای تغییر وارد کنید" : ""}</label>
         <input name="platform_ig_token" class="ltr" autocomplete="off" placeholder={s.platform_ig_token ? "•••••••• (ذخیره شده)" : "IGAA…"} />
         <label>پیامی که برای فروشگاه فرستاده می‌شود</label>
         <textarea name="ig_invite_text" rows={8}>{s.ig_invite_text}</textarea>
