@@ -532,7 +532,8 @@ export function ProductPage(props: {
     type: "product",
     description: summary(p.description ? `${p.title}: ${p.description}` : `خرید ${p.title} از فروشگاه ${p.shop_name} در ${site.site_name}؛ به لیست آرزویت اضافه کن تا دوستانت برایت کادو بخرند، یا مستقیم بخر.`),
     image: images[0] ? `/img/${images[0]}` : undefined,
-    props: [["product:price:amount", String(p.price * 10)], ["product:price:currency", "IRR"]],
+    // An Instagram item the shop hasn't priced yet has no price to show search engines.
+    props: p.awaiting_price ? [] : [["product:price:amount", String(p.price * 10)], ["product:price:currency", "IRR"]],
     jsonLd: [
       {
         "@context": "https://schema.org",
@@ -546,16 +547,20 @@ export function ProductPage(props: {
         ...(p.category ? { category: p.category } : {}),
         brand: { "@type": "Brand", name: p.shop_name },
         ...(features.length ? { additionalProperty: features.map((x) => ({ "@type": "PropertyValue", name: "ویژگی", value: x })) } : {}),
-        offers: {
-          "@type": "Offer",
-          url,
-          price: String(p.price * 10),
-          priceCurrency: "IRR",
-          availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
-          itemCondition: "https://schema.org/NewCondition",
-          areaServed: { "@type": "Country", name: "Iran" },
-          seller: { "@type": "Organization", name: p.shop_name, url: `${site.origin}/s/${p.shop_slug}` },
-        },
+        ...(p.awaiting_price
+          ? {}
+          : {
+              offers: {
+                "@type": "Offer",
+                url,
+                price: String(p.price * 10),
+                priceCurrency: "IRR",
+                availability: soldOut ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+                itemCondition: "https://schema.org/NewCondition",
+                areaServed: { "@type": "Country", name: "Iran" },
+                seller: { "@type": "Organization", name: p.shop_name, url: `${site.origin}/s/${p.shop_slug}` },
+              },
+            }),
       },
       breadcrumbLd(site, [
         [site.site_name, "/"],
