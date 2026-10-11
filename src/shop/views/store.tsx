@@ -1108,7 +1108,8 @@ export function WishlistPublicPage(props: {
   const cover = props.items.find((it) => it.image_key)?.image_key;
   const seo: Seo = {
     description: summary(w.description || `لیست آرزوی ${props.owner.name} در ${site.site_name}: ${props.items.length} آرزو. یکی را انتخاب کن و برایش کادو بخر.`),
-    image: cover ? `/img/${cover}` : props.owner.avatar_key ? `/img/${props.owner.avatar_key}` : undefined,
+    // The link preview shows the wisher: their profile photo, else their banner, else a wished item.
+    image: props.owner.avatar_key ? `/img/${props.owner.avatar_key}` : props.owner.banner_key ? `/img/${props.owner.banner_key}` : cover ? `/img/${cover}` : undefined,
   };
   return (
     <Layout title={`${w.title} | آرزوهای ${props.owner.name}`} user={props.user} nav={props.isOwner ? "wishes" : "home"} header={header} bare wide seo={seo}>
