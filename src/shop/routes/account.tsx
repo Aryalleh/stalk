@@ -581,16 +581,17 @@ account.post("/me/wishlists/:id{[0-9]+}", async (c) => {
 account.post("/me/items/:id{[0-9]+}/delete", async (c) => {
   const user = currentUser(c);
   const item = await c.env.DB.prepare(
-    `SELECT i.id, i.wishlist_id FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE i.id = ? AND w.user_id = ?`,
+    `SELECT i.id, i.wishlist_id, w.slug FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE i.id = ? AND w.user_id = ?`,
   )
     .bind(intParam(c, "id"), user.id)
-    .first<{ id: number; wishlist_id: number }>();
+    .first<{ id: number; wishlist_id: number; slug: string }>();
   if (!item) return c.notFound();
   // Items that ever had an order are kept so order history stays intact.
   await c.env.DB.prepare("DELETE FROM wishlist_items WHERE id = ? AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.item_id = ?)")
     .bind(item.id, item.id)
     .run();
-  return c.redirect(`/me/wishlists/${item.wishlist_id}`);
+  // From the wishlist's own page, back to it.
+  return c.redirect((await form(c)).back === "list" ? `/w/${item.slug}` : `/me/wishlists/${item.wishlist_id}`);
 });
 
 account.post("/p/:id{[0-9]+}/wish", async (c) => {

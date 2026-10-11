@@ -1143,6 +1143,14 @@ export function WishlistPublicPage(props: {
                   <ImageOrGift imageKey={it.image_key} alt={it.title} class={`w-full h-auto block min-h-[160px] object-cover ${fulfilled ? "grayscale-[60%]" : ""}`} />
                 </a>
                 <div class="absolute inset-0 photo-scrim pointer-events-none"></div>
+                {props.isOwner && it.bought === 0 && it.reserved === 0 && (
+                  <form method="post" action={`/me/items/${it.id}/delete`} class="absolute top-3 left-3 z-10 m-0" onsubmit="return confirm('این آرزو از لیست حذف شود؟')">
+                    <input type="hidden" name="back" value="list" />
+                    <button aria-label="حذف از لیست" title="حذف از لیست" class="w-8 h-8 rounded-full bg-black/45 backdrop-blur-md text-white flex items-center justify-center text-xs border border-white/20 hover:bg-red-500/80">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </form>
+                )}
                 {fulfilled ? (
                   <div class="absolute top-3 right-3 bg-brand px-2.5 py-1 rounded-lg text-[10px] font-bold text-white shadow-lg">✓ برآورده شد</div>
                 ) : it.quantity > 1 && it.bought > 0 ? (
