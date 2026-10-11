@@ -86,6 +86,8 @@ export interface Shop {
   ig_contact_at: string | null;
   /** One-time link for the page to take the stand-in shop over as its own (commands.ts "عضویت"). */
   claim_token: string;
+  /** A phone number the page sent to sign up with, waiting for its one-time code. */
+  claim_phone: string;
   created_at: string;
 }
 
@@ -178,7 +180,8 @@ export async function listProducts(db: D1Database, opts: { q?: string; shopId?: 
     where.push("p.shop_id = ?");
     binds.push(opts.shopId);
   } else {
-    where.push("s.is_external = 0"); // items added from Instagram pages stay out of explore/search
+    // Items from Instagram pages not on the site, and any item still waiting for its price, stay out of explore/search.
+    where.push("s.is_external = 0", "p.awaiting_price = 0");
   }
   if (opts.category) {
     where.push("p.category = ?");

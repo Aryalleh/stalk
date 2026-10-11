@@ -486,7 +486,7 @@ async function saveProduct(c: C, product: Product | null) {
   let productId = product?.id ?? 0;
   if (product) {
     await db.prepare(
-      "UPDATE products SET title = ?, description = ?, price = ?, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, colors = ?, track_stock = ?, is_active = ?, updated_at = ? WHERE id = ?",
+      "UPDATE products SET title = ?, description = ?, price = ?, awaiting_price = 0, video_url = ?, image_key = ?, size_guide = ?, size_guide_image = ?, category = ?, features = ?, colors = ?, track_stock = ?, is_active = ?, updated_at = ? WHERE id = ?",
     )
       .bind(values.title, values.description, price, values.video_url, cover, sizeGuide, chartKey, values.category, values.features, values.colors, Number(values.track_stock), Number(values.is_active), t, product.id)
       .run();
@@ -528,7 +528,7 @@ panel.get("/panel/products/:id{[0-9]+}", async (c) => {
   const p = await ownProduct(c);
   if (!p) return c.notFound();
   const values = {
-    title: p.title, description: p.description, price: String(p.price), video_url: p.video_url, size_guide: p.size_guide,
+    title: p.title, description: p.description, price: p.awaiting_price ? "" : String(p.price), video_url: p.video_url, size_guide: p.size_guide,
     category: p.category, features: p.features, colors: p.colors, track_stock: String(p.track_stock),
     is_active: String(p.is_active), saved: c.req.query("saved") ?? "",
     tg_ok: c.req.query("tg_ok") ?? "", tg_error: c.req.query("tg_error") ?? "",

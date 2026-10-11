@@ -981,6 +981,10 @@ export interface AddedFromInstagram {
   ig_contact_id: string;
   /** The page has set its price and card: friends can already buy it. */
   ready: boolean;
+  /** The page is already a shop on the site (the item went into it). */
+  member: boolean;
+  shop_name: string;
+  shop_slug: string;
   message: string; // the DM to send the page
 }
 
@@ -1016,6 +1020,10 @@ export function InstagramAddPage(props: {
           </div>
           {a.ready ? (
             <div class="okbox">این فروشگاه قیمت و کارتش را ثبت کرده؛ دوستانتان همین حالا می‌توانند آن را برایتان بخرند.</div>
+          ) : a.member ? (
+            <div class="card" style="line-height:1.9">
+              🏪 این صفحه در سایت فروشگاه دارد: <a href={`/s/${a.shop_slug}`} class="font-bold">{a.shop_name}</a>. محصول به فروشگاهش اضافه شد و به او خبر دادیم؛ به‌محض اینکه قیمت را ثبت کند، دوستانتان می‌توانند بخرند.
+            </div>
           ) : (
             <div class="card">
               <h2 style="margin-top:0">📩 به فروشگاه خبر بدهید</h2>

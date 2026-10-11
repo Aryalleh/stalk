@@ -5,6 +5,10 @@ import { cardNumberError, formatCard, toLatinDigits } from "../../lib/normalize"
 import { cancelForStock, confirmOrder, rejectOrder, shipOrder, type Deps } from "./orders";
 import { now, randomSlug, toman, type Order, type Shop } from "./db";
 import { variantLabel } from "./variants";
+import { cancelCode, issueCode, verifyCode } from "../bale/otp";
+import { SafirError, sendSafirOtp } from "../bale/safir";
+import { assignUsername } from "../session";
+import { handOver } from "./instagram-shops";
 
 const n = (x: number) => x.toLocaleString("fa-IR", { useGrouping: false });
 
@@ -21,7 +25,8 @@ export const COMMANDS_HELP = [
   "❌ رد 34 دلیل — واریز نرسید",
   "🚚 ارسال 34 کدرهگیری — ثبت ارسال و کد رهگیری",
   "⛔️ لغو 34 دلیل — لغو سفارش (کالا تمام شده)",
-  "🏪 عضویت — فروشگاه کامل خودتان در سایت",
+  "📱 شماره موبایلتان (مثل 09121234567) — ثبت‌نام و فروشگاه کامل خودتان در سایت",
+  "🏪 عضویت — همین کار با لینک",
 ].join("\n");
 
 const STATUS: Record<string, string> = {
@@ -191,6 +196,52 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
     return ok
       ? `⛔️ سفارش ${n(o.id)} لغو شد و به خریدار خبر دادیم.${o.status === "paid" ? `\nلطفاً ${toman(o.amount)} را به کارت خریدار برگردانید.` : ""}`
       : "لغو انجام نشد.";
+  }
+
+  // Sign up by phone: the number gets a one-time code (in Bale), the code comes back here.
+  if (shop.is_external && (m = t.match(/^(?:ثبت ?نام|شماره|موبایل|signup)?\s*(?:\+98|0098|0)?(9\d{9})$/i))) {
+    const phone = `0${m[1]}`;
+    const owner = await db.prepare("SELECT id, shop_id FROM users WHERE phone = ?").bind(phone).first<{ id: number; shop_id: number | null }>();
+    if (owner?.shop_id || (owner && (await db.prepare("SELECT 1 AS x FROM shops WHERE owner_id = ?").bind(owner.id).first()))) {
+      return "این شماره از قبل فروشگاه دیگری در سایت دارد؛ شماره‌ی دیگری بفرستید.";
+    }
+    const issued = await issueCode(db, phone);
+    if ("wait" in issued) return issued.wait;
+    try {
+      await sendSafirOtp(d.settings, phone, issued.code);
+    } catch (e) {
+      if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(d.siteUrl)) {
+        await cancelCode(db, phone);
+        return `ارسال کد به ${phone} ممکن نشد${e instanceof SafirError ? `: ${e.message}` : ""}. دوباره امتحان کنید.`;
+      }
+      console.log(`[dev] login code for ${phone}: ${issued.code}`); // local development only
+    }
+    await db.prepare("UPDATE shops SET claim_phone = ? WHERE id = ?").bind(phone, shop.id).run();
+    return `📩 یک کد ۶ رقمی در «بله» به شماره ${phone} فرستادیم. همان کد را همین‌جا بفرستید.`;
+  }
+
+  if (shop.is_external && shop.claim_phone && (m = t.match(/^(?:کد|code)?\s*(\d{6})$/i))) {
+    const phone = shop.claim_phone;
+    const ok = await verifyCode(db, phone, m[1]);
+    if (ok !== true) return `❌ ${ok}`;
+    let user = await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+    if (!user) {
+      user = await db
+        .prepare("INSERT INTO users (phone, name, first_name, password_hash, created_at) VALUES (?, ?, ?, '!', ?) ON CONFLICT (phone) DO NOTHING RETURNING id")
+        .bind(phone, shop.name, shop.name, now())
+        .first<{ id: number }>();
+      user ??= await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+      await assignUsername(db, user!.id);
+    }
+    const error = await handOver(db, shop.id, user!.id);
+    await db.prepare("UPDATE shops SET claim_phone = '' WHERE id = ?").bind(shop.id).run();
+    if (error) return `❌ ${error}`;
+    return [
+      "🎉 ثبت‌نام انجام شد و فروشگاه کامل شما در سایت آماده است!",
+      `ورود به پنل: ${d.siteUrl}/panel (با شماره ${phone})`,
+      "آنجا محصول تازه اضافه کنید، قیمت‌ها و ارسال را تنظیم کنید و بات بله یا تلگرام را وصل کنید تا سفارش‌ها همیشه به دستتان برسد.",
+      "همین دستورها اینجا و در بات هم کار می‌کنند.",
+    ].join("\n");
   }
 
   if (/^(عضویت|join|فروشگاه|پنل|panel)$/i.test(t)) {

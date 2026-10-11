@@ -50,6 +50,32 @@ const meta = (html: string, prop: string) =>
  * previews (best effort: private posts or a blocked request give nothing).
  */
 export async function fetchPost(postUrl: string): Promise<{ image: string; handle: string }> {
+  // The embed page has the bare photo / reel cover (the link-preview image of a reel carries a play
+  // icon) and the page's username.
+  const embed = await fetchEmbed(postUrl);
+  if (embed.image && embed.handle) return embed;
+  const og = await fetchPreview(postUrl);
+  return { image: embed.image || og.image, handle: embed.handle || og.handle };
+}
+
+async function fetchEmbed(postUrl: string): Promise<{ image: string; handle: string }> {
+  try {
+    const res = await fetch(`${instagramWeb()}${new URL(postUrl).pathname}embed/captioned/`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; facebookexternalhit/1.1)", "Accept-Language": "en-US,en" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { image: "", handle: "" };
+    const html = (await res.text()).slice(0, 600_000);
+    const tag = html.match(/<img[^>]+class=["'][^"']*EmbeddedMediaImage[^"']*["'][^>]*>/i)?.[0] ?? "";
+    const image = decode(tag.match(/\ssrc=["']([^"']+)["']/i)?.[1] ?? "");
+    const handle = parseHandle(decode(html.match(/class=["'][^"']*UsernameText[^"']*["'][^>]*>\s*([^<\s]+)\s*</i)?.[1] ?? ""));
+    return { image: /^https?:\/\//.test(image) ? image : "", handle };
+  } catch {
+    return { image: "", handle: "" };
+  }
+}
+
+async function fetchPreview(postUrl: string): Promise<{ image: string; handle: string }> {
   try {
     const res = await fetch(instagramWeb() + new URL(postUrl).pathname, {
       headers: { "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "Accept-Language": "en-US,en" },
@@ -158,7 +184,6 @@ export async function handOver(db: D1Database, shopId: number, userId: number) {
   // Payments already go to the page's own card, so open orders simply carry on in the new panel.
   await db.batch([
     db.prepare("UPDATE shops SET owner_id = ?, is_external = 0, invite_status = 'joined', claim_token = '', ig_username = CASE WHEN ig_username = '' THEN instagram ELSE ig_username END WHERE id = ?").bind(user.id, shop.id),
-    db.prepare("UPDATE products SET source_url = '' WHERE shop_id = ?").bind(shop.id),
     db.prepare("UPDATE users SET shop_id = NULL, shop_role = '' WHERE id = ?").bind(shop.owner_id),
     db.prepare("UPDATE users SET shop_id = ?, shop_role = 'admin' WHERE id = ?").bind(shop.id, user.id),
   ]);
@@ -170,7 +195,7 @@ const platformReady = (s: Settings) => !!(s.platform_ig_account_id && s.platform
 /** DM a page that has written to the site's Instagram account (fails quietly outside the 24-hour window). */
 export async function dmPage(d: Deps, shopId: number, text: string) {
   if (!platformReady(d.settings)) return false;
-  const shop = await d.db.prepare("SELECT ig_contact_id FROM shops WHERE id = ? AND is_external = 1").bind(shopId).first<{ ig_contact_id: string }>();
+  const shop = await d.db.prepare("SELECT ig_contact_id FROM shops WHERE id = ?").bind(shopId).first<{ ig_contact_id: string }>();
   if (!shop?.ig_contact_id) return false;
   try {
     await sendDm(d.settings.platform_ig_token, d.settings.platform_ig_account_id, shop.ig_contact_id, text);
@@ -186,7 +211,8 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
   const s = d.settings;
   if (!platformReady(s)) return;
   const db = d.db;
-  let shop = await db.prepare("SELECT * FROM shops WHERE ig_contact_id = ? AND is_external = 1").bind(ev.customerId).first<Shop>();
+  // (A page that has since joined keeps using the same commands here.)
+  let shop = await db.prepare("SELECT * FROM shops WHERE ig_contact_id = ?").bind(ev.customerId).first<Shop>();
   let first = false;
   if (!shop) {
     // Who is writing: the page's own account proves it runs the page (its username comes from Instagram).
@@ -209,6 +235,7 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
       `سلام 🌸 به ${s.site_name} خوش آمدید! محصولات صفحه‌ی @${shop.instagram} در لیست آرزوی کاربران ما هستند و دوستانشان می‌خواهند برایشان بخرند 🎁`,
       "پول مستقیم به کارت خودتان واریز می‌شود و همه‌چیز را از همین گفتگو مدیریت می‌کنید.",
       ...todo,
+      "📱 برای فروش راحت‌تر (پنل، همه محصولات، سفارش‌ها در بات): کافی است شماره موبایلتان را همین‌جا بفرستید تا ثبت‌نامتان انجام شود.",
       COMMANDS_HELP,
     ].join("\n\n");
   } else {

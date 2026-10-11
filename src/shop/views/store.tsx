@@ -706,7 +706,7 @@ export function ProductPage(props: {
           <a href={p.source_url} target="_blank" rel="noopener nofollow" class="flex items-start gap-3 p-4 bg-card rounded-2xl text-xs text-muted leading-6">
             <i class="fa-brands fa-instagram text-brand text-xl mt-0.5"></i>
             <span>
-              این محصول از صفحه‌ی اینستاگرام <b class="text-fg ltr inline-block">{p.shop_name}</b> است. پول مستقیم به کارت همان فروشگاه واریز می‌شود و خودش سفارش را ارسال می‌کند؛ وضعیت سفارش را همین‌جا دنبال می‌کنید.
+              این محصول از پست اینستاگرام <b class="text-fg">{p.shop_name}</b> اضافه شده است. پول مستقیم به کارت همان فروشگاه واریز می‌شود و خودش سفارش را ارسال می‌کند؛ وضعیت سفارش را همین‌جا دنبال می‌کنید.
               {p.awaiting_price ? <span class="block mt-1">فروشگاه هنوز قیمت را ثبت نکرده؛ به‌محض ثبت، خرید فعال می‌شود.</span> : null}
               <span class="block text-brand font-bold mt-1">مشاهده پست در اینستاگرام <i class="fa-solid fa-arrow-up-left-from-square text-[10px]"></i></span>
             </span>

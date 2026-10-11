@@ -14,13 +14,13 @@ import { birthDate, fullName } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
-import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/botapi";
+import { activeBots, botLink, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
 import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
-import { answerChange } from "../orders";
+import { answerChange, shopOwnerChats } from "../orders";
 
 const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
@@ -378,15 +378,17 @@ const myLists = (c: C) =>
 /** The item just added, with the page to tell about it. */
 async function addedItem(c: C, productId: number) {
   const row = await c.env.DB.prepare(
-    `SELECT p.id, p.title, p.code, p.source_url, p.image_key, s.instagram, s.ig_contact_id, s.card_number, p.awaiting_price,
+    `SELECT p.id, p.title, p.code, p.source_url, p.image_key, s.instagram, s.ig_username, s.ig_contact_id, s.card_number, p.awaiting_price,
+            s.is_external, s.name AS shop_name, s.slug AS shop_slug,
             (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes
-     FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?1 AND s.is_external = 1
+     FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?1 AND p.source_url <> ''
        AND EXISTS (SELECT 1 FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE i.product_id = p.id AND w.user_id = ?2)`,
   )
     .bind(productId, currentUser(c).id)
-    .first<{ id: number; title: string; code: string; source_url: string; image_key: string; instagram: string; ig_contact_id: string; card_number: string; awaiting_price: number; wishes: number }>();
+    .first<{ id: number; title: string; code: string; source_url: string; image_key: string; instagram: string; ig_username: string; ig_contact_id: string; card_number: string; awaiting_price: number; wishes: number; is_external: number; shop_name: string; shop_slug: string }>();
   if (!row) return undefined;
-  return { ...row, ready: !!row.card_number && !row.awaiting_price, message: inviteText(c.get("settings"), siteUrl(c), row, row, row.wishes) };
+  if (!row.is_external) row.instagram = row.ig_username || parseHandle(row.instagram) || row.instagram;
+  return { ...row, member: !row.is_external, ready: !!row.card_number && !row.awaiting_price, message: inviteText(c.get("settings"), siteUrl(c), row, row, row.wishes) };
 }
 
 account.get("/me/instagram", async (c) => {
@@ -418,7 +420,7 @@ account.post("/me/instagram", async (c) => {
   const db = c.env.DB;
   // The same post added again (by anyone) is the same product, so its wishes add up.
   let product = await db
-    .prepare("SELECT p.id, p.shop_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND s.is_external = 1")
+    .prepare("SELECT p.id, p.shop_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND s.status <> 'suspended' ORDER BY s.is_external LIMIT 1")
     .bind(postUrl)
     .first<{ id: number; shop_id: number }>();
   if (!product) {
@@ -426,9 +428,10 @@ account.post("/me/instagram", async (c) => {
     const post = await fetchPost(postUrl);
     const handle = parseHandle(values.handle) || post.handle || parseHandle(values.post_url.replace(/\/(p|reel|reels|tv)\/.*/i, ""));
     if (!handle) return page({ errors: ["صفحه‌ی این پست پیدا نشد؛ آیدی صفحه‌ی فروشگاه را هم بنویسید (مثل ‎@shop_name)."], askHandle: true });
+    // A page that is already a shop here gets the item in its own shop (it sets the price);
+    // otherwise its stand-in shop.
     const member = await memberShopFor(db, handle);
-    if (member) return page({ member });
-    const shop = await externalShop(db, handle);
+    const shop = member ? (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(member.id).first<Shop>())! : await externalShop(db, handle);
     if (shop.status === "suspended") return page({ errors: ["افزودن از این صفحه فعلاً ممکن نیست."] });
     let image = "";
     if (photo) image = await storeImage(c.env.IMAGES, photo, "p");
@@ -440,28 +443,41 @@ account.post("/me/instagram", async (c) => {
       }
     }
     const t = now();
-    // No price yet: the page sets it (src/shop/commands.ts); 1 is a placeholder the price check accepts.
+    // No price yet: the shop sets it (src/shop/commands.ts or its panel); 1 is a placeholder the price check accepts.
     product = await db
       .prepare(
         `INSERT INTO products (shop_id, title, description, price, awaiting_price, image_key, is_active, created_at, updated_at, code, source_url, added_by)
          VALUES (?, ?, ?, 1, 1, ?, 1, ?, ?, ?, ?, ?) RETURNING id, shop_id`,
       )
-      .bind(shop.id, values.title.slice(0, 120), `از صفحه‌ی اینستاگرام @${handle}`, image, t, t, productCode(shop.slug), postUrl, user.id)
+      .bind(shop.id, values.title.slice(0, 120), `از اینستاگرام @${handle}`, image, t, t, productCode(shop.slug), postUrl, user.id)
       .first<{ id: number; shop_id: number }>();
     if (image) await db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(product!.id, image).run();
   }
   await addItem(db, list!.id, product!.id, 1, values.note.slice(0, 200));
   const settings = c.get("settings");
-  const info = await db
-    .prepare("SELECT p.title, p.source_url, s.instagram, s.ig_contact_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?")
+  const info = (await db
+    .prepare("SELECT p.id, p.title, p.source_url, p.awaiting_price, s.id AS shop_id, s.instagram, s.ig_username, s.ig_contact_id, s.is_external FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?")
     .bind(product!.id)
-    .first<{ title: string; source_url: string; instagram: string; ig_contact_id: string }>();
-  const deps = { db, images: c.env.IMAGES, settings, siteUrl: siteUrl(c) };
+    .first<{ id: number; title: string; source_url: string; awaiting_price: number; shop_id: number; instagram: string; ig_username: string; ig_contact_id: string; is_external: number }>())!;
+  const site = siteUrl(c);
+  const deps = { db, images: c.env.IMAGES, settings, siteUrl: site };
+  const igPage = `@${info.is_external ? info.instagram : info.ig_username || parseHandle(info.instagram) || info.instagram}`;
+  const price = info.awaiting_price ? `\nبرای فعال شدن خرید، قیمتش را بفرستید:\nقیمت ${info.id} مبلغ‌به‌تومان` : "";
+  const toShop = `🎁 یک کاربر «${info.title}» را از پست اینستاگرام شما به لیست آرزویش اضافه کرد.\n${info.source_url}${price}`;
   c.executionCtx.waitUntil(
     Promise.allSettled([
-      notifyAdmins(db, settings, [`📸 آرزوی تازه از اینستاگرام @${info!.instagram}`, `«${info!.title}»`, info!.source_url, `افزوده‌شده توسط ${user.name}`, `${siteUrl(c)}/admin/instagram`].join("\n")),
-      // A page already talking to us hears it right away (and is reminded what's missing).
-      info!.ig_contact_id ? dmPage(deps, product!.shop_id, `🎁 «${info!.title}» از صفحه‌ی شما به لیست آرزوی یک کاربر اضافه شد.\n${info!.source_url}\nبرای دیدن کارهای باقی‌مانده: راهنما`) : null,
+      info.is_external
+        ? // The site can't DM a page first (Instagram's rule): the admins get the message ready to send.
+          notifyAdmins(
+            db,
+            settings,
+            info.ig_contact_id
+              ? `📸 آرزوی تازه از ${igPage}: «${info.title}» (فروشگاه در دایرکت با ما در ارتباط است و خبرش کردیم)`
+              : [`📸 آرزوی تازه از ${igPage}: «${info.title}» — این پیام را برای فروشگاه بفرستید:`, `https://ig.me/m/${info.instagram}`, "", inviteText(settings, site, info, info, 1)].join("\n"),
+          )
+        : // A member shop hears it in its bot right away, and can price it there with the same command.
+          shopOwnerChats(db, info.shop_id).then((chats) => (chats ? sendToChats(settings, chats, `${toShop}\nیا از پنل: ${site}/panel/products/${info.id}`) : "")),
+      info.ig_contact_id ? dmPage(deps, info.shop_id, toShop) : null,
     ]),
   );
   return c.redirect(`/me/instagram?added=${product!.id}&list=${list!.id}`);
