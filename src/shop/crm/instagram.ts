@@ -166,6 +166,14 @@ async function graph<T>(token: string, path: string, init?: RequestInit): Promis
   return data;
 }
 
+/**
+ * Subscribe the account to this app's webhook (messages and comments). Instagram only delivers an
+ * account's DMs to /ig/webhook once it is subscribed.
+ */
+export async function subscribeWebhook(token: string) {
+  await graph<{ success?: boolean }>(token, "me/subscribed_apps?subscribed_fields=messages,comments", { method: "POST" });
+}
+
 /** Private reply: a DM to the person who commented (once per comment, within 7 days). */
 export async function privateReply(token: string, accountId: string, commentId: string, text: string) {
   const d = await graph<{ message_id?: string }>(token, `${encodeURIComponent(accountId)}/messages`, {

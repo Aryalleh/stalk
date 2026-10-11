@@ -26,6 +26,7 @@ import m0022 from "../migrations/0022_bale_channel.sql";
 import m0023 from "../migrations/0023_instagram_shops.sql";
 import m0024 from "../migrations/0024_instagram_chat.sql";
 import m0025 from "../migrations/0025_instagram_signup.sql";
+import m0026 from "../migrations/0026_ig_log.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -55,6 +56,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0023_instagram_shops.sql", m0023],
   ["0024_instagram_chat.sql", m0024],
   ["0025_instagram_signup.sql", m0025],
+  ["0026_ig_log.sql", m0026],
 ];
 
 let done: Promise<void> | null = null;

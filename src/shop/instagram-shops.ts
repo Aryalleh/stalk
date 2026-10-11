@@ -190,6 +190,16 @@ export async function handOver(db: D1Database, shopId: number, userId: number) {
   return null;
 }
 
+/** A line in the admin's log of the site account's DMs (the last 200 are kept). */
+export async function igLog(db: D1Database, e: { account_id?: string; sender?: string; result: string; detail?: string }) {
+  await db
+    .batch([
+      db.prepare("INSERT INTO ig_log (at, account_id, sender, result, detail) VALUES (?, ?, ?, ?, ?)").bind(new Date().toISOString(), e.account_id ?? "", e.sender ?? "", e.result, (e.detail ?? "").slice(0, 500)),
+      db.prepare("DELETE FROM ig_log WHERE id <= (SELECT MAX(id) - 200 FROM ig_log)"),
+    ])
+    .catch((err) => console.error("ig_log", err));
+}
+
 const platformReady = (s: Settings) => !!(s.platform_ig_account_id && s.platform_ig_token);
 
 /** DM a page that has written to the site's Instagram account (fails quietly outside the 24-hour window). */
@@ -209,8 +219,9 @@ export async function dmPage(d: Deps, shopId: number, text: string) {
 /** A DM to the site's Instagram account: a page with a stand-in shop runs it by commands. */
 export async function handlePlatformDm(d: Deps, ev: IgEvent) {
   const s = d.settings;
-  if (!platformReady(s)) return;
   const db = d.db;
+  const log = (result: string, sender: string, detail = "") => igLog(db, { account_id: ev.accountId, sender, result, detail });
+  if (!platformReady(s)) return log("not_connected", ev.customerId);
   // (A page that has since joined keeps using the same commands here.)
   let shop = await db.prepare("SELECT * FROM shops WHERE ig_contact_id = ?").bind(ev.customerId).first<Shop>();
   let first = false;
@@ -218,9 +229,9 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
     // Who is writing: the page's own account proves it runs the page (its username comes from Instagram).
     const profile = await fetchProfile(s.platform_ig_token, ev.customerId);
     const handle = parseHandle(profile.username ?? "");
-    if (!handle) return;
+    if (!handle) return log("no_username", ev.customerId, ev.body.slice(0, 120));
     shop = await db.prepare("SELECT * FROM shops WHERE is_external = 1 AND instagram = ?").bind(handle).first<Shop>();
-    if (!shop) return; // not a page with wished-for items: left for a person to answer
+    if (!shop) return log("no_wishes", `${ev.customerId} @${handle}`, ev.body.slice(0, 120)); // left for a person to answer
     await db.prepare("UPDATE shops SET ig_contact_id = '' WHERE ig_contact_id = ?").bind(ev.customerId).run();
     first = true;
   }
@@ -241,5 +252,28 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
   } else {
     reply = ev.type === "text" ? await runShopCommand(d, shop, ev.body) : "لطفاً دستور را به‌صورت متن بفرستید. «راهنما» فهرست دستورها را نشان می‌دهد.";
   }
-  await sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, reply.slice(0, 990));
+  const who = `${ev.customerId} @${shop.instagram}`;
+  try {
+    // Instagram caps a text DM at 1000 characters: longer replies go in parts.
+    for (const part of splitMessage(reply, 990)) await sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, part);
+    await log(first ? "linked" : "replied", who, ev.body.slice(0, 120));
+  } catch (e) {
+    await log("send_failed", who, String((e as Error).message ?? e));
+  }
+}
+
+/** Split at line breaks into parts of at most `max` characters. */
+export function splitMessage(text: string, max: number) {
+  const parts: string[] = [];
+  let cur = "";
+  for (const line of text.split("\n")) {
+    const add = cur ? `${cur}\n${line}` : line;
+    if (add.length <= max) cur = add;
+    else {
+      if (cur) parts.push(cur);
+      cur = line.slice(0, max);
+    }
+  }
+  if (cur) parts.push(cur);
+  return parts;
 }

@@ -1727,6 +1727,28 @@ export interface ExternalOrderRow {
   created_at: string;
 }
 
+export interface IgLogRow {
+  at: string;
+  account_id: string;
+  sender: string;
+  result: string;
+  detail: string;
+}
+
+/** What happened to a DM to the site account (instagram-shops.ts handlePlatformDm, crm/webhook.ts). */
+const LOG_LABEL: Record<string, [string, string]> = {
+  linked: ["✅", "فروشگاه شناخته و وصل شد؛ پیام خوش‌آمد رفت"],
+  replied: ["✅", "دستور اجرا شد و جواب رفت"],
+  subscribed: ["✅", "اشتراک وبهوک فعال شد"],
+  no_wishes: ["ℹ️", "پیج فرستنده محصولی در لیست آرزوها ندارد؛ جواب خودکار داده نشد"],
+  no_username: ["⚠️", "نام کاربری فرستنده از اینستاگرام گرفته نشد (دسترسی توکن یا حالت Development اپ)"],
+  send_failed: ["❌", "پیام رسید ولی ارسال جواب ناموفق بود"],
+  subscribe_failed: ["❌", "اشتراک وبهوک ناموفق بود"],
+  not_connected: ["❌", "پیام رسید ولی پیج سایت وصل نیست (توکن ندارد)"],
+  unknown_account: ["⚠️", "پیامی برای حسابی رسید که نه پیج سایت است نه فروشگاه وصل‌شده؛ شناسه را با شناسه‌ی پیج سایت مقایسه کنید"],
+  bad_signature: ["❌", "تحویل وبهوک رد شد: امضا نامعتبر است؛ App secret در تنظیمات سایت را بررسی کنید"],
+};
+
 const INVITE_LABEL: Record<string, string> = { "": "خبر داده نشده", invited: "پیام فرستاده شد", talking: "در دایرکت فعال است", declined: "فعلاً نمی‌خواهد", joined: "عضو شد" };
 
 /** Instagram pages that aren't on the site: their status, the message to send them, joining. */
@@ -1736,6 +1758,7 @@ export function AdminInstagramPage(props: {
   settings: Settings;
   shops: ExternalShopRow[];
   orders: ExternalOrderRow[];
+  log: IgLogRow[];
   ok?: string;
   error?: string;
 }) {
@@ -1834,6 +1857,31 @@ export function AdminInstagramPage(props: {
         )}
       </div>
 
+      <div class="card wrap" id="log">
+        <h2><i class="fa-solid fa-list-ul ml-1"></i> گزارش پیام‌های دایرکت پیج سایت</h2>
+        <p class="small muted" style="margin-top:0">اگر فروشنده پیام داده و اینجا چیزی نیامده، پیام اصلاً به سایت نرسیده است (اشتراک وبهوک، آدرس وبهوک در اپ متا، یا حالت Development اپ).</p>
+        {props.log.length === 0 ? (
+          <p class="muted small">هنوز چیزی ثبت نشده.</p>
+        ) : (
+          <table>
+            <thead><tr><th>زمان</th><th>نتیجه</th><th>فرستنده</th><th>جزئیات</th></tr></thead>
+            <tbody>
+              {props.log.map((r) => {
+                const [icon, label] = LOG_LABEL[r.result] ?? ["•", r.result];
+                return (
+                  <tr>
+                    <td class="small muted dt">{formatJalali(r.at)}</td>
+                    <td class="small">{icon} {label}</td>
+                    <td class="small ltr">{r.sender || "—"}{r.account_id && r.account_id !== s.platform_ig_account_id ? <div class="muted">→ {r.account_id}</div> : null}</td>
+                    <td class="small muted" style="max-width:280px;word-break:break-word">{r.detail}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <form method="post" action="/admin/instagram/settings" class="card">
         <h2><i class="fa-solid fa-plug ml-1"></i> صفحه‌ی اینستاگرام سایت</h2>
         <div class="row" style="gap:8px;align-items:center;margin-bottom:8px">
@@ -1841,6 +1889,7 @@ export function AdminInstagramPage(props: {
             <>
               <span class="tag ok">✅ وصل است{s.platform_instagram ? ` — @${s.platform_instagram}` : ""}</span>
               <a class="btn small secondary" href="/admin/instagram/connect"><i class="fa-brands fa-instagram"></i> ورود دوباره</a>
+              <button class="small secondary" formaction="/admin/instagram/subscribe" formnovalidate>اشتراک وبهوک</button>
               <button class="small secondary" formaction="/admin/instagram/disconnect" formnovalidate>جدا کردن</button>
             </>
           ) : (
@@ -1863,6 +1912,7 @@ export function AdminInstagramPage(props: {
             <input name="platform_ig_account_id" class="ltr" inputmode="numeric" value={s.platform_ig_account_id} />
           </div>
         </div>
+        {connected && <p class="small muted ltr" style="margin:0">account id: {s.platform_ig_account_id}</p>}
         <label>توکن دسترسی (دستی، اختیاری) {s.platform_ig_token ? "— برای تغییر وارد کنید" : ""}</label>
         <input name="platform_ig_token" class="ltr" autocomplete="off" placeholder={s.platform_ig_token ? "•••••••• (ذخیره شده)" : "IGAA…"} />
         <label>پیامی که برای فروشگاه فرستاده می‌شود</label>

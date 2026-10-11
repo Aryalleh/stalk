@@ -3,7 +3,7 @@ import type { Env } from "../../env";
 import { safeEqual } from "../../../lib/auth";
 import { handleIgEvent, shopForAccount } from "./automation";
 import { handleIgComment } from "./comments";
-import { handlePlatformDm } from "../instagram-shops";
+import { handlePlatformDm, igLog } from "../instagram-shops";
 import { loadSettings, saveSettings } from "../../settings";
 import { parseComments, parseWebhook, refreshToken, validSignature } from "./instagram";
 
@@ -20,7 +20,11 @@ igWebhook.get("/ig/webhook", (c) => {
 
 igWebhook.post("/ig/webhook", async (c) => {
   const raw = await c.req.text();
-  if (!(await validSignature(raw, c.req.header("x-hub-signature-256"), c.get("settings").meta_app_secret))) return c.text("forbidden", 403);
+  if (!(await validSignature(raw, c.req.header("x-hub-signature-256"), c.get("settings").meta_app_secret))) {
+    // Most often a wrong App secret in the site settings: Meta's deliveries are then all refused.
+    c.executionCtx.waitUntil(igLog(c.env.DB, { result: "bad_signature", detail: raw.includes('"instagram"') ? "" : raw.slice(0, 100) }));
+    return c.text("forbidden", 403);
+  }
   let events, comments;
   try {
     const body = JSON.parse(raw);
@@ -45,6 +49,8 @@ igWebhook.post("/ig/webhook", async (c) => {
         }
         const shop = await shopForAccount(db, ev.accountId);
         if (shop) await handleIgEvent(db, shop, ev).catch((e) => console.error("instagram event", e));
+        // A delivery for an account the site doesn't know: often the site account saved with another id.
+        else if (ev.direction === "in") await igLog(db, { account_id: ev.accountId, sender: ev.customerId, result: "unknown_account", detail: ev.body.slice(0, 120) });
       }
       for (const cm of comments) {
         const shop = await shopForAccount(db, cm.accountId);

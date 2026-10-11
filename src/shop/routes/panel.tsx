@@ -14,7 +14,7 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, AdminInstagramPage, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, AdminInstagramPage, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
@@ -24,8 +24,8 @@ import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
-import { handOver, inviteText } from "../instagram-shops";
-import { authorizeUrl, exchangeCode, fetchAccount } from "../crm/instagram";
+import { handOver, igLog, inviteText } from "../instagram-shops";
+import { authorizeUrl, exchangeCode, fetchAccount, subscribeWebhook } from "../crm/instagram";
 import { cleanIgToken } from "../crm/routes";
 
 export const panel = new Hono<Env>();
@@ -822,7 +822,7 @@ admin.get("/admin/instagram", async (c) => {
   const db = c.env.DB;
   const s = c.get("settings");
   const site = siteUrl(c);
-  const [shops, orders] = await db.batch([
+  const [shops, orders, log] = await db.batch([
     db.prepare(
       `SELECT s.id, s.slug, s.instagram, s.owner_id, s.status, s.invite_status, s.invited_at, s.ig_contact_at, s.card_number, s.created_at,
               (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id) AS products,
@@ -840,6 +840,7 @@ admin.get("/admin/instagram", async (c) => {
        FROM orders o JOIN shops s ON s.id = o.shop_id JOIN products p ON p.id = o.product_id
        WHERE s.is_external = 1 AND o.status IN ('awaiting', 'paid', 'shipped') ORDER BY o.id DESC LIMIT 200`,
     ),
+    db.prepare("SELECT at, account_id, sender, result, detail FROM ig_log ORDER BY id DESC LIMIT 40"),
   ]);
   type ShopQ = Omit<ExternalShopRow, "invite"> & { top_title: string | null; top_url: string | null };
   const shopRows = (shops.results as ShopQ[]).map((x) => ({
@@ -848,7 +849,7 @@ admin.get("/admin/instagram", async (c) => {
   }));
   return render(
     c,
-    <AdminInstagramPage user={currentUser(c)} site={site} settings={s} shops={shopRows} orders={orders.results as ExternalOrderRow[]} ok={c.req.query("ok")} error={c.req.query("error")} />,
+    <AdminInstagramPage user={currentUser(c)} site={site} settings={s} log={log.results as IgLogRow[]} shops={shopRows} orders={orders.results as ExternalOrderRow[]} ok={c.req.query("ok")} error={c.req.query("error")} />,
   );
 });
 
@@ -877,7 +878,31 @@ admin.post("/admin/instagram/settings", async (c) => {
     }
   }
   await saveSiteSettings(c.env.DB, values);
+  if (values.platform_ig_token) {
+    const sub = await subscribePlatform(c.env.DB, values.platform_ig_token, values.platform_ig_account_id ?? "");
+    if (sub) return igBack(c, `ذخیره شد، اما اشتراک وبهوک ناموفق بود: ${sub}`, false);
+  }
   return igBack(c, "ذخیره شد.");
+});
+
+/** Subscribe the site account to the app's webhook; returns an error message, or "". */
+async function subscribePlatform(db: D1Database, token: string, accountId: string) {
+  try {
+    await subscribeWebhook(token);
+    await igLog(db, { account_id: accountId, result: "subscribed" });
+    return "";
+  } catch (e) {
+    const msg = String((e as Error).message ?? e).slice(0, 200);
+    await igLog(db, { account_id: accountId, result: "subscribe_failed", detail: msg });
+    return msg;
+  }
+}
+
+admin.post("/admin/instagram/subscribe", async (c) => {
+  const s = c.get("settings");
+  if (!s.platform_ig_token) return igBack(c, "اول صفحه‌ی اینستاگرام سایت را وصل کنید.", false);
+  const sub = await subscribePlatform(c.env.DB, s.platform_ig_token, s.platform_ig_account_id);
+  return sub ? igBack(c, `اشتراک وبهوک ناموفق بود: ${sub}`, false) : igBack(c, "اشتراک وبهوک فعال شد؛ پیام‌های دایرکت صفحه‌ی سایت به سایت می‌رسند.");
 });
 
 // "Login with Instagram" for the site's own account (same Instagram Business Login as the shops').
@@ -915,7 +940,8 @@ async function platformIgCallback(c: C, next: () => Promise<void>) {
       platform_instagram: me.username.toLowerCase(),
       platform_ig_token_refreshed_at: new Date().toISOString(),
     });
-    return igBack(c, `وصل شد: @${me.username}`);
+    const sub = await subscribePlatform(c.env.DB, token, me.accountId);
+    return igBack(c, `وصل شد: @${me.username}${sub ? ` — اما اشتراک وبهوک ناموفق بود: ${sub}` : ""}`, !sub);
   } catch (e) {
     return igBack(c, `ورود ناموفق بود: ${(e as Error).message.slice(0, 200)}`, false);
   }
