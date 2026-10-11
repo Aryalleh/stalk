@@ -34,6 +34,8 @@ export const PRODUCT_CODE = "[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0
 export const productPath = (p: { id: number; code?: string | null }) => `/p/${p.code || p.id}`;
 /** How a code is shown to people (and typed back into search). */
 export const showCode = (code: string) => code.toUpperCase();
+/** A product's price, or "price soon" for an Instagram item the page hasn't priced yet. */
+export const priceLabel = (p: { price: number; awaiting_price?: number }) => (p.awaiting_price ? "قیمت به‌زودی" : toman(p.price));
 
 export interface Shop {
   id: number;
@@ -79,6 +81,11 @@ export interface Shop {
   is_external: number;
   invite_status: string;
   invited_at: string | null;
+  /** The page's id in DMs with the platform's Instagram account, and when it last wrote there. */
+  ig_contact_id: string;
+  ig_contact_at: string | null;
+  /** One-time link for the page to take the stand-in shop over as its own (commands.ts "عضویت"). */
+  claim_token: string;
   created_at: string;
 }
 
@@ -105,6 +112,8 @@ export interface Product {
   /** The Instagram post an item from an external shop was added from. */
   source_url: string;
   added_by: number | null;
+  /** 1 = added from Instagram and the page hasn't set a price yet (price holds a placeholder). */
+  awaiting_price: number;
   created_at: string;
 }
 export type ProductWithShop = Product & { shop_name: string; shop_slug: string };
@@ -141,7 +150,9 @@ export type ItemView = {
   product_active: number;
   shop_name: string;
   shop_slug: string;
-  shop_ok: number; // approved and has a card number to receive transfers
+  shop_ok: number; // approved, has a card number to receive transfers, and the item has a price
+  awaiting_price: number; // added from Instagram; the page hasn't priced it yet
+  waiting_shop: number; // an Instagram page still has to send its price / card
   shop_city: string;
   courier_enabled: number;
   courier_fee: number;
@@ -197,8 +208,9 @@ export async function wishlistItems(db: D1Database, wishlistId: number): Promise
   const { results } = await db
     .prepare(
       `SELECT i.id, i.wishlist_id, i.product_id, i.quantity, i.note, i.size, i.color,
-              p.title, p.price, p.image_key, p.is_active AS product_active,
-              s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '') AS shop_ok,
+              p.title, p.price, p.image_key, p.is_active AS product_active, p.awaiting_price,
+              s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '' AND p.awaiting_price = 0) AS shop_ok,
+              (s.is_external = 1 AND (s.card_number = '' OR p.awaiting_price = 1)) AS waiting_shop,
               s.city AS shop_city, s.courier_enabled, s.courier_fee, s.post_enabled, s.post_fee,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved,
@@ -245,7 +257,7 @@ export async function reserveItem(db: D1Database, itemId: number, giver: GiverIn
        JOIN wishlists w ON w.id = i.wishlist_id
        JOIN products p ON p.id = i.product_id
        JOIN shops s ON s.id = p.shop_id
-       WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND s.status = 'approved' AND s.card_number <> ''
+       WHERE i.id = ?1 AND w.is_open = 1 AND p.is_active = 1 AND p.awaiting_price = 0 AND s.status = 'approved' AND s.card_number <> ''
          AND i.quantity > (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?7")})
          AND ${AVAILABLE("p.id", "i.size", "i.color", "?7")} > 0
        RETURNING id, token, amount`,

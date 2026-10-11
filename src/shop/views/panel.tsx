@@ -3,7 +3,7 @@ import { formatCard } from "../../../lib/normalize";
 import { birthdayLabel } from "../../../lib/people";
 import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
-import { STATUS_LABEL, showCode, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
+import { STATUS_LABEL, priceLabel, showCode, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
 import { DELIVERY_LABEL } from "../notify";
 import { CLOTHING_TEMPLATE } from "../sizes";
 import { variantKey, variantLabel, variants, type Variant } from "../variants";
@@ -592,7 +592,7 @@ export function ProductsPage(props: { user: User; shop: Shop; products: (Product
                 <h3 class="text-xs font-bold truncate">{p.title}</h3>
                 {p.code && <p class="text-[9px] font-mono text-slate-400 ltr text-right truncate">{showCode(p.code)}</p>}
                 <div class="flex items-center justify-between mt-1">
-                  <span class="text-[11px] font-bold text-sky-600">{toman(p.price)}</span>
+                  <span class="text-[11px] font-bold text-sky-600">{priceLabel(p)}</span>
                   <span class={`text-[10px] px-1.5 py-0.5 rounded-sm ${p.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>{p.is_active ? "فعال" : "غیرفعال"}</span>
                 </div>
               </div>
@@ -1706,12 +1706,15 @@ export interface ExternalShopRow {
   status: string;
   invite_status: string;
   invited_at: string | null;
+  ig_contact_at: string | null;
+  card_number: string;
   created_at: string;
   products: number;
+  unpriced: number;
   wishes: number;
   open_orders: number;
   sold: number;
-  invite: string; // the invite DM, filled in
+  invite: string; // the DM telling the page about its wished-for items, filled in
 }
 
 export interface ExternalOrderRow {
@@ -1720,13 +1723,13 @@ export interface ExternalOrderRow {
   product_title: string;
   source_url: string;
   amount: number;
+  status: string;
   created_at: string;
-  message: string; // the order DM, filled in
 }
 
-const INVITE_LABEL: Record<string, string> = { "": "دعوت نشده", invited: "دعوت فرستاده شد", declined: "فعلاً نمی‌خواهد", joined: "عضو شد" };
+const INVITE_LABEL: Record<string, string> = { "": "خبر داده نشده", invited: "پیام فرستاده شد", talking: "در دایرکت فعال است", declined: "فعلاً نمی‌خواهد", joined: "عضو شد" };
 
-/** Instagram pages that aren't on the platform: invite them, order their paid items, hand them their shop. */
+/** Instagram pages that aren't on the site: their status, the message to send them, joining. */
 export function AdminInstagramPage(props: {
   user: User;
   settings: Settings;
@@ -1736,44 +1739,23 @@ export function AdminInstagramPage(props: {
   error?: string;
 }) {
   const s = props.settings;
+  const connected = !!(s.platform_ig_account_id && s.platform_ig_token);
   const dm = (h: string) => `https://ig.me/m/${h}`;
   return (
     <AdminShell title="صفحه‌های اینستاگرام" user={props.user} on="/admin/instagram">
       <h1>صفحه‌های اینستاگرام (خارج از سایت)</h1>
-      <p class="muted small" style="margin-top:-6px">
-        کاربران محصولات هر صفحه‌ی اینستاگرامی را به لیست آرزویشان اضافه می‌کنند. خریداران به کارت سایت پرداخت می‌کنند و شما سفارش را با دایرکت از همان صفحه ثبت می‌کنید.
-        اینستاگرام اجازه‌ی ارسال خودکار پیام به صفحه‌هایی را که اول پیام نداده‌اند نمی‌دهد؛ برای همین متن هر پیام آماده است: «کپی متن» و بعد «دایرکت» را بزنید.
+      <p class="muted small" style="margin-top:-6px;line-height:1.9">
+        کاربران محصول هر صفحه‌ی اینستاگرامی را به لیست آرزویشان اضافه می‌کنند (لینک پست و نام؛ عکس خودکار از پست). فروشگاه با یک پیام به صفحه‌ی اینستاگرام سایت
+        وصل می‌شود و قیمت، شماره کارت، تأیید واریز، کد رهگیری و لغو را با دستورهای چتی مدیریت می‌کند؛ پول مستقیم به کارت خود فروشگاه می‌رود.
+        اولین پیام به فروشگاه را اینستاگرام اجازه نمی‌دهد خودکار فرستاده شود: آرزوکننده یا شما آن را با «کپی متن» و «دایرکت» می‌فرستید.
       </p>
       {props.ok && <div class="okbox">{props.ok}</div>}
       <Errors errors={[props.error]} />
-
-      <div class="card wrap">
-        <h2><i class="fa-solid fa-truck-fast ml-1"></i> سفارش‌های پرداخت‌شده برای ثبت در اینستاگرام</h2>
-        {props.orders.length === 0 ? (
-          <p class="muted small">سفارشی منتظر ثبت نیست.</p>
-        ) : (
-          <table>
-            <thead><tr><th>سفارش</th><th>صفحه</th><th>محصول</th><th>مبلغ</th><th></th></tr></thead>
-            <tbody>
-              {props.orders.map((o) => (
-                <tr>
-                  <td>#{o.id}<div class="small muted dt">{formatJalali(o.created_at, false)}</div></td>
-                  <td class="ltr">@{o.instagram}</td>
-                  <td>{o.source_url ? <a href={o.source_url} target="_blank" rel="noopener nofollow">{o.product_title}</a> : o.product_title}</td>
-                  <td>{toman(o.amount)}</td>
-                  <td>
-                    <div class="row" style="gap:6px">
-                      <button type="button" class="small" data-copy={o.message} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی پیام سفارش</button>
-                      <a class="btn small secondary" href={dm(o.instagram)} target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> دایرکت</a>
-                    </div>
-                    <p class="small muted" style="margin:4px 0 0">بعد از ارسال، کد رهگیری را در پنل همان صفحه ثبت کنید.</p>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {!connected && (
+        <div class="card" style="border:1px solid #fbbf24">
+          ⚠️ صفحه‌ی اینستاگرام سایت هنوز وصل نیست؛ تا وصل نشود فروشگاه‌ها نمی‌توانند از دایرکت قیمت و کارت بدهند. پایین همین صفحه وصلش کنید.
+        </div>
+      )}
 
       <div class="card wrap">
         <h2><i class="fa-brands fa-instagram ml-1"></i> صفحه‌ها</h2>
@@ -1781,7 +1763,7 @@ export function AdminInstagramPage(props: {
           <p class="muted small">هنوز کسی از اینستاگرام آرزویی اضافه نکرده است.</p>
         ) : (
           <table>
-            <thead><tr><th>صفحه</th><th>آرزوها</th><th>فروش</th><th>دعوت</th><th></th></tr></thead>
+            <thead><tr><th>صفحه</th><th>آماده فروش</th><th>آرزو / فروش</th><th>وضعیت</th><th></th></tr></thead>
             <tbody>
               {props.shops.map((x) => (
                 <tr>
@@ -1789,29 +1771,32 @@ export function AdminInstagramPage(props: {
                     <a href={`https://instagram.com/${x.instagram}`} target="_blank" rel="noopener nofollow" class="ltr font-bold">@{x.instagram}</a>
                     <div class="small muted"><a href={`/s/${x.slug}`}>صفحه در سایت</a> · {x.products} محصول{x.status === "suspended" ? " · معلق" : ""}</div>
                   </td>
-                  <td>{x.wishes}</td>
-                  <td>{x.sold}{x.open_orders ? <div class="small muted">{x.open_orders} باز</div> : null}</td>
+                  <td class="small">
+                    <div>{x.card_number ? "✅ کارت" : "⏳ بدون کارت"}</div>
+                    <div>{x.unpriced ? `⏳ ${x.unpriced} بدون قیمت` : "✅ قیمت‌ها"}</div>
+                  </td>
+                  <td>{x.wishes} / {x.sold}{x.open_orders ? <div class="small muted">{x.open_orders} سفارش باز</div> : null}</td>
                   <td>
-                    <span class={`tag ${x.invite_status === "invited" ? "ok" : ""}`}>{INVITE_LABEL[x.invite_status] ?? x.invite_status}</span>
-                    {x.invited_at && <div class="small muted dt">{formatJalali(x.invited_at, false)}</div>}
+                    <span class={`tag ${x.invite_status === "talking" ? "ok" : ""}`}>{INVITE_LABEL[x.invite_status] ?? x.invite_status}</span>
+                    {(x.ig_contact_at || x.invited_at) && <div class="small muted dt">{formatJalali((x.ig_contact_at || x.invited_at)!, false)}</div>}
                   </td>
                   <td>
                     <div class="row" style="gap:6px">
-                      <button type="button" class="small" data-copy={x.invite} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی متن دعوت</button>
+                      <button type="button" class="small" data-copy={x.invite} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی متن</button>
                       <a class="btn small secondary" href={dm(x.instagram)} target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> دایرکت</a>
                     </div>
                     <form method="post" action={`/admin/instagram/${x.id}/invite`} class="row" style="gap:6px;margin-top:6px">
-                      {x.invite_status !== "invited" && <button class="small secondary" name="status" value="invited">دعوت فرستاده شد</button>}
+                      {x.invite_status === "" && <button class="small secondary" name="status" value="invited">پیام فرستاده شد</button>}
                       {x.invite_status !== "declined" && <button class="small secondary" name="status" value="declined">نمی‌خواهد</button>}
                     </form>
                     <form method="post" action={`/admin/users/${x.owner_id}/login-as`} style="margin-top:6px">
                       <input type="hidden" name="next" value="/panel" />
-                      <button class="small secondary"><i class="fa-solid fa-store ml-1"></i> پنل این صفحه (سفارش‌ها و قیمت‌ها)</button>
+                      <button class="small secondary"><i class="fa-solid fa-store ml-1"></i> پنل این صفحه</button>
                     </form>
                     <details style="margin-top:6px">
-                      <summary class="small" style="cursor:pointer">عضو شد؟ تحویل فروشگاه</summary>
+                      <summary class="small" style="cursor:pointer">تحویل به حساب صاحب صفحه</summary>
                       <form method="post" action={`/admin/instagram/${x.id}/handover`} style="margin-top:6px">
-                        <p class="small muted" style="margin:0 0 6px">صاحب صفحه اول با شماره‌ی خودش در سایت ثبت‌نام کند؛ بعد شماره‌اش را اینجا بزنید. محصولات و آرزوها به فروشگاه او منتقل می‌شوند.</p>
+                        <p class="small muted" style="margin:0 0 6px">معمولاً خود فروشگاه با دستور «عضویت» این کار را می‌کند. اگر لازم شد: صاحب صفحه با شماره‌اش در سایت ثبت‌نام کند و شماره را اینجا بزنید.</p>
                         <div class="row" style="gap:6px">
                           <input name="phone" class="ltr" inputmode="tel" placeholder="09…" required style="max-width:160px" />
                           <button class="small">تحویل</button>
@@ -1826,32 +1811,50 @@ export function AdminInstagramPage(props: {
         )}
       </div>
 
+      <div class="card wrap">
+        <h2><i class="fa-solid fa-box ml-1"></i> سفارش‌های باز این صفحه‌ها</h2>
+        {props.orders.length === 0 ? (
+          <p class="muted small">سفارش بازی نیست.</p>
+        ) : (
+          <table>
+            <thead><tr><th>سفارش</th><th>صفحه</th><th>محصول</th><th>مبلغ</th><th>وضعیت</th></tr></thead>
+            <tbody>
+              {props.orders.map((o) => (
+                <tr>
+                  <td>#{o.id}<div class="small muted dt">{formatJalali(o.created_at, false)}</div></td>
+                  <td class="ltr">@{o.instagram}</td>
+                  <td>{o.source_url ? <a href={o.source_url} target="_blank" rel="noopener nofollow">{o.product_title}</a> : o.product_title}</td>
+                  <td>{toman(o.amount)}</td>
+                  <td>{STATUS_LABEL[o.status as keyof typeof STATUS_LABEL] ?? o.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <form method="post" action="/admin/instagram/settings" class="card">
-        <h2><i class="fa-solid fa-gear ml-1"></i> تنظیمات</h2>
+        <h2><i class="fa-solid fa-plug ml-1"></i> صفحه‌ی اینستاگرام سایت</h2>
+        <p class="small muted" style="margin-top:0;line-height:1.9">
+          فروشگاه‌ها به این صفحه دایرکت می‌دهند. همان اپ متا و وبهوک <span class="ltr">/ig/webhook</span> فروشگاه‌ها استفاده می‌شود؛ این حساب را هم در اپ اضافه کنید،
+          توکن آن را از بخش «Generate token» بگیرید و اینجا بگذارید. {connected ? "✅ وصل است." : ""}
+        </p>
         <div class="two">
           <div>
-            <label>صفحه‌ی اینستاگرام سایت</label>
+            <label>آیدی صفحه</label>
             <input name="platform_instagram" class="ltr" placeholder="@kadochie" value={s.platform_instagram} />
           </div>
-          <div />
-        </div>
-        <div class="two">
           <div>
-            <label>شماره کارت دریافت پول این سفارش‌ها</label>
-            <input name="ext_card_number" class="ltr" inputmode="numeric" value={s.ext_card_number ? formatCard(s.ext_card_number) : ""} />
-          </div>
-          <div>
-            <label>به نام</label>
-            <input name="ext_card_holder" value={s.ext_card_holder} />
+            <label>شناسه حساب (Instagram account ID)</label>
+            <input name="platform_ig_account_id" class="ltr" inputmode="numeric" value={s.platform_ig_account_id} />
           </div>
         </div>
-        <p class="small muted" style="margin:6px 0 0">تا شماره کارت وارد نشود، محصولات این صفحه‌ها قابل خرید نیستند.</p>
-        <label>متن دعوت</label>
-        <textarea name="ig_invite_text" rows={7}>{s.ig_invite_text}</textarea>
-        <label>متن سفارش</label>
-        <textarea name="ig_order_text" rows={7}>{s.ig_order_text}</textarea>
+        <label>توکن دسترسی {s.platform_ig_token ? "(برای تغییر وارد کنید)" : ""}</label>
+        <input name="platform_ig_token" class="ltr" autocomplete="off" placeholder={s.platform_ig_token ? "•••••••• (ذخیره شده)" : "IGAA…"} />
+        <label>پیامی که برای فروشگاه فرستاده می‌شود</label>
+        <textarea name="ig_invite_text" rows={8}>{s.ig_invite_text}</textarea>
         <p class="small muted" style="margin:6px 0 0">
-          جایگزین‌ها: <span class="ltr">{"{shop} {product} {link} {site} {site_name} {wishes}"}</span> — و در متن سفارش: <span class="ltr">{"{variant} {qty} {ship}"}</span>
+          جایگزین‌ها: <span class="ltr">{"{shop} {product} {link} {platform} {dm} {site} {site_name} {wishes}"}</span>
         </p>
         <p><button>ذخیره</button></p>
       </form>

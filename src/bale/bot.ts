@@ -8,12 +8,15 @@ import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, 
 import { useConnectToken } from "./connect";
 import { saveLink } from "./links";
 import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
+import { runShopCommand } from "../shop/commands";
+import type { Shop } from "../shop/db";
 
 // Webhook for the site's Bale/Telegram bots (registered from /admin/settings → "connect").
 //  - "/start <token>": connect the chat to the site account that opened the bot from /connect.
 //  - A shared contact (Bale): link that phone to the chat, so the CRM can message it for free.
 //  - Receipt buttons (pay:ok:<id> / pay:no:<id>): the shop confirms or rejects a transfer.
 //  - Channel posts (Telegram and Bale): a connected shop channel's tagged posts become products.
+//  - Any other text from a shop's admin: a shop command (orders, prices, tracking…), see commands.ts.
 
 export const bot = new Hono<Env>();
 
@@ -105,6 +108,23 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     }
     reply("این لینک اتصال منقضی شده؛ از صفحه سایت دوباره «اتصال» را بزنید.");
     return c.json({ ok: true });
+  }
+
+  // A shop's admin can run the shop from here with text commands (src/shop/commands.ts).
+  const text = msg?.text?.trim();
+  if (text && !/^\/start(@\w+)?$/.test(text)) {
+    const col = kind === "bale" ? "bale_chat_id" : "telegram_chat_id";
+    const shop = await c.env.DB.prepare(
+      `SELECT s.* FROM users u JOIN shops s ON s.id = u.shop_id
+       WHERE u.${col} = ? AND (u.shop_role = 'admin' OR s.owner_id = u.id) AND s.is_external = 0 LIMIT 1`,
+    )
+      .bind(String(chatId))
+      .first<Shop>();
+    if (shop) {
+      const deps = { db: c.env.DB, images: c.env.IMAGES, settings: s, siteUrl: siteUrl(c) };
+      reply((await runShopCommand(deps, shop, text)).slice(0, 4000));
+      return c.json({ ok: true });
+    }
   }
 
   const app = openAppMarkup(`${siteUrl(c)}/app`, `🎁 باز کردن ${s.site_name}`);

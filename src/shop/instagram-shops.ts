@@ -1,15 +1,20 @@
-// Instagram shops that aren't on the platform yet ("external" shops).
+// Instagram pages that aren't on the site yet ("external" shops).
 //
-// A user can put an item they saw on any Instagram page into their wishlist. The platform keeps a
-// stand-in shop for that page, owned by a placeholder account (it can't sign in) and run by the
-// platform admins: givers pay the platform's card, and the admins order the item from the page by
-// DM. The page itself is invited to join; when it does, an admin hands the shop over to the page's
-// own account, products and wishes included.
+// A user puts an item they saw on any Instagram page into their wishlist: the post link, the page
+// and the item's name; the photo is taken from the post. The site keeps a stand-in shop for the
+// page, owned by a placeholder account that can't sign in. The page is told (by the wisher or an
+// admin) and DMs the site's own Instagram account; from then on it runs its items there by chat
+// commands (commands.ts): its card number, prices, confirming transfers, tracking codes,
+// cancelling. Givers pay the page's own card. With "عضویت" the page takes the shop over as its
+// own, with everything in it.
 //
-// Instagram's API only lets a business account answer people who messaged it first, so the
-// invite and order DMs are prepared here and sent by an admin from the platform's page.
+// Instagram only lets a business account write to someone who wrote to it in the last 24 hours,
+// so the first message to a page can't be sent by the site; it's prepared for a person to send.
 import type { Settings } from "../settings";
 import { now, randomSlug, type Shop } from "./db";
+import { fetchProfile, instagramWeb, sendDm, type IgEvent } from "./crm/instagram";
+import { runShopCommand, setupTodo, COMMANDS_HELP } from "./commands";
+import type { Deps } from "./orders";
 
 const HANDLE_RE = /^[a-z0-9._]{1,30}$/;
 
@@ -31,7 +36,51 @@ export function parsePostUrl(input: string) {
   return `https://www.instagram.com/${kind}/${m[2]}/`;
 }
 
-/** A shop already on the platform that runs this Instagram page, if any. */
+const decode = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#039;|&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#064;/g, "@");
+const meta = (html: string, prop: string) =>
+  decode(
+    html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']*)["']`, "i"))?.[1] ??
+      html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${prop}["']`, "i"))?.[1] ??
+      "",
+  );
+
+/**
+ * The cover image and page of a public post, from the preview tags Instagram serves to link
+ * previews (best effort: private posts or a blocked request give nothing).
+ */
+export async function fetchPost(postUrl: string): Promise<{ image: string; handle: string }> {
+  try {
+    const res = await fetch(instagramWeb() + new URL(postUrl).pathname, {
+      headers: { "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "Accept-Language": "en-US,en" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { image: "", handle: "" };
+    const html = (await res.text()).slice(0, 400_000);
+    const image = meta(html, "og:image");
+    // "12 likes, 3 comments - nice.shop on May 1, 2025: …" or "Name (@nice.shop) • Instagram reel"
+    const text = `${meta(html, "og:description")} ${meta(html, "og:title")} ${meta(html, "twitter:title")}`;
+    const handle = parseHandle(text.match(/-\s+([a-z0-9._]{1,30})\s+on\s/i)?.[1] ?? text.match(/@([a-z0-9._]{1,30})/i)?.[1] ?? "");
+    return { image: /^https?:\/\//.test(image) ? image : "", handle };
+  } catch {
+    return { image: "", handle: "" };
+  }
+}
+
+/** Download a post's cover so it outlives Instagram's expiring CDN link. */
+export async function downloadImage(url: string): Promise<{ data: ArrayBuffer; type: string } | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();
+    if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return null;
+    const data = await res.arrayBuffer();
+    return data.byteLength > 0 && data.byteLength <= 8 * 1024 * 1024 ? { data, type } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A shop already on the site that runs this Instagram page, if any. */
 export function memberShopFor(db: D1Database, handle: string) {
   return db
     .prepare(
@@ -45,8 +94,8 @@ export function memberShopFor(db: D1Database, handle: string) {
     .first<{ id: number; name: string; slug: string }>();
 }
 
-/** The stand-in shop for an Instagram page, created on first use. */
-export async function externalShop(db: D1Database, s: Settings, handle: string): Promise<Shop> {
+/** The stand-in shop for an Instagram page, created on first use (no card yet: the page sends it). */
+export async function externalShop(db: D1Database, handle: string): Promise<Shop> {
   const found = await db.prepare("SELECT * FROM shops WHERE is_external = 1 AND instagram = ?").bind(handle).first<Shop>();
   if (found) return found;
   // Placeholder owner: its "phone" can never be typed at login, and it has no password.
@@ -60,14 +109,14 @@ export async function externalShop(db: D1Database, s: Settings, handle: string):
   const insert = (slug: string) =>
     db
       .prepare(
-        `INSERT INTO shops (owner_id, name, slug, description, status, card_number, card_holder, post_enabled, post_fee, instagram, is_external, created_at)
-         VALUES (?, ?, ?, ?, 'approved', ?, ?, 1, 0, ?, 1, ?) RETURNING *`,
+        `INSERT INTO shops (owner_id, name, slug, description, status, post_enabled, post_fee, instagram, is_external, created_at)
+         VALUES (?, ?, ?, ?, 'approved', 1, 0, ?, 1, ?) RETURNING *`,
       )
-      .bind(owner.id, `@${handle}`, slug, `محصولات صفحه‌ی اینستاگرام @${handle} که کاربران به لیست آرزویشان اضافه کرده‌اند.`, s.ext_card_number, s.ext_card_holder, handle, now())
+      .bind(owner.id, `@${handle}`, slug, `محصولات صفحه‌ی اینستاگرام @${handle} در لیست آرزوهای کاربران.`, handle, now())
       .first<Shop>();
-  let shop: Shop | null = null;
+  let shop: Shop | null;
   try {
-    shop = await insert(base.length >= 3 ? base : `ig-${randomSlug(6)}`);
+    shop = await insert(base.length >= 3 ? base : `ig-${randomSlug(6).toLowerCase()}`);
   } catch {
     shop = await insert(`${base}-${randomSlug(4)}`.toLowerCase());
   }
@@ -80,23 +129,90 @@ export function fill(template: string, vars: Record<string, string>) {
   return template.replace(/\{([a-z_]+)\}/g, (all, k: string) => (k in vars ? vars[k] : all));
 }
 
-const siteVars = (s: Settings, site: string) => ({ site, site_name: s.site_name });
-
-/** The DM inviting an Instagram page to join, about one of its wished-for items. */
-export function inviteText(s: Settings, site: string, shop: { instagram: string }, item: { title: string; source_url: string }, wishes: number) {
-  return fill(s.ig_invite_text, { ...siteVars(s, site), shop: `@${shop.instagram}`, product: item.title, link: item.source_url, wishes: String(wishes) });
-}
-
-/** The DM ordering a paid item from an Instagram page (with where to send it). */
-export function orderText(
-  s: Settings,
-  site: string,
-  o: { product_title: string; source_url: string; size: string; color: string; instagram: string; ship_name: string; ship_phone: string; ship_city: string; ship_address: string; ship_postal_code: string },
-) {
-  const variant = [o.size && `سایز: ${o.size}`, o.color && `رنگ: ${o.color}`].filter(Boolean).join(" — ");
-  const ship = [`${o.ship_name} — ${o.ship_phone}`, [o.ship_city, o.ship_address].filter(Boolean).join("، "), o.ship_postal_code && `کد پستی: ${o.ship_postal_code}`].filter(Boolean).join("\n");
-  return fill(s.ig_order_text, { ...siteVars(s, site), shop: `@${o.instagram}`, product: o.product_title, link: o.source_url, variant: variant ? `${variant}\n` : "", qty: "۱", ship });
-}
-
 /** Instagram DM link for a page. */
 export const dmLink = (handle: string) => `https://ig.me/m/${handle}`;
+
+/** The DM telling a page its item is wished for, and how to start selling it here. */
+export function inviteText(s: Settings, site: string, shop: { instagram: string }, item: { title: string; source_url: string }, wishes: number) {
+  const platform = s.platform_instagram;
+  return fill(s.ig_invite_text, {
+    site,
+    site_name: s.site_name,
+    shop: `@${shop.instagram}`,
+    product: item.title,
+    link: item.source_url,
+    wishes: String(wishes),
+    platform: platform ? `@${platform}` : s.site_name,
+    dm: platform ? dmLink(platform) : site,
+  });
+}
+
+/** Hand a stand-in shop to its page's own account (from "عضویت" or an admin). Returns an error, or null. */
+export async function handOver(db: D1Database, shopId: number, userId: number) {
+  const shop = await db.prepare("SELECT * FROM shops WHERE id = ? AND is_external = 1").bind(shopId).first<Shop>();
+  if (!shop) return "این فروشگاه قبلاً تحویل شده است.";
+  const user = await db.prepare("SELECT id, name, shop_id, phone FROM users WHERE id = ?").bind(userId).first<{ id: number; name: string; shop_id: number | null; phone: string }>();
+  if (!user || user.phone.startsWith("ig:")) return "کاربر پیدا نشد.";
+  const owns = user.shop_id || (await db.prepare("SELECT 1 AS x FROM shops WHERE owner_id = ?").bind(user.id).first());
+  if (owns) return `${user.name} از قبل فروشگاه دارد؛ با حساب دیگری وارد شوید.`;
+  // Payments already go to the page's own card, so open orders simply carry on in the new panel.
+  await db.batch([
+    db.prepare("UPDATE shops SET owner_id = ?, is_external = 0, invite_status = 'joined', claim_token = '', ig_username = CASE WHEN ig_username = '' THEN instagram ELSE ig_username END WHERE id = ?").bind(user.id, shop.id),
+    db.prepare("UPDATE products SET source_url = '' WHERE shop_id = ?").bind(shop.id),
+    db.prepare("UPDATE users SET shop_id = NULL, shop_role = '' WHERE id = ?").bind(shop.owner_id),
+    db.prepare("UPDATE users SET shop_id = ?, shop_role = 'admin' WHERE id = ?").bind(shop.id, user.id),
+  ]);
+  return null;
+}
+
+const platformReady = (s: Settings) => !!(s.platform_ig_account_id && s.platform_ig_token);
+
+/** DM a page that has written to the site's Instagram account (fails quietly outside the 24-hour window). */
+export async function dmPage(d: Deps, shopId: number, text: string) {
+  if (!platformReady(d.settings)) return false;
+  const shop = await d.db.prepare("SELECT ig_contact_id FROM shops WHERE id = ? AND is_external = 1").bind(shopId).first<{ ig_contact_id: string }>();
+  if (!shop?.ig_contact_id) return false;
+  try {
+    await sendDm(d.settings.platform_ig_token, d.settings.platform_ig_account_id, shop.ig_contact_id, text);
+    return true;
+  } catch (e) {
+    console.error("instagram dm to page", shopId, e);
+    return false;
+  }
+}
+
+/** A DM to the site's Instagram account: a page with a stand-in shop runs it by commands. */
+export async function handlePlatformDm(d: Deps, ev: IgEvent) {
+  const s = d.settings;
+  if (!platformReady(s)) return;
+  const db = d.db;
+  let shop = await db.prepare("SELECT * FROM shops WHERE ig_contact_id = ? AND is_external = 1").bind(ev.customerId).first<Shop>();
+  let first = false;
+  if (!shop) {
+    // Who is writing: the page's own account proves it runs the page (its username comes from Instagram).
+    const profile = await fetchProfile(s.platform_ig_token, ev.customerId);
+    const handle = parseHandle(profile.username ?? "");
+    if (!handle) return;
+    shop = await db.prepare("SELECT * FROM shops WHERE is_external = 1 AND instagram = ?").bind(handle).first<Shop>();
+    if (!shop) return; // not a page with wished-for items: left for a person to answer
+    await db.prepare("UPDATE shops SET ig_contact_id = '' WHERE ig_contact_id = ?").bind(ev.customerId).run();
+    first = true;
+  }
+  await db.prepare("UPDATE shops SET ig_contact_id = ?, ig_contact_at = ?, invite_status = CASE WHEN invite_status IN ('', 'invited') THEN 'talking' ELSE invite_status END WHERE id = ?")
+    .bind(ev.customerId, now(), shop.id)
+    .run();
+  shop.ig_contact_id = ev.customerId;
+  let reply: string;
+  if (first) {
+    const todo = await setupTodo(db, shop);
+    reply = [
+      `سلام 🌸 به ${s.site_name} خوش آمدید! محصولات صفحه‌ی @${shop.instagram} در لیست آرزوی کاربران ما هستند و دوستانشان می‌خواهند برایشان بخرند 🎁`,
+      "پول مستقیم به کارت خودتان واریز می‌شود و همه‌چیز را از همین گفتگو مدیریت می‌کنید.",
+      ...todo,
+      COMMANDS_HELP,
+    ].join("\n\n");
+  } else {
+    reply = ev.type === "text" ? await runShopCommand(d, shop, ev.body) : "لطفاً دستور را به‌صورت متن بفرستید. «راهنما» فهرست دستورها را نشان می‌دهد.";
+  }
+  await sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, reply.slice(0, 990));
+}

@@ -2,7 +2,17 @@
 // connected shop to /ig/webhook; each shop connects its account (id + long-lived access token) in the
 // panel. https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api
 
-const GRAPH = "https://graph.instagram.com/v21.0";
+let GRAPH = "https://graph.instagram.com/v21.0";
+let WEB = "https://www.instagram.com";
+/** Local tests only: INSTAGRAM_API_BASE in .dev.vars points Graph and instagram.com at a mock server. */
+export function setInstagramApiBase(base: string | undefined) {
+  if (!base) return;
+  const b = base.replace(/\/$/, "");
+  GRAPH = `${b}/v21.0`;
+  WEB = `${b}/web`;
+}
+/** instagram.com, or the test mock. */
+export const instagramWeb = () => WEB;
 const enc = new TextEncoder();
 
 /** X-Hub-Signature-256: "sha256=" + HMAC-SHA256(app secret, raw body). */

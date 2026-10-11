@@ -48,18 +48,17 @@ export const DEFAULTS = {
   footer_embed: "",
   // Footer links to the admin's pages, kept in sync by /admin/pages: JSON [[slug, title, column], ...].
   pages_index: "",
-  // Instagram shops not on the platform (see /admin/instagram): the platform's own Instagram page,
-  // the card givers pay into for those items, and the DMs sent to the page. Placeholders:
-  // {shop} @handle, {product} item title, {link} its Instagram post, {site} site address,
-  // {wishes} how many people wished for the page's items; the order DM also takes
-  // {variant}, {qty}, {ship} (recipient name, phone, address).
-  platform_instagram: "",
-  ext_card_number: "",
-  ext_card_holder: "",
+  // Instagram pages not on the platform (see /admin/instagram and src/shop/instagram-shops.ts).
+  // The platform's own Instagram account: pages DM it to run their items here by chat commands.
+  platform_instagram: "", // its @username
+  platform_ig_account_id: "",
+  platform_ig_token: "",
+  platform_ig_token_refreshed_at: "",
+  // The DM a wisher (or an admin) sends the page about its wished-for item. Placeholders:
+  // {shop} @page, {product} item title, {link} the post, {site} site address, {site_name},
+  // {platform} the platform's @page, {dm} a link that opens a DM to it, {wishes} how many wishes.
   ig_invite_text:
-    "سلام وقت بخیر 🌸\nیکی از کاربران {site_name}، محصول «{product}» از صفحه شما را به لیست آرزوهایش اضافه کرده است.\n{site_name} یک پلتفرم لیست آرزو و کادو است؛ دوستان و خانواده‌ی هر کاربر، آرزوهایش را مستقیم از فروشگاه‌ها برایش می‌خرند.\nخوشحال می‌شویم فروشگاه شما هم در {site_name} باشد (ثبت‌نام رایگان): {site}/panel/register\nاگر هم نخواستید عضو شوید اشکالی ندارد؛ هر وقت کسی این محصول را سفارش داد، از همین صفحه برای خریدش به شما پیام می‌دهیم.",
-  ig_order_text:
-    "سلام وقت بخیر 🌸\nبرای سفارش این محصول پیام می‌دهم:\n{product}\n{link}\n{variant}تعداد: {qty}\n\nارسال به:\n{ship}\n\nلطفاً مبلغ نهایی همراه با هزینه ارسال و شماره کارت را بفرمایید. ممنون 🙏",
+    "سلام وقت بخیر 🌸\nمحصول «{product}» از صفحه‌ی شما در لیست آرزوی {site_name} قرار گرفته تا دوستان و خانواده برایش کادو بخرند 🎁\n{link}\n\nبرای اینکه بتوانند بخرند، کافی است یک پیام به صفحه‌ی {platform} بدهید ({dm}). آنجا قیمت و شماره کارتتان را می‌دهید و پول مستقیم به کارت خودتان واریز می‌شود؛ سفارش‌ها را هم همان‌جا تأیید و کد رهگیری را ثبت می‌کنید.\nاگر خواستید، با یک کلیک فروشگاه کامل خودتان را هم در {site_name} خواهید داشت (رایگان).",
   // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.
   ga_measurement_id: "",
   cf_analytics_token: "",
@@ -69,7 +68,7 @@ export type SettingKey = keyof typeof DEFAULTS;
 export type Settings = Record<SettingKey, string>;
 
 /** Keys whose values are secret: never rendered back into pages. */
-export const SECRET_KEYS: SettingKey[] = ["bale_bot_token", "telegram_bot_token", "bot_webhook_secret", "safir_api_key", "meta_app_secret"];
+export const SECRET_KEYS: SettingKey[] = ["bale_bot_token", "telegram_bot_token", "bot_webhook_secret", "safir_api_key", "meta_app_secret", "platform_ig_token"];
 
 export async function loadSettings(db: D1Database): Promise<Settings> {
   const { results } = await db.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();

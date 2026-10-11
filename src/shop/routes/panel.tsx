@@ -23,7 +23,9 @@ import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
-import { inviteText, orderText } from "../instagram-shops";
+import { handOver, inviteText } from "../instagram-shops";
+import { fetchAccount } from "../crm/instagram";
+import { cleanIgToken } from "../crm/routes";
 
 export const panel = new Hono<Env>();
 
@@ -818,8 +820,9 @@ admin.get("/admin/instagram", async (c) => {
   const site = siteUrl(c);
   const [shops, orders] = await db.batch([
     db.prepare(
-      `SELECT s.id, s.slug, s.instagram, s.owner_id, s.status, s.invite_status, s.invited_at, s.created_at,
+      `SELECT s.id, s.slug, s.instagram, s.owner_id, s.status, s.invite_status, s.invited_at, s.ig_contact_at, s.card_number, s.created_at,
               (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id) AS products,
+              (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id AND p.awaiting_price = 1 AND p.is_active = 1) AS unpriced,
               (SELECT COUNT(*) FROM wishlist_items i JOIN products p ON p.id = i.product_id WHERE p.shop_id = s.id) AS wishes,
               (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('awaiting', 'paid')) AS open_orders,
               (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('paid', 'shipped', 'delivered')) AS sold,
@@ -829,10 +832,9 @@ admin.get("/admin/instagram", async (c) => {
        ORDER BY (s.invite_status = '') DESC, wishes DESC, s.created_at DESC LIMIT 500`,
     ),
     db.prepare(
-      `SELECT o.id, o.product_title, o.amount, o.created_at, o.size, o.color, o.ship_name, o.ship_phone, o.ship_city, o.ship_address, o.ship_postal_code,
-              s.instagram, p.source_url
+      `SELECT o.id, o.product_title, o.amount, o.status, o.created_at, s.instagram, p.source_url
        FROM orders o JOIN shops s ON s.id = o.shop_id JOIN products p ON p.id = o.product_id
-       WHERE s.is_external = 1 AND o.status = 'paid' ORDER BY o.id LIMIT 200`,
+       WHERE s.is_external = 1 AND o.status IN ('awaiting', 'paid', 'shipped') ORDER BY o.id DESC LIMIT 200`,
     ),
   ]);
   type ShopQ = Omit<ExternalShopRow, "invite"> & { top_title: string | null; top_url: string | null };
@@ -840,11 +842,9 @@ admin.get("/admin/instagram", async (c) => {
     ...x,
     invite: inviteText(s, site, x, { title: x.top_title ?? "", source_url: x.top_url ?? "" }, x.wishes),
   }));
-  type OrderQ = Omit<ExternalOrderRow, "message"> & Parameters<typeof orderText>[2];
-  const orderRows = (orders.results as OrderQ[]).map((o) => ({ ...o, message: orderText(s, site, o) }));
   return render(
     c,
-    <AdminInstagramPage user={currentUser(c)} settings={s} shops={shopRows} orders={orderRows} ok={c.req.query("ok")} error={c.req.query("error")} />,
+    <AdminInstagramPage user={currentUser(c)} settings={s} shops={shopRows} orders={orders.results as ExternalOrderRow[]} ok={c.req.query("ok")} error={c.req.query("error")} />,
   );
 });
 
@@ -852,19 +852,25 @@ const igBack = (c: C, msg: string, ok = true) => c.redirect(`/admin/instagram?${
 
 admin.post("/admin/instagram/settings", async (c) => {
   const f = await form(c);
-  const card = normalizeDigits(f.ext_card_number ?? "");
-  if (card && cardNumberError(card)) return igBack(c, cardNumberError(card)!, false);
-  const text = (k: string) => (f[k] ?? "").replace(/\r/g, "").trim().slice(0, 2000);
   const values: Partial<Settings> = {
-    platform_instagram: (f.platform_instagram ?? "").trim().replace(/^@/, "").slice(0, 60),
-    ext_card_number: card,
-    ext_card_holder: (f.ext_card_holder ?? "").trim().slice(0, 80),
-    ig_invite_text: text("ig_invite_text"),
-    ig_order_text: text("ig_order_text"),
+    platform_instagram: (f.platform_instagram ?? "").trim().replace(/^@/, "").toLowerCase().slice(0, 60),
+    platform_ig_account_id: (f.platform_ig_account_id ?? "").replace(/\D/g, "").slice(0, 30),
+    ig_invite_text: (f.ig_invite_text ?? "").replace(/\r/g, "").trim().slice(0, 2000),
   };
+  const token = cleanIgToken(f.platform_ig_token ?? "");
+  if (token) {
+    // Check the token and fill in the account it belongs to.
+    try {
+      const acct = await fetchAccount(token);
+      values.platform_ig_token = token;
+      values.platform_ig_token_refreshed_at = new Date().toISOString();
+      if (acct.accountId) values.platform_ig_account_id = acct.accountId;
+      if (acct.username) values.platform_instagram = acct.username.toLowerCase();
+    } catch (e) {
+      return igBack(c, `توکن اینستاگرام پذیرفته نشد: ${String(e).slice(0, 200)}`, false);
+    }
+  }
   await saveSiteSettings(c.env.DB, values);
-  // Givers of these pages' items pay this card.
-  await c.env.DB.prepare("UPDATE shops SET card_number = ?, card_holder = ? WHERE is_external = 1").bind(values.ext_card_number, values.ext_card_holder).run();
   return igBack(c, "ذخیره شد.");
 });
 
@@ -877,26 +883,13 @@ admin.post("/admin/instagram/:id{[0-9]+}/invite", async (c) => {
   return c.redirect("/admin/instagram");
 });
 
-// The page joined: its owner's own account takes over the shop, products and wishes included.
+// Hand a page's stand-in shop to its owner's account (pages usually do this themselves with "عضویت").
 admin.post("/admin/instagram/:id{[0-9]+}/handover", async (c) => {
-  const db = c.env.DB;
-  const shop = await db.prepare("SELECT * FROM shops WHERE id = ? AND is_external = 1").bind(intParam(c, "id")).first<Shop>();
-  if (!shop) return c.notFound();
   const phone = normalizePhone((await form(c)).phone ?? "");
-  const user = await db.prepare("SELECT id, name, shop_id FROM users WHERE phone = ?").bind(phone).first<{ id: number; name: string; shop_id: number | null }>();
+  const user = await c.env.DB.prepare("SELECT id, name FROM users WHERE phone = ?").bind(phone).first<{ id: number; name: string }>();
   if (!user) return igBack(c, "کاربری با این شماره نیست؛ صاحب صفحه اول در سایت ثبت‌نام کند.", false);
-  const hasShop = user.shop_id || (await db.prepare("SELECT 1 AS x FROM shops WHERE owner_id = ?").bind(user.id).first());
-  if (hasShop) return igBack(c, `${user.name} از قبل فروشگاه دارد.`, false);
-  const open = await db.prepare("SELECT COUNT(*) AS n FROM orders WHERE shop_id = ? AND status IN ('pending', 'awaiting', 'paid')").bind(shop.id).first<{ n: number }>();
-  if (open?.n) return igBack(c, "اول سفارش‌های باز این صفحه را تمام کنید (پرداخت‌شده‌ها ارسال شوند).", false);
-  await db.batch([
-    // Their own card from now on (set in their panel); until then their items can't be bought.
-    db.prepare("UPDATE shops SET owner_id = ?, is_external = 0, invite_status = 'joined', card_number = '', card_holder = '', status = 'pending' WHERE id = ?").bind(user.id, shop.id),
-    db.prepare("UPDATE products SET source_url = '' WHERE shop_id = ?").bind(shop.id),
-    db.prepare("UPDATE users SET shop_id = NULL, shop_role = '' WHERE id = ?").bind(shop.owner_id),
-    db.prepare("UPDATE users SET shop_id = ?, shop_role = 'admin' WHERE id = ?").bind(shop.id, user.id),
-  ]);
-  return igBack(c, `فروشگاه @${shop.instagram} به ${user.name} تحویل شد. بعد از ثبت شماره کارت در پنلش، از صفحه‌ی مدیریت تأییدش کنید.`);
+  const error = await handOver(c.env.DB, intParam(c, "id"), user.id);
+  return error ? igBack(c, error, false) : igBack(c, `فروشگاه به ${user.name} تحویل شد.`);
 });
 
 admin.get("/admin/content", (c) => contentPage(c));

@@ -1,6 +1,6 @@
 import { formatJalali } from "../../../lib/jalali";
 import { CITIES } from "../cities";
-import { STATUS_LABEL, orderStatusLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
+import { STATUS_LABEL, orderStatusLabel, priceLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { useSite } from "../../render";
 import { Avatar, Errors, FilePicker, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
@@ -748,7 +748,7 @@ export function WishlistFormPage(props: {
               <Thumb imageKey={it.image_key} alt={it.title} />
               <div class="body">
                 <a href={`/p/${it.product_id}`}><b>{it.title}</b></a> <span class="muted small">· {it.shop_name}</span>
-                <div class="price">{toman(it.price)}</div>
+                <div class="price">{priceLabel(it)}</div>
                 <div class="small muted">{it.bought} از {it.quantity} خریده شده{variantLabel(it.size, it.color) && ` · ${variantLabel(it.size, it.color)}`}{it.note && ` · یادداشت: ${it.note}`}</div>
               </div>
               {it.bought === 0 && it.reserved === 0 ? (
@@ -972,7 +972,19 @@ export function PendingChanges(props: { items: { id: number; product_title: stri
   );
 }
 
-/** Add an item seen on any Instagram page (on the platform or not) to one of my wishlists. */
+export interface AddedFromInstagram {
+  id: number;
+  title: string;
+  code: string;
+  image_key: string;
+  instagram: string;
+  ig_contact_id: string;
+  /** The page has set its price and card: friends can already buy it. */
+  ready: boolean;
+  message: string; // the DM to send the page
+}
+
+/** Add an item seen on any Instagram page (on the site or not) to one of my wishlists. */
 export function InstagramAddPage(props: {
   user: User;
   wishlists: Wishlist[];
@@ -980,53 +992,117 @@ export function InstagramAddPage(props: {
   errors?: string[];
   /** The page is already a shop here: link to it instead. */
   member?: { name: string; slug: string };
+  /** The page couldn't be read from the post: ask for it. */
+  askHandle?: boolean;
+  added?: AddedFromInstagram;
 }) {
   const v = props.values;
+  const a = props.added;
   return (
-    <Layout title="افزودن از اینستاگرام" user={props.user} nav="wishes">
-      <h1><i class="fa-brands fa-instagram ml-1 text-brand"></i> افزودن آرزو از اینستاگرام</h1>
-      <div class="card small muted" style="line-height:1.9">
-        محصولی را در یک صفحه‌ی اینستاگرامی دیده‌اید؟ لینک پست و نام صفحه را بدهید تا به لیست آرزویتان اضافه شود. اگر آن فروشگاه هنوز در سایت نیست،
-        دوستانتان مثل همیشه از همین‌جا برایتان می‌خرند و ما سفارش را از همان صفحه برایتان ثبت می‌کنیم.
-      </div>
-      <Errors errors={props.errors} />
-      {props.member && (
-        <div class="card">
-          این صفحه در سایت فروشگاه دارد: <a href={`/s/${props.member.slug}`} class="font-bold">{props.member.name}</a> — محصول را از همان‌جا به لیستتان اضافه کنید.
-        </div>
-      )}
-      {props.wishlists.length === 0 ? (
-        <div class="card">
-          اول یک لیست آرزو بسازید. <a class="btn small" href="/me/wishlists/new">ساخت لیست آرزو</a>
-        </div>
-      ) : (
-        <form method="post" action="/me/instagram" enctype="multipart/form-data" class="card">
-          <label style="margin-top:0">لینک پست یا ریلز محصول</label>
-          <input name="post_url" class="ltr" required placeholder="https://www.instagram.com/p/…" value={v.post_url ?? ""} />
-          <label>آیدی صفحه‌ی فروشگاه</label>
-          <input name="handle" class="ltr" required placeholder="@shop_name" value={v.handle ?? ""} />
-          <label>نام محصول</label>
-          <input name="title" required maxlength={120} value={v.title ?? ""} />
-          <div class="two">
-            <div>
-              <label>قیمت (تومان)</label>
-              <input name="price" inputmode="numeric" required class="ltr" placeholder="مثلاً 850000" value={v.price ?? ""} />
+    <Layout title="آرزو از اینستاگرام" user={props.user} nav="wishes">
+      <h1><i class="fa-brands fa-instagram ml-1 text-brand"></i> آرزو از اینستاگرام</h1>
+      {a ? (
+        <>
+          <div class="card" style="display:flex;gap:14px;align-items:center">
+            <div class="w-20 h-20 rounded-xl overflow-hidden bg-ink flex items-center justify-center text-3xl shrink-0">
+              {a.image_key ? <img src={`/img/${a.image_key}`} alt="" class="w-full h-full object-cover" /> : "🎁"}
             </div>
-            <div>
+            <div style="flex:1;min-width:0">
+              <div class="font-bold text-fg">✅ «{a.title}» به لیست آرزویتان اضافه شد</div>
+              <div class="small muted">
+                از صفحه‌ی <span class="ltr inline-block">@{a.instagram}</span> — <a href={`/p/${a.code}`}>مشاهده</a>
+              </div>
+            </div>
+          </div>
+          {a.ready ? (
+            <div class="okbox">این فروشگاه قیمت و کارتش را ثبت کرده؛ دوستانتان همین حالا می‌توانند آن را برایتان بخرند.</div>
+          ) : (
+            <div class="card">
+              <h2 style="margin-top:0">📩 به فروشگاه خبر بدهید</h2>
+              <p class="small muted" style="line-height:1.9;margin-top:0">
+                {a.ig_contact_id
+                  ? "این فروشگاه با ما در ارتباط است و خبرش کردیم؛ به‌محض اینکه قیمت را ثبت کند، دوستانتان می‌توانند بخرند."
+                  : "تا فروشگاه قیمت و شماره کارتش را ثبت نکند، کسی نمی‌تواند این آرزو را بخرد. این پیام را کپی کنید و در دایرکت برای فروشگاه بفرستید؛ بقیه‌اش با ما."}
+              </p>
+              {!a.ig_contact_id && (
+                <>
+                  <div class="text-xs leading-7 whitespace-pre-wrap bg-ink rounded-xl p-3 mb-3">{a.message}</div>
+                  <div class="row" style="gap:8px">
+                    <button type="button" data-copy={a.message} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی پیام</button>
+                    <a class="btn secondary" href={`https://ig.me/m/${a.instagram}`} target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> دایرکت @{a.instagram}</a>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <p class="row" style="gap:8px">
+            <a class="btn secondary" href={v.wishlist_id ? `/me/wishlists/${v.wishlist_id}` : "/me/wishlists"}>رفتن به لیست</a>
+            <a class="btn secondary" href={`/me/instagram${v.wishlist_id ? `?list=${v.wishlist_id}` : ""}`}>افزودن آرزوی دیگر</a>
+          </p>
+        </>
+      ) : (
+        <>
+          <div class="card small muted" style="line-height:1.9">
+            محصولی را در یک صفحه‌ی اینستاگرامی دیده‌اید؟ لینک پست و نام محصول را بدهید؛ عکس و صفحه را خودمان از پست برمی‌داریم.
+            قیمت و شماره کارت را خود فروشگاه ثبت می‌کند و دوستانتان مستقیم از او برایتان می‌خرند.
+          </div>
+          <Errors errors={props.errors} />
+          {props.member && (
+            <div class="card">
+              این صفحه در سایت فروشگاه دارد: <a href={`/s/${props.member.slug}`} class="font-bold">{props.member.name}</a> — محصول را از همان‌جا به لیستتان اضافه کنید.
+            </div>
+          )}
+          {props.wishlists.length === 0 ? (
+            <div class="card">
+              اول یک لیست آرزو بسازید. <a class="btn small" href="/me/wishlists/new">ساخت لیست آرزو</a>
+            </div>
+          ) : (
+            <form method="post" action="/me/instagram" enctype="multipart/form-data" class="card">
+              <label style="margin-top:0">لینک پست یا ریلز محصول</label>
+              <input name="post_url" class="ltr" required placeholder="https://www.instagram.com/p/…" value={v.post_url ?? ""} />
+              <label>نام محصول</label>
+              <input name="title" required maxlength={120} placeholder="مثلاً کیف چرمی قهوه‌ای" value={v.title ?? ""} />
               <label>لیست</label>
               <select name="wishlist_id">
                 {props.wishlists.map((w) => <option value={String(w.id)} selected={v.wishlist_id === String(w.id)}>{w.title}</option>)}
               </select>
-            </div>
-          </div>
-          <label>سایز، رنگ یا توضیح (اختیاری)</label>
-          <input name="note" maxlength={200} placeholder="مثلاً سایز M، رنگ کرم" value={v.note ?? ""} />
-          <label>عکس محصول (اسکرین‌شات پست)</label>
-          <FilePicker name="photo" accept="image/jpeg,image/png,image/webp" icon="fa-image" label="انتخاب عکس" />
-          <p class="small muted" style="margin:10px 0 0">قیمت نهایی و هزینه ارسال را هنگام سفارش با فروشگاه هماهنگ می‌کنیم.</p>
-          <p><button><i class="fa-solid fa-heart ml-1"></i> افزودن به لیست آرزو</button></p>
-        </form>
+              <label>سایز، رنگ یا توضیح (اختیاری)</label>
+              <input name="note" maxlength={200} placeholder="مثلاً سایز M، رنگ کرم" value={v.note ?? ""} />
+              <details open={props.askHandle || !!v.handle} style="margin-top:12px">
+                <summary class="small muted" style="cursor:pointer">صفحه یا عکس را خودم وارد می‌کنم (اگر خودکار پیدا نشد)</summary>
+                <label>آیدی صفحه‌ی فروشگاه</label>
+                <input name="handle" class="ltr" placeholder="@shop_name" required={props.askHandle} value={v.handle ?? ""} />
+                <label>عکس محصول</label>
+                <FilePicker name="photo" accept="image/jpeg,image/png,image/webp" icon="fa-image" label="انتخاب عکس" />
+              </details>
+              <p><button><i class="fa-solid fa-heart ml-1"></i> افزودن به لیست آرزو</button></p>
+            </form>
+          )}
+        </>
       )}
+    </Layout>
+  );
+}
+
+/** An Instagram page takes its stand-in shop over: its own panel, products and wishes included. */
+export function ClaimShopPage(props: { user: User; shop: { name: string; instagram: string }; products: number; wishes: number; error?: string }) {
+  return (
+    <Layout title="تحویل فروشگاه" user={props.user} nav="none">
+      <h1>🏪 فروشگاه خودتان در سایت</h1>
+      <Errors errors={[props.error]} />
+      <div class="card" style="line-height:2">
+        صفحه‌ی اینستاگرام <b class="ltr inline-block">@{props.shop.instagram}</b> با {fa(props.products)} محصول و {fa(props.wishes)} آرزو به حساب
+        <b> {props.user.name}</b> ({props.user.phone}) منتقل می‌شود. بعد از آن:
+        <ul style="margin:8px 0 0;padding-right:18px">
+          <li>پنل فروشگاه: محصولات تازه، قیمت‌ها، موجودی و تنظیمات ارسال</li>
+          <li>سفارش‌ها و فیش‌های واریز در بات بله/تلگرام؛ همان دستورهای چتی آنجا هم کار می‌کنند</li>
+          <li>سفارش‌های باز و کارت بانکی‌تان همان‌طور می‌مانند</li>
+        </ul>
+      </div>
+      <form method="post" class="card">
+        <p class="small muted" style="margin-top:0">اگر این حساب مال شما نیست، اول از حساب خارج شوید و با شماره‌ی خودتان وارد شوید.</p>
+        <button>تحویل گرفتن فروشگاه</button>
+      </form>
     </Layout>
   );
 }

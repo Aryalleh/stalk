@@ -3,6 +3,8 @@ import type { Env } from "../../env";
 import { safeEqual } from "../../../lib/auth";
 import { handleIgEvent, shopForAccount } from "./automation";
 import { handleIgComment } from "./comments";
+import { handlePlatformDm } from "../instagram-shops";
+import { loadSettings, saveSettings } from "../../settings";
 import { parseComments, parseWebhook, refreshToken, validSignature } from "./instagram";
 
 // Instagram webhook for every shop: set the callback URL <site>/ig/webhook and the verify token from
@@ -32,7 +34,15 @@ igWebhook.post("/ig/webhook", async (c) => {
   // Answer Meta at once; file the messages and comments and run the automation in the background.
   c.executionCtx.waitUntil(
     (async () => {
+      const s = c.get("settings");
       for (const ev of events) {
+        // DMs to the platform's own account: Instagram pages running their items by chat.
+        if (s.platform_ig_account_id && ev.accountId === s.platform_ig_account_id) {
+          if (ev.direction === "in") {
+            await handlePlatformDm({ db, images: c.env.IMAGES, settings: s, siteUrl: site }, ev).catch((e) => console.error("platform instagram dm", e));
+          }
+          continue;
+        }
         const shop = await shopForAccount(db, ev.accountId);
         if (shop) await handleIgEvent(db, shop, ev).catch((e) => console.error("instagram event", e));
       }
@@ -55,6 +65,15 @@ export async function refreshIgTokens(db: D1Database) {
     .prepare("SELECT id, ig_access_token FROM shops WHERE ig_access_token <> '' AND (ig_token_refreshed_at IS NULL OR ig_token_refreshed_at < ?)")
     .bind(weekAgo)
     .all<{ id: number; ig_access_token: string }>();
+  // The platform's own account (Instagram pages run their items from its DMs).
+  const settings = await loadSettings(db);
+  if (settings.platform_ig_token && (!settings.platform_ig_token_refreshed_at || settings.platform_ig_token_refreshed_at < weekAgo)) {
+    try {
+      await saveSettings(db, { platform_ig_token: await refreshToken(settings.platform_ig_token), platform_ig_token_refreshed_at: new Date().toISOString() });
+    } catch (e) {
+      console.error("platform instagram token refresh", e);
+    }
+  }
   for (const s of results) {
     try {
       const token = await refreshToken(s.ig_access_token);

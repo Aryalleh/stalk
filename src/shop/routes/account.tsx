@@ -4,8 +4,8 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { availableByVariant, getPublicProduct, normCity, now, productCode, productImages, randomSlug, toman, wishlistItems, type Order, type Wishlist } from "../db";
-import { externalShop, memberShopFor, parseHandle, parsePostUrl } from "../instagram-shops";
+import { availableByVariant, getPublicProduct, normCity, now, productCode, productImages, randomSlug, toman, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
+import { dmPage, downloadImage, externalShop, fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl } from "../instagram-shops";
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
@@ -18,7 +18,7 @@ import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/bota
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange } from "../orders";
 
@@ -375,10 +375,24 @@ const productOptions = async (db: D1Database, productId: number) =>
 const myLists = (c: C) =>
   c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY id DESC").bind(currentUser(c).id).all<Wishlist>().then((r) => r.results);
 
+/** The item just added, with the page to tell about it. */
+async function addedItem(c: C, productId: number) {
+  const row = await c.env.DB.prepare(
+    `SELECT p.id, p.title, p.code, p.source_url, p.image_key, s.instagram, s.ig_contact_id, s.card_number, p.awaiting_price,
+            (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes
+     FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?1 AND s.is_external = 1
+       AND EXISTS (SELECT 1 FROM wishlist_items i JOIN wishlists w ON w.id = i.wishlist_id WHERE i.product_id = p.id AND w.user_id = ?2)`,
+  )
+    .bind(productId, currentUser(c).id)
+    .first<{ id: number; title: string; code: string; source_url: string; image_key: string; instagram: string; ig_contact_id: string; card_number: string; awaiting_price: number; wishes: number }>();
+  if (!row) return undefined;
+  return { ...row, ready: !!row.card_number && !row.awaiting_price, message: inviteText(c.get("settings"), siteUrl(c), row, row, row.wishes) };
+}
+
 account.get("/me/instagram", async (c) => {
   const lists = await myLists(c);
-  const wl = c.req.query("list");
-  return render(c, <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: wl ?? "" }} />);
+  const added = Number(c.req.query("added")) ? await addedItem(c, Number(c.req.query("added"))) : undefined;
+  return render(c, <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: c.req.query("list") ?? "" }} added={added} />);
 });
 
 account.post("/me/instagram", async (c) => {
@@ -386,15 +400,11 @@ account.post("/me/instagram", async (c) => {
   const lists = await myLists(c);
   const body = await c.req.parseBody();
   const f = Object.fromEntries(Object.entries(body).filter(([, v]) => typeof v === "string")) as Record<string, string>;
-  const values = Object.fromEntries(["post_url", "handle", "title", "price", "note", "wishlist_id"].map((k) => [k, String(f[k] ?? "").trim()]));
+  const values = Object.fromEntries(["post_url", "handle", "title", "note", "wishlist_id"].map((k) => [k, String(f[k] ?? "").trim()]));
   const errors: string[] = [];
   const postUrl = parsePostUrl(values.post_url);
   if (!postUrl) errors.push("لینک پست یا ریلز اینستاگرام را درست وارد کنید (مثل https://www.instagram.com/p/…).");
-  const handle = parseHandle(values.handle) || parseHandle(values.post_url.replace(/\/(p|reel|reels|tv)\/.*/i, ""));
-  if (!handle) errors.push("آیدی صفحه‌ی اینستاگرام فروشگاه را وارد کنید (مثل ‎@shop_name).");
   if (!values.title) errors.push("نام محصول را بنویسید.");
-  const price = Number(normalizeDigits(values.price).replace(/[,٬،]/g, ""));
-  if (!Number.isInteger(price) || price < 1000 || price > 1_000_000_000) errors.push("قیمت را به تومان وارد کنید.");
   const list = lists.find((w) => String(w.id) === values.wishlist_id) ?? lists[0];
   if (!list) errors.push("اول یک لیست آرزو بسازید.");
   const photo = fileField(body.photo);
@@ -402,44 +412,87 @@ account.post("/me/instagram", async (c) => {
     const e = imageError(photo, 8, "عکس");
     if (e) errors.push(e);
   }
-  const page = (extra: { errors?: string[]; member?: { name: string; slug: string } }) =>
+  const page = (extra: { errors?: string[]; member?: { name: string; slug: string }; askHandle?: boolean }) =>
     render(c, <InstagramAddPage user={user} wishlists={lists} values={values} {...extra} />, 400);
   if (errors.length) return page({ errors });
-  const member = await memberShopFor(c.env.DB, handle);
-  if (member) return page({ member });
   const db = c.env.DB;
-  const settings = c.get("settings");
-  const shop = await externalShop(db, settings, handle);
-  if (shop.status === "suspended") return page({ errors: ["افزودن از این صفحه فعلاً ممکن نیست."] });
   // The same post added again (by anyone) is the same product, so its wishes add up.
-  let product = await db.prepare("SELECT id, code, title FROM products WHERE shop_id = ? AND source_url = ?").bind(shop.id, postUrl).first<{ id: number; code: string; title: string }>();
+  let product = await db
+    .prepare("SELECT p.id, p.shop_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND s.is_external = 1")
+    .bind(postUrl)
+    .first<{ id: number; shop_id: number }>();
   if (!product) {
-    const image = photo ? await storeImage(c.env.IMAGES, photo, "p") : "";
+    // The page and the cover photo come from the post itself.
+    const post = await fetchPost(postUrl);
+    const handle = parseHandle(values.handle) || post.handle || parseHandle(values.post_url.replace(/\/(p|reel|reels|tv)\/.*/i, ""));
+    if (!handle) return page({ errors: ["صفحه‌ی این پست پیدا نشد؛ آیدی صفحه‌ی فروشگاه را هم بنویسید (مثل ‎@shop_name)."], askHandle: true });
+    const member = await memberShopFor(db, handle);
+    if (member) return page({ member });
+    const shop = await externalShop(db, handle);
+    if (shop.status === "suspended") return page({ errors: ["افزودن از این صفحه فعلاً ممکن نیست."] });
+    let image = "";
+    if (photo) image = await storeImage(c.env.IMAGES, photo, "p");
+    else if (post.image) {
+      const img = await downloadImage(post.image);
+      if (img) {
+        image = `p/${randomSlug(16)}.${img.type === "image/png" ? "png" : img.type === "image/webp" ? "webp" : "jpg"}`;
+        await c.env.IMAGES.put(image, img.data, { httpMetadata: { contentType: img.type } });
+      }
+    }
     const t = now();
+    // No price yet: the page sets it (src/shop/commands.ts); 1 is a placeholder the price check accepts.
     product = await db
       .prepare(
-        `INSERT INTO products (shop_id, title, description, price, image_key, is_active, created_at, updated_at, code, source_url, added_by)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?) RETURNING id, code, title`,
+        `INSERT INTO products (shop_id, title, description, price, awaiting_price, image_key, is_active, created_at, updated_at, code, source_url, added_by)
+         VALUES (?, ?, ?, 1, 1, ?, 1, ?, ?, ?, ?, ?) RETURNING id, shop_id`,
       )
-      .bind(shop.id, values.title.slice(0, 120), `از صفحه‌ی اینستاگرام @${handle}`, price, image, t, t, productCode(shop.slug), postUrl, user.id)
-      .first<{ id: number; code: string; title: string }>();
+      .bind(shop.id, values.title.slice(0, 120), `از صفحه‌ی اینستاگرام @${handle}`, image, t, t, productCode(shop.slug), postUrl, user.id)
+      .first<{ id: number; shop_id: number }>();
     if (image) await db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(product!.id, image).run();
   }
   await addItem(db, list!.id, product!.id, 1, values.note.slice(0, 200));
+  const settings = c.get("settings");
+  const info = await db
+    .prepare("SELECT p.title, p.source_url, s.instagram, s.ig_contact_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?")
+    .bind(product!.id)
+    .first<{ title: string; source_url: string; instagram: string; ig_contact_id: string }>();
+  const deps = { db, images: c.env.IMAGES, settings, siteUrl: siteUrl(c) };
   c.executionCtx.waitUntil(
-    notifyAdmins(
-      db,
-      settings,
-      [
-        `📸 آرزوی تازه از اینستاگرام @${handle}`,
-        `«${product!.title}» — ${toman(price)}`,
-        postUrl,
-        `افزوده‌شده توسط ${user.name}`,
-        shop.invite_status ? "" : `پیام دعوت این صفحه آماده است: ${siteUrl(c)}/admin/instagram`,
-      ].filter(Boolean).join("\n"),
-    ).catch((e) => console.error("notify admins", e)),
+    Promise.allSettled([
+      notifyAdmins(db, settings, [`📸 آرزوی تازه از اینستاگرام @${info!.instagram}`, `«${info!.title}»`, info!.source_url, `افزوده‌شده توسط ${user.name}`, `${siteUrl(c)}/admin/instagram`].join("\n")),
+      // A page already talking to us hears it right away (and is reminded what's missing).
+      info!.ig_contact_id ? dmPage(deps, product!.shop_id, `🎁 «${info!.title}» از صفحه‌ی شما به لیست آرزوی یک کاربر اضافه شد.\n${info!.source_url}\nبرای دیدن کارهای باقی‌مانده: راهنما`) : null,
+    ]),
   );
-  return c.redirect(`/me/wishlists/${list!.id}?saved=1`);
+  return c.redirect(`/me/instagram?added=${product!.id}&list=${list!.id}`);
+});
+
+// An Instagram page takes its stand-in shop over as its own (link from the "عضویت" chat command).
+const claimShop = (c: C) =>
+  c.env.DB.prepare("SELECT * FROM shops WHERE claim_token = ? AND claim_token <> '' AND is_external = 1").bind(c.req.param("token") ?? "").first<Shop>();
+
+account.get("/claim/:token{[A-Za-z0-9]{16,64}}", async (c) => {
+  const shop = await claimShop(c);
+  if (!shop) return notFoundPage(c);
+  const counts = await c.env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM products WHERE shop_id = ?1) AS products,
+            (SELECT COUNT(*) FROM wishlist_items i JOIN products p ON p.id = i.product_id WHERE p.shop_id = ?1) AS wishes`,
+  )
+    .bind(shop.id)
+    .first<{ products: number; wishes: number }>();
+  return render(c, <ClaimShopPage user={currentUser(c)} shop={shop} products={counts?.products ?? 0} wishes={counts?.wishes ?? 0} />);
+});
+
+account.post("/claim/:token{[A-Za-z0-9]{16,64}}", async (c) => {
+  const shop = await claimShop(c);
+  if (!shop) return notFoundPage(c);
+  const user = currentUser(c);
+  const error = await handOver(c.env.DB, shop.id, user.id);
+  if (error) return render(c, <ClaimShopPage user={user} shop={shop} products={0} wishes={0} error={error} />, 400);
+  c.executionCtx.waitUntil(
+    notifyAdmins(c.env.DB, c.get("settings"), `🏪 صفحه‌ی اینستاگرام @${shop.instagram} فروشگاهش را تحویل گرفت: ${user.name} — ${user.phone}`).catch(() => undefined),
+  );
+  return c.redirect("/panel");
 });
 
 account.get("/me/wishlists/new", async (c) => {
@@ -567,6 +620,7 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
   const { values, errors } = cleanWishlist({ ...f, title: `خرید مستقیم: ${product.title}`.slice(0, 120), is_open: "1" });
   const v = pickVariant(product, hasChoice(product) ? variantFromForm(f) : "|");
   if (!v) errors.push("سایز / رنگ را انتخاب کنید.");
+  if (product.awaiting_price) errors.push("فروشگاه هنوز قیمت این محصول را ثبت نکرده است.");
   const available = await availableByVariant(c.env.DB, product);
   if (v && available && !errors.length && !available[v.key]) errors.push(v.label ? `${v.label} ناموجود است.` : "این محصول ناموجود است.");
   if (errors.length) return directBuyPage(c, { ...f, ...values }, errors, 400);

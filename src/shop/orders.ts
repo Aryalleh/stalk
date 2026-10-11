@@ -5,6 +5,7 @@ import { adjustStock, cancelOutOfStock, confirmPayment, now, rejectPayment, toma
 import { variantLabel } from "./variants";
 import { syncGiftBuyer } from "./crm/db";
 import { receiptButtons, receiptCaption, shipMessage } from "./notify";
+import { dmPage } from "./instagram-shops";
 
 export interface Deps {
   db: D1Database;
@@ -37,6 +38,24 @@ async function recordNotify(db: D1Database, orderId: number, error: string) {
 export async function sendReceiptToShop(d: Deps, orderId: number) {
   const o = await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
   if (!o) return;
+  // An Instagram page not on the site hears it in its DM with the site's Instagram account; if
+  // that fails (it hasn't written in 24 hours), the admins get the receipt instead, to reach it.
+  const external = await d.db.prepare("SELECT is_external FROM shops WHERE id = ?").bind(o.shop_id).first<{ is_external: number }>();
+  if (external?.is_external) {
+    const v = variantLabel(o.size, o.color);
+    const text = [
+      `💰 سفارش تازه #${o.id}: «${o.product_title}»${v ? ` (${v})` : ""}`,
+      `خریدار ${toman(o.amount)} به کارت شما واریز کرده است.`,
+      `پیگیری واریز: ${o.transfer_ref || "—"} — ۴ رقم آخر کارت خریدار: ${o.transfer_card_last4 || "—"}${o.transfer_at ? ` — ${o.transfer_at}` : ""}`,
+      "",
+      `اگر رسید: تایید ${o.id}`,
+      `اگر نرسید: رد ${o.id} دلیل`,
+    ].join("\n");
+    if (await dmPage(d, o.shop_id, text)) {
+      await recordNotify(d.db, o.id, "");
+      return;
+    }
+  }
   const chats = await shopOwnerChats(d.db, o.shop_id);
   let error = "no connected chat";
   try {
@@ -56,7 +75,9 @@ export async function confirmOrder(d: Deps, orderId: number, shopId: number) {
   if (!(await confirmPayment(d.db, orderId, shopId))) return false;
   const o = await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
   if (o) await syncGiftBuyer(d.db, o).catch((e) => console.error("crm sync", e));
-  const chats = await shopOwnerChats(d.db, shopId);
+  // (An Instagram page confirming from its DM gets the address in the reply there.)
+  const external = await d.db.prepare("SELECT is_external FROM shops WHERE id = ?").bind(shopId).first<{ is_external: number }>();
+  const chats = external?.is_external ? null : await shopOwnerChats(d.db, shopId);
   if (o && chats) await recordNotify(d.db, o.id, await sendToChats(d.settings, chats, shipMessage(o, d.siteUrl)).catch((e) => String(e)));
   if (o) await tellPaid(d, o);
   return true;

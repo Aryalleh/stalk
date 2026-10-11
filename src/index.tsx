@@ -7,6 +7,7 @@ import { crm } from "./crm/routes";
 import type { Env } from "./env";
 import { SESSION_COOKIE, assignUsername, isConnected, needsProfile, sessionUser } from "./session";
 import { activeBots, setBaleApiBase, setTelegramApiBase } from "./bale/botapi";
+import { setInstagramApiBase } from "./shop/crm/instagram";
 import { CONNECT_EXEMPT, connect } from "./bale/connect";
 import { appCss } from "./assets";
 import { ensureMigrated } from "./migrate";
@@ -47,6 +48,7 @@ app.get("/static/app.css", (c) =>
 app.use(async (c, next) => {
   setTelegramApiBase(c.env.TELEGRAM_API_BASE);
   setBaleApiBase(c.env.BALE_API_BASE);
+  setInstagramApiBase(c.env.INSTAGRAM_API_BASE);
   await ensureMigrated(c.env.DB);
   await next();
 });
@@ -112,7 +114,7 @@ app.use(async (c, next) => {
 });
 
 // Shop pages that need a logged-in user (the CRM checks for itself).
-const LOGIN_REQUIRED = /^\/(me|panel|admin)(\/|$)|^\/p\/\d+\/(wish|buy)$/;
+const LOGIN_REQUIRED = /^\/(me|panel|admin|claim)(\/|$)|^\/p\/\d+\/(wish|buy)$/;
 app.use(async (c, next) => {
   if (!c.get("user") && LOGIN_REQUIRED.test(c.req.path)) {
     const back = c.req.method === "GET" ? c.req.path : "/";

@@ -14,6 +14,7 @@ import {
   type ProductWithShop,
   type Shop,
   type Wishlist,
+  priceLabel,
   productPath,
   showCode,
 } from "../db";
@@ -51,7 +52,7 @@ function ProductCard(props: { p: ProductWithShop }) {
       <div class="absolute inset-0 photo-scrim"></div>
       <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
         <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{p.title}</h3>
-        <div class="text-[11px] text-brand font-bold">{toman(p.price)}</div>
+        <div class="text-[11px] text-brand font-bold">{priceLabel(p)}</div>
         <div class="text-[10px] text-muted truncate">{p.shop_name}</div>
       </div>
     </a>
@@ -505,6 +506,7 @@ export function ProductPage(props: {
   const avail = props.available ?? null;
   const totalLeft = avail ? Object.values(avail).reduce((a, b) => a + b, 0) : Infinity;
   const soldOut = totalLeft <= 0;
+  const noBuy = soldOut || !!p.awaiting_price; // an Instagram item the page hasn't priced yet
   const features = p.features.split("\n").map((s) => s.trim()).filter(Boolean);
   const loginHref = `/login?next=/p/${p.id}`;
   const nofollow = props.user ? undefined : "nofollow";
@@ -576,8 +578,8 @@ export function ProductPage(props: {
       </div>
       <h1 class="text-2xl font-black text-fg mb-2 leading-tight">{p.title}</h1>
       <div class="flex items-baseline gap-2 flex-wrap">
-        <span class="text-2xl font-black text-brand">{fa(p.price)}</span>
-        <span class="text-xs text-fg/60">تومان</span>
+        <span class="text-2xl font-black text-brand">{p.awaiting_price ? "قیمت به‌زودی" : fa(p.price)}</span>
+        {!p.awaiting_price && <span class="text-xs text-fg/60">تومان</span>}
         {soldOut ? (
           <span class="text-[11px] font-bold text-white bg-red-500/80 px-2 py-0.5 rounded-lg mr-2">ناموجود</span>
         ) : totalLeft <= 3 ? (
@@ -601,8 +603,8 @@ export function ProductPage(props: {
           </div>
           <h1 class="text-3xl lg:text-4xl font-black text-fg mb-5 leading-tight">{p.title}</h1>
           <div class="flex items-baseline gap-3 flex-wrap mb-8">
-            <span class="text-4xl font-black text-brand">{fa(p.price)}</span>
-            <span class="text-lg text-muted font-bold">تومان</span>
+            <span class="text-4xl font-black text-brand">{p.awaiting_price ? "قیمت به‌زودی" : fa(p.price)}</span>
+            {!p.awaiting_price && <span class="text-lg text-muted font-bold">تومان</span>}
             {soldOut ? (
               <span class="text-xs font-bold text-white bg-red-500 px-3 py-1 rounded-xl">ناموجود</span>
             ) : totalLeft <= 3 ? (
@@ -635,14 +637,14 @@ export function ProductPage(props: {
           {hasPicker && !soldOut && <PagePicker product={p} available={avail} where="d" class="mb-6 p-5 bg-card border border-fg/5 rounded-3xl" error={pickError} />}
           <div class="space-y-3">
             <a
-              href={soldOut ? "#" : buyHref}
+              href={noBuy ? "#" : buyHref}
               data-buy
               rel={nofollow}
-              aria-disabled={soldOut ? "true" : undefined}
-              class={`${soldOut ? "opacity-40 pointer-events-none " : ""}w-full py-4 bg-brand text-white rounded-[28px] text-base font-black shadow-xl shadow-brand/25 hover:brightness-110 transition-all flex items-center justify-center gap-3`}
+              aria-disabled={noBuy ? "true" : undefined}
+              class={`${noBuy ? "opacity-40 pointer-events-none " : ""}w-full py-4 bg-brand text-white rounded-[28px] text-base font-black shadow-xl shadow-brand/25 hover:brightness-110 transition-all flex items-center justify-center gap-3`}
             >
               <i class="fa-solid fa-bag-shopping"></i>
-              {soldOut ? "ناموجود" : "خرید مستقیم"}
+              {soldOut ? "ناموجود" : p.awaiting_price ? "منتظر قیمت از فروشگاه" : "خرید مستقیم"}
             </a>
             <a href={wishHref} rel={nofollow} {...wishAttrs} class="w-full py-4 border-2 border-brand text-brand hover:bg-brand/5 rounded-[28px] text-base font-black transition-all flex items-center justify-center gap-3">
               <i class="fa-solid fa-gift"></i>
@@ -704,7 +706,8 @@ export function ProductPage(props: {
           <a href={p.source_url} target="_blank" rel="noopener nofollow" class="flex items-start gap-3 p-4 bg-card rounded-2xl text-xs text-muted leading-6">
             <i class="fa-brands fa-instagram text-brand text-xl mt-0.5"></i>
             <span>
-              این محصول از صفحه‌ی اینستاگرام <b class="text-fg ltr inline-block">{p.shop_name}</b> اضافه شده است. خریدش را ما از همان صفحه برایتان ثبت و پیگیری می‌کنیم.
+              این محصول از صفحه‌ی اینستاگرام <b class="text-fg ltr inline-block">{p.shop_name}</b> است. پول مستقیم به کارت همان فروشگاه واریز می‌شود و خودش سفارش را ارسال می‌کند؛ وضعیت سفارش را همین‌جا دنبال می‌کنید.
+              {p.awaiting_price ? <span class="block mt-1">فروشگاه هنوز قیمت را ثبت نکرده؛ به‌محض ثبت، خرید فعال می‌شود.</span> : null}
               <span class="block text-brand font-bold mt-1">مشاهده پست در اینستاگرام <i class="fa-solid fa-arrow-up-left-from-square text-[10px]"></i></span>
             </span>
           </a>
@@ -766,8 +769,8 @@ export function ProductPage(props: {
           <a href={wishHref} rel={nofollow} {...wishAttrs} class="flex-[2] py-4 bg-brand text-white text-center rounded-2xl font-bold shadow-lg shadow-brand/20 active:scale-95 transition-transform">
             {!props.user ? "ورود و افزودن به لیست آرزو" : props.wishlists.length ? "افزودن به لیست آرزوها" : "ساخت لیست آرزو و افزودن این محصول"}
           </a>
-          <a href={soldOut ? "#" : buyHref} data-buy rel={nofollow} aria-disabled={soldOut ? "true" : undefined} class={`${soldOut ? "opacity-40 pointer-events-none " : ""}flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform`}>
-            <i class="fa-solid fa-bag-shopping ml-1"></i> {soldOut ? "ناموجود" : "خرید مستقیم"}
+          <a href={noBuy ? "#" : buyHref} data-buy rel={nofollow} aria-disabled={noBuy ? "true" : undefined} class={`${noBuy ? "opacity-40 pointer-events-none " : ""}flex-1 py-4 bg-card text-fg text-center rounded-2xl font-bold border border-muted/20 active:scale-95 transition-transform`}>
+            <i class="fa-solid fa-bag-shopping ml-1"></i> {soldOut ? "ناموجود" : p.awaiting_price ? "منتظر قیمت" : "خرید مستقیم"}
           </a>
         </div>
       </div>
@@ -1038,7 +1041,7 @@ function ShopProductCard(props: { p: ProductWithShop; available: boolean }) {
         <div class="p-4 md:p-6">
           <h3 class="text-xs md:text-base font-bold truncate mb-1">{p.title}</h3>
           <div class="flex items-center justify-between">
-            <span class="text-[11px] md:text-base font-black text-brand">{toman(p.price)}</span>
+            <span class="text-[11px] md:text-base font-black text-brand">{priceLabel(p)}</span>
             <span class="w-8 h-8 md:w-11 md:h-11 bg-brand/10 text-brand rounded-xl md:rounded-2xl flex items-center justify-center group-hover:bg-brand group-hover:text-white transition-colors">
               <i class="fa-solid fa-cart-shopping text-xs md:text-base"></i>
             </span>
@@ -1120,6 +1123,8 @@ export function WishlistPublicPage(props: {
               ? "تمام شد"
               : !it.in_stock && it.product_active
                 ? "فعلاً ناموجود"
+                : it.waiting_shop
+                ? "منتظر قیمت از فروشگاه"
                 : props.isOwner
                 ? null
                 : it.reserved > 0 && free <= 0
@@ -1144,7 +1149,7 @@ export function WishlistPublicPage(props: {
                 ) : null}
                 <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
                   <h3 class="text-xs font-bold text-fg mb-0.5 truncate">{it.title}</h3>
-                  <div class={`text-[11px] font-bold ${fulfilled ? "text-white/70 line-through" : "text-brand"}`}>{toman(it.price)}</div>
+                  <div class={`text-[11px] font-bold ${fulfilled ? "text-white/70 line-through" : "text-brand"}`}>{priceLabel(it)}</div>
                   {variantLabel(it.size, it.color) && <div class="text-[10px] text-fg/80">{variantLabel(it.size, it.color)}</div>}
                   {it.note && <div class="text-[10px] text-muted truncate">{it.note}</div>}
                   {buyable && !fulfilled && !props.isOwner ? (
@@ -1555,7 +1560,7 @@ export function DirectBuyPage(props: {
           <div class="min-w-0">
             <h2 class="text-sm font-bold text-fg truncate">{p.title}</h2>
             <p class="text-[10px] text-muted">{p.shop_name}</p>
-            <p class="text-xs font-bold text-brand mt-1">{toman(p.price)}</p>
+            <p class="text-xs font-bold text-brand mt-1">{priceLabel(p)}</p>
           </div>
         </section>
         <Errors errors={props.errors} />
