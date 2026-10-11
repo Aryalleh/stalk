@@ -48,6 +48,18 @@ export const DEFAULTS = {
   footer_embed: "",
   // Footer links to the admin's pages, kept in sync by /admin/pages: JSON [[slug, title, column], ...].
   pages_index: "",
+  // Instagram shops not on the platform (see /admin/instagram): the platform's own Instagram page,
+  // the card givers pay into for those items, and the DMs sent to the page. Placeholders:
+  // {shop} @handle, {product} item title, {link} its Instagram post, {site} site address,
+  // {wishes} how many people wished for the page's items; the order DM also takes
+  // {variant}, {qty}, {ship} (recipient name, phone, address).
+  platform_instagram: "",
+  ext_card_number: "",
+  ext_card_holder: "",
+  ig_invite_text:
+    "سلام وقت بخیر 🌸\nیکی از کاربران {site_name}، محصول «{product}» از صفحه شما را به لیست آرزوهایش اضافه کرده است.\n{site_name} یک پلتفرم لیست آرزو و کادو است؛ دوستان و خانواده‌ی هر کاربر، آرزوهایش را مستقیم از فروشگاه‌ها برایش می‌خرند.\nخوشحال می‌شویم فروشگاه شما هم در {site_name} باشد (ثبت‌نام رایگان): {site}/panel/register\nاگر هم نخواستید عضو شوید اشکالی ندارد؛ هر وقت کسی این محصول را سفارش داد، از همین صفحه برای خریدش به شما پیام می‌دهیم.",
+  ig_order_text:
+    "سلام وقت بخیر 🌸\nبرای سفارش این محصول پیام می‌دهم:\n{product}\n{link}\n{variant}تعداد: {qty}\n\nارسال به:\n{ship}\n\nلطفاً مبلغ نهایی همراه با هزینه ارسال و شماره کارت را بفرمایید. ممنون 🙏",
   // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.
   ga_measurement_id: "",
   cf_analytics_token: "",

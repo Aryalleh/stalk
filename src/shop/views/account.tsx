@@ -651,6 +651,7 @@ export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items:
       <div class="row" style="margin-bottom:16px">
         <h1 style="margin:0">لیست‌های آرزوی من</h1>
         <span class="sp" />
+        <a class="btn small secondary" href="/me/instagram"><i class="fa-brands fa-instagram"></i> از اینستاگرام</a>
         <a class="btn small" href="/me/wishlists/new"><i class="fa-solid fa-plus"></i> لیست جدید</a>
       </div>
       {props.lists.length === 0 && <div class="card muted">هنوز لیستی نساخته‌اید. یک لیست بسازید و از صفحه محصولات آرزوهایتان را اضافه کنید.</div>}
@@ -968,5 +969,64 @@ export function PendingChanges(props: { items: { id: number; product_title: stri
         </a>
       ))}
     </section>
+  );
+}
+
+/** Add an item seen on any Instagram page (on the platform or not) to one of my wishlists. */
+export function InstagramAddPage(props: {
+  user: User;
+  wishlists: Wishlist[];
+  values: Record<string, string>;
+  errors?: string[];
+  /** The page is already a shop here: link to it instead. */
+  member?: { name: string; slug: string };
+}) {
+  const v = props.values;
+  return (
+    <Layout title="افزودن از اینستاگرام" user={props.user} nav="wishes">
+      <h1><i class="fa-brands fa-instagram ml-1 text-brand"></i> افزودن آرزو از اینستاگرام</h1>
+      <div class="card small muted" style="line-height:1.9">
+        محصولی را در یک صفحه‌ی اینستاگرامی دیده‌اید؟ لینک پست و نام صفحه را بدهید تا به لیست آرزویتان اضافه شود. اگر آن فروشگاه هنوز در سایت نیست،
+        دوستانتان مثل همیشه از همین‌جا برایتان می‌خرند و ما سفارش را از همان صفحه برایتان ثبت می‌کنیم.
+      </div>
+      <Errors errors={props.errors} />
+      {props.member && (
+        <div class="card">
+          این صفحه در سایت فروشگاه دارد: <a href={`/s/${props.member.slug}`} class="font-bold">{props.member.name}</a> — محصول را از همان‌جا به لیستتان اضافه کنید.
+        </div>
+      )}
+      {props.wishlists.length === 0 ? (
+        <div class="card">
+          اول یک لیست آرزو بسازید. <a class="btn small" href="/me/wishlists/new">ساخت لیست آرزو</a>
+        </div>
+      ) : (
+        <form method="post" action="/me/instagram" enctype="multipart/form-data" class="card">
+          <label style="margin-top:0">لینک پست یا ریلز محصول</label>
+          <input name="post_url" class="ltr" required placeholder="https://www.instagram.com/p/…" value={v.post_url ?? ""} />
+          <label>آیدی صفحه‌ی فروشگاه</label>
+          <input name="handle" class="ltr" required placeholder="@shop_name" value={v.handle ?? ""} />
+          <label>نام محصول</label>
+          <input name="title" required maxlength={120} value={v.title ?? ""} />
+          <div class="two">
+            <div>
+              <label>قیمت (تومان)</label>
+              <input name="price" inputmode="numeric" required class="ltr" placeholder="مثلاً 850000" value={v.price ?? ""} />
+            </div>
+            <div>
+              <label>لیست</label>
+              <select name="wishlist_id">
+                {props.wishlists.map((w) => <option value={String(w.id)} selected={v.wishlist_id === String(w.id)}>{w.title}</option>)}
+              </select>
+            </div>
+          </div>
+          <label>سایز، رنگ یا توضیح (اختیاری)</label>
+          <input name="note" maxlength={200} placeholder="مثلاً سایز M، رنگ کرم" value={v.note ?? ""} />
+          <label>عکس محصول (اسکرین‌شات پست)</label>
+          <FilePicker name="photo" accept="image/jpeg,image/png,image/webp" icon="fa-image" label="انتخاب عکس" />
+          <p class="small muted" style="margin:10px 0 0">قیمت نهایی و هزینه ارسال را هنگام سفارش با فروشگاه هماهنگ می‌کنیم.</p>
+          <p><button><i class="fa-solid fa-heart ml-1"></i> افزودن به لیست آرزو</button></p>
+        </form>
+      )}
+    </Layout>
   );
 }

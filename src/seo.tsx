@@ -35,10 +35,10 @@ seo.get("/sitemap.xml", async (c) => {
   const origin = siteOrigin(c);
   const db = c.env.DB;
   const [shops, products] = await db.batch([
-    db.prepare("SELECT slug, logo_key, created_at FROM shops WHERE status = 'approved' ORDER BY id LIMIT 5000"),
+    db.prepare("SELECT slug, logo_key, created_at FROM shops WHERE status = 'approved' AND is_external = 0 ORDER BY id LIMIT 5000"),
     db.prepare(
       `SELECT p.id, p.code, p.title, p.image_key, p.updated_at FROM products p JOIN shops s ON s.id = p.shop_id
-       WHERE p.is_active = 1 AND s.status = 'approved' ORDER BY p.id DESC LIMIT 40000`,
+       WHERE p.is_active = 1 AND s.status = 'approved' AND s.is_external = 0 ORDER BY p.id DESC LIMIT 40000`,
     ),
   ]);
   const url = (loc: string, opts: { lastmod?: string; priority?: string; image?: string; imageTitle?: string } = {}) =>
@@ -195,7 +195,7 @@ seo.get("/faq", (c) => {
 seo.get("/llms.txt", async (c) => {
   const s = c.get("settings");
   const origin = siteOrigin(c);
-  const { results: shops } = await c.env.DB.prepare("SELECT name, slug, city, description FROM shops WHERE status = 'approved' ORDER BY id LIMIT 100").all<{
+  const { results: shops } = await c.env.DB.prepare("SELECT name, slug, city, description FROM shops WHERE status = 'approved' AND is_external = 0 ORDER BY id LIMIT 100").all<{
     name: string;
     slug: string;
     city: string;

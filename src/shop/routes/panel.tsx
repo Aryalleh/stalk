@@ -13,7 +13,7 @@ import { sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, AdminInstagramPage, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl } from "./helpers";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
@@ -23,6 +23,7 @@ import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
+import { inviteText, orderText } from "../instagram-shops";
 
 export const panel = new Hono<Env>();
 
@@ -806,7 +807,96 @@ admin.get("/admin/users", async (c) => {
 admin.post("/admin/users/:id{[0-9]+}/login-as", async (c) => {
   const error = await startImpersonation(c, currentUser(c), intParam(c, "id"));
   if (error) return c.redirect(`/admin/users?error=${encodeURIComponent(error)}`);
-  return c.redirect("/me");
+  return c.redirect((await form(c)).next === "/panel" ? "/panel" : "/me");
+});
+
+// ---------- Instagram pages not on the platform ----------
+
+admin.get("/admin/instagram", async (c) => {
+  const db = c.env.DB;
+  const s = c.get("settings");
+  const site = siteUrl(c);
+  const [shops, orders] = await db.batch([
+    db.prepare(
+      `SELECT s.id, s.slug, s.instagram, s.owner_id, s.status, s.invite_status, s.invited_at, s.created_at,
+              (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id) AS products,
+              (SELECT COUNT(*) FROM wishlist_items i JOIN products p ON p.id = i.product_id WHERE p.shop_id = s.id) AS wishes,
+              (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('awaiting', 'paid')) AS open_orders,
+              (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('paid', 'shipped', 'delivered')) AS sold,
+              (SELECT p.title FROM products p LEFT JOIN wishlist_items i ON i.product_id = p.id WHERE p.shop_id = s.id GROUP BY p.id ORDER BY COUNT(i.id) DESC, p.id LIMIT 1) AS top_title,
+              (SELECT p.source_url FROM products p LEFT JOIN wishlist_items i ON i.product_id = p.id WHERE p.shop_id = s.id GROUP BY p.id ORDER BY COUNT(i.id) DESC, p.id LIMIT 1) AS top_url
+       FROM shops s WHERE s.is_external = 1
+       ORDER BY (s.invite_status = '') DESC, wishes DESC, s.created_at DESC LIMIT 500`,
+    ),
+    db.prepare(
+      `SELECT o.id, o.product_title, o.amount, o.created_at, o.size, o.color, o.ship_name, o.ship_phone, o.ship_city, o.ship_address, o.ship_postal_code,
+              s.instagram, p.source_url
+       FROM orders o JOIN shops s ON s.id = o.shop_id JOIN products p ON p.id = o.product_id
+       WHERE s.is_external = 1 AND o.status = 'paid' ORDER BY o.id LIMIT 200`,
+    ),
+  ]);
+  type ShopQ = Omit<ExternalShopRow, "invite"> & { top_title: string | null; top_url: string | null };
+  const shopRows = (shops.results as ShopQ[]).map((x) => ({
+    ...x,
+    invite: inviteText(s, site, x, { title: x.top_title ?? "", source_url: x.top_url ?? "" }, x.wishes),
+  }));
+  type OrderQ = Omit<ExternalOrderRow, "message"> & Parameters<typeof orderText>[2];
+  const orderRows = (orders.results as OrderQ[]).map((o) => ({ ...o, message: orderText(s, site, o) }));
+  return render(
+    c,
+    <AdminInstagramPage user={currentUser(c)} settings={s} shops={shopRows} orders={orderRows} ok={c.req.query("ok")} error={c.req.query("error")} />,
+  );
+});
+
+const igBack = (c: C, msg: string, ok = true) => c.redirect(`/admin/instagram?${ok ? "ok" : "error"}=${encodeURIComponent(msg)}`);
+
+admin.post("/admin/instagram/settings", async (c) => {
+  const f = await form(c);
+  const card = normalizeDigits(f.ext_card_number ?? "");
+  if (card && cardNumberError(card)) return igBack(c, cardNumberError(card)!, false);
+  const text = (k: string) => (f[k] ?? "").replace(/\r/g, "").trim().slice(0, 2000);
+  const values: Partial<Settings> = {
+    platform_instagram: (f.platform_instagram ?? "").trim().replace(/^@/, "").slice(0, 60),
+    ext_card_number: card,
+    ext_card_holder: (f.ext_card_holder ?? "").trim().slice(0, 80),
+    ig_invite_text: text("ig_invite_text"),
+    ig_order_text: text("ig_order_text"),
+  };
+  await saveSiteSettings(c.env.DB, values);
+  // Givers of these pages' items pay this card.
+  await c.env.DB.prepare("UPDATE shops SET card_number = ?, card_holder = ? WHERE is_external = 1").bind(values.ext_card_number, values.ext_card_holder).run();
+  return igBack(c, "ذخیره شد.");
+});
+
+admin.post("/admin/instagram/:id{[0-9]+}/invite", async (c) => {
+  const status = (await form(c)).status;
+  if (!["invited", "declined", ""].includes(status ?? "x")) return c.notFound();
+  await c.env.DB.prepare("UPDATE shops SET invite_status = ?, invited_at = ? WHERE id = ? AND is_external = 1")
+    .bind(status, status === "invited" ? now() : null, intParam(c, "id"))
+    .run();
+  return c.redirect("/admin/instagram");
+});
+
+// The page joined: its owner's own account takes over the shop, products and wishes included.
+admin.post("/admin/instagram/:id{[0-9]+}/handover", async (c) => {
+  const db = c.env.DB;
+  const shop = await db.prepare("SELECT * FROM shops WHERE id = ? AND is_external = 1").bind(intParam(c, "id")).first<Shop>();
+  if (!shop) return c.notFound();
+  const phone = normalizePhone((await form(c)).phone ?? "");
+  const user = await db.prepare("SELECT id, name, shop_id FROM users WHERE phone = ?").bind(phone).first<{ id: number; name: string; shop_id: number | null }>();
+  if (!user) return igBack(c, "کاربری با این شماره نیست؛ صاحب صفحه اول در سایت ثبت‌نام کند.", false);
+  const hasShop = user.shop_id || (await db.prepare("SELECT 1 AS x FROM shops WHERE owner_id = ?").bind(user.id).first());
+  if (hasShop) return igBack(c, `${user.name} از قبل فروشگاه دارد.`, false);
+  const open = await db.prepare("SELECT COUNT(*) AS n FROM orders WHERE shop_id = ? AND status IN ('pending', 'awaiting', 'paid')").bind(shop.id).first<{ n: number }>();
+  if (open?.n) return igBack(c, "اول سفارش‌های باز این صفحه را تمام کنید (پرداخت‌شده‌ها ارسال شوند).", false);
+  await db.batch([
+    // Their own card from now on (set in their panel); until then their items can't be bought.
+    db.prepare("UPDATE shops SET owner_id = ?, is_external = 0, invite_status = 'joined', card_number = '', card_holder = '', status = 'pending' WHERE id = ?").bind(user.id, shop.id),
+    db.prepare("UPDATE products SET source_url = '' WHERE shop_id = ?").bind(shop.id),
+    db.prepare("UPDATE users SET shop_id = NULL, shop_role = '' WHERE id = ?").bind(shop.owner_id),
+    db.prepare("UPDATE users SET shop_id = ?, shop_role = 'admin' WHERE id = ?").bind(shop.id, user.id),
+  ]);
+  return igBack(c, `فروشگاه @${shop.instagram} به ${user.name} تحویل شد. بعد از ثبت شماره کارت در پنلش، از صفحه‌ی مدیریت تأییدش کنید.`);
 });
 
 admin.get("/admin/content", (c) => contentPage(c));

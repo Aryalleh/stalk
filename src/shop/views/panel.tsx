@@ -1242,6 +1242,7 @@ function AdminShell(props: { title: string; user: User; on: string; children?: C
     ["/admin/users", "fa-users", "کاربران"],
     ["/admin/content", "fa-pen-to-square", "درباره و سوالات"],
     ["/admin/pages", "fa-file-lines", "صفحه‌ها و فوتر"],
+    ["/admin/instagram", "fa-camera-retro", "صفحه‌های اینستاگرام"],
     ["/admin/settings", "fa-gear", "تنظیمات سایت"],
     ["/crm", "fa-address-book", "CRM"],
   ];
@@ -1691,6 +1692,167 @@ export function AdminContentPage(props: { user: User; s: Settings; faq: [string,
             </label>
           )}
         </div>
+        <p><button>ذخیره</button></p>
+      </form>
+    </AdminShell>
+  );
+}
+
+export interface ExternalShopRow {
+  id: number;
+  slug: string;
+  instagram: string;
+  owner_id: number;
+  status: string;
+  invite_status: string;
+  invited_at: string | null;
+  created_at: string;
+  products: number;
+  wishes: number;
+  open_orders: number;
+  sold: number;
+  invite: string; // the invite DM, filled in
+}
+
+export interface ExternalOrderRow {
+  id: number;
+  instagram: string;
+  product_title: string;
+  source_url: string;
+  amount: number;
+  created_at: string;
+  message: string; // the order DM, filled in
+}
+
+const INVITE_LABEL: Record<string, string> = { "": "دعوت نشده", invited: "دعوت فرستاده شد", declined: "فعلاً نمی‌خواهد", joined: "عضو شد" };
+
+/** Instagram pages that aren't on the platform: invite them, order their paid items, hand them their shop. */
+export function AdminInstagramPage(props: {
+  user: User;
+  settings: Settings;
+  shops: ExternalShopRow[];
+  orders: ExternalOrderRow[];
+  ok?: string;
+  error?: string;
+}) {
+  const s = props.settings;
+  const dm = (h: string) => `https://ig.me/m/${h}`;
+  return (
+    <AdminShell title="صفحه‌های اینستاگرام" user={props.user} on="/admin/instagram">
+      <h1>صفحه‌های اینستاگرام (خارج از سایت)</h1>
+      <p class="muted small" style="margin-top:-6px">
+        کاربران محصولات هر صفحه‌ی اینستاگرامی را به لیست آرزویشان اضافه می‌کنند. خریداران به کارت سایت پرداخت می‌کنند و شما سفارش را با دایرکت از همان صفحه ثبت می‌کنید.
+        اینستاگرام اجازه‌ی ارسال خودکار پیام به صفحه‌هایی را که اول پیام نداده‌اند نمی‌دهد؛ برای همین متن هر پیام آماده است: «کپی متن» و بعد «دایرکت» را بزنید.
+      </p>
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <Errors errors={[props.error]} />
+
+      <div class="card wrap">
+        <h2><i class="fa-solid fa-truck-fast ml-1"></i> سفارش‌های پرداخت‌شده برای ثبت در اینستاگرام</h2>
+        {props.orders.length === 0 ? (
+          <p class="muted small">سفارشی منتظر ثبت نیست.</p>
+        ) : (
+          <table>
+            <thead><tr><th>سفارش</th><th>صفحه</th><th>محصول</th><th>مبلغ</th><th></th></tr></thead>
+            <tbody>
+              {props.orders.map((o) => (
+                <tr>
+                  <td>#{o.id}<div class="small muted dt">{formatJalali(o.created_at, false)}</div></td>
+                  <td class="ltr">@{o.instagram}</td>
+                  <td>{o.source_url ? <a href={o.source_url} target="_blank" rel="noopener nofollow">{o.product_title}</a> : o.product_title}</td>
+                  <td>{toman(o.amount)}</td>
+                  <td>
+                    <div class="row" style="gap:6px">
+                      <button type="button" class="small" data-copy={o.message} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی پیام سفارش</button>
+                      <a class="btn small secondary" href={dm(o.instagram)} target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> دایرکت</a>
+                    </div>
+                    <p class="small muted" style="margin:4px 0 0">بعد از ارسال، کد رهگیری را در پنل همان صفحه ثبت کنید.</p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div class="card wrap">
+        <h2><i class="fa-brands fa-instagram ml-1"></i> صفحه‌ها</h2>
+        {props.shops.length === 0 ? (
+          <p class="muted small">هنوز کسی از اینستاگرام آرزویی اضافه نکرده است.</p>
+        ) : (
+          <table>
+            <thead><tr><th>صفحه</th><th>آرزوها</th><th>فروش</th><th>دعوت</th><th></th></tr></thead>
+            <tbody>
+              {props.shops.map((x) => (
+                <tr>
+                  <td>
+                    <a href={`https://instagram.com/${x.instagram}`} target="_blank" rel="noopener nofollow" class="ltr font-bold">@{x.instagram}</a>
+                    <div class="small muted"><a href={`/s/${x.slug}`}>صفحه در سایت</a> · {x.products} محصول{x.status === "suspended" ? " · معلق" : ""}</div>
+                  </td>
+                  <td>{x.wishes}</td>
+                  <td>{x.sold}{x.open_orders ? <div class="small muted">{x.open_orders} باز</div> : null}</td>
+                  <td>
+                    <span class={`tag ${x.invite_status === "invited" ? "ok" : ""}`}>{INVITE_LABEL[x.invite_status] ?? x.invite_status}</span>
+                    {x.invited_at && <div class="small muted dt">{formatJalali(x.invited_at, false)}</div>}
+                  </td>
+                  <td>
+                    <div class="row" style="gap:6px">
+                      <button type="button" class="small" data-copy={x.invite} data-copied="کپی شد ✓"><i class="fa-regular fa-copy"></i> کپی متن دعوت</button>
+                      <a class="btn small secondary" href={dm(x.instagram)} target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> دایرکت</a>
+                    </div>
+                    <form method="post" action={`/admin/instagram/${x.id}/invite`} class="row" style="gap:6px;margin-top:6px">
+                      {x.invite_status !== "invited" && <button class="small secondary" name="status" value="invited">دعوت فرستاده شد</button>}
+                      {x.invite_status !== "declined" && <button class="small secondary" name="status" value="declined">نمی‌خواهد</button>}
+                    </form>
+                    <form method="post" action={`/admin/users/${x.owner_id}/login-as`} style="margin-top:6px">
+                      <input type="hidden" name="next" value="/panel" />
+                      <button class="small secondary"><i class="fa-solid fa-store ml-1"></i> پنل این صفحه (سفارش‌ها و قیمت‌ها)</button>
+                    </form>
+                    <details style="margin-top:6px">
+                      <summary class="small" style="cursor:pointer">عضو شد؟ تحویل فروشگاه</summary>
+                      <form method="post" action={`/admin/instagram/${x.id}/handover`} style="margin-top:6px">
+                        <p class="small muted" style="margin:0 0 6px">صاحب صفحه اول با شماره‌ی خودش در سایت ثبت‌نام کند؛ بعد شماره‌اش را اینجا بزنید. محصولات و آرزوها به فروشگاه او منتقل می‌شوند.</p>
+                        <div class="row" style="gap:6px">
+                          <input name="phone" class="ltr" inputmode="tel" placeholder="09…" required style="max-width:160px" />
+                          <button class="small">تحویل</button>
+                        </div>
+                      </form>
+                    </details>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <form method="post" action="/admin/instagram/settings" class="card">
+        <h2><i class="fa-solid fa-gear ml-1"></i> تنظیمات</h2>
+        <div class="two">
+          <div>
+            <label>صفحه‌ی اینستاگرام سایت</label>
+            <input name="platform_instagram" class="ltr" placeholder="@kadochie" value={s.platform_instagram} />
+          </div>
+          <div />
+        </div>
+        <div class="two">
+          <div>
+            <label>شماره کارت دریافت پول این سفارش‌ها</label>
+            <input name="ext_card_number" class="ltr" inputmode="numeric" value={s.ext_card_number ? formatCard(s.ext_card_number) : ""} />
+          </div>
+          <div>
+            <label>به نام</label>
+            <input name="ext_card_holder" value={s.ext_card_holder} />
+          </div>
+        </div>
+        <p class="small muted" style="margin:6px 0 0">تا شماره کارت وارد نشود، محصولات این صفحه‌ها قابل خرید نیستند.</p>
+        <label>متن دعوت</label>
+        <textarea name="ig_invite_text" rows={7}>{s.ig_invite_text}</textarea>
+        <label>متن سفارش</label>
+        <textarea name="ig_order_text" rows={7}>{s.ig_order_text}</textarea>
+        <p class="small muted" style="margin:6px 0 0">
+          جایگزین‌ها: <span class="ltr">{"{shop} {product} {link} {site} {site_name} {wishes}"}</span> — و در متن سفارش: <span class="ltr">{"{variant} {qty} {ship}"}</span>
+        </p>
         <p><button>ذخیره</button></p>
       </form>
     </AdminShell>

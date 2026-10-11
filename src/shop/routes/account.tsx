@@ -4,7 +4,8 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { availableByVariant, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Wishlist } from "../db";
+import { availableByVariant, getPublicProduct, normCity, now, productCode, productImages, randomSlug, toman, wishlistItems, type Order, type Wishlist } from "../db";
+import { externalShop, memberShopFor, parseHandle, parsePostUrl } from "../instagram-shops";
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
@@ -13,11 +14,11 @@ import { birthDate, fullName } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
-import { activeBots, botLink, type BotKind } from "../../bale/botapi";
+import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange } from "../orders";
 
@@ -368,6 +369,78 @@ const productOptions = async (db: D1Database, productId: number) =>
     size_guide: "",
     colors: "",
   };
+
+// ---------- an item from any Instagram page ----------
+
+const myLists = (c: C) =>
+  c.env.DB.prepare("SELECT * FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY id DESC").bind(currentUser(c).id).all<Wishlist>().then((r) => r.results);
+
+account.get("/me/instagram", async (c) => {
+  const lists = await myLists(c);
+  const wl = c.req.query("list");
+  return render(c, <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: wl ?? "" }} />);
+});
+
+account.post("/me/instagram", async (c) => {
+  const user = currentUser(c);
+  const lists = await myLists(c);
+  const body = await c.req.parseBody();
+  const f = Object.fromEntries(Object.entries(body).filter(([, v]) => typeof v === "string")) as Record<string, string>;
+  const values = Object.fromEntries(["post_url", "handle", "title", "price", "note", "wishlist_id"].map((k) => [k, String(f[k] ?? "").trim()]));
+  const errors: string[] = [];
+  const postUrl = parsePostUrl(values.post_url);
+  if (!postUrl) errors.push("لینک پست یا ریلز اینستاگرام را درست وارد کنید (مثل https://www.instagram.com/p/…).");
+  const handle = parseHandle(values.handle) || parseHandle(values.post_url.replace(/\/(p|reel|reels|tv)\/.*/i, ""));
+  if (!handle) errors.push("آیدی صفحه‌ی اینستاگرام فروشگاه را وارد کنید (مثل ‎@shop_name).");
+  if (!values.title) errors.push("نام محصول را بنویسید.");
+  const price = Number(normalizeDigits(values.price).replace(/[,٬،]/g, ""));
+  if (!Number.isInteger(price) || price < 1000 || price > 1_000_000_000) errors.push("قیمت را به تومان وارد کنید.");
+  const list = lists.find((w) => String(w.id) === values.wishlist_id) ?? lists[0];
+  if (!list) errors.push("اول یک لیست آرزو بسازید.");
+  const photo = fileField(body.photo);
+  if (photo) {
+    const e = imageError(photo, 8, "عکس");
+    if (e) errors.push(e);
+  }
+  const page = (extra: { errors?: string[]; member?: { name: string; slug: string } }) =>
+    render(c, <InstagramAddPage user={user} wishlists={lists} values={values} {...extra} />, 400);
+  if (errors.length) return page({ errors });
+  const member = await memberShopFor(c.env.DB, handle);
+  if (member) return page({ member });
+  const db = c.env.DB;
+  const settings = c.get("settings");
+  const shop = await externalShop(db, settings, handle);
+  if (shop.status === "suspended") return page({ errors: ["افزودن از این صفحه فعلاً ممکن نیست."] });
+  // The same post added again (by anyone) is the same product, so its wishes add up.
+  let product = await db.prepare("SELECT id, code, title FROM products WHERE shop_id = ? AND source_url = ?").bind(shop.id, postUrl).first<{ id: number; code: string; title: string }>();
+  if (!product) {
+    const image = photo ? await storeImage(c.env.IMAGES, photo, "p") : "";
+    const t = now();
+    product = await db
+      .prepare(
+        `INSERT INTO products (shop_id, title, description, price, image_key, is_active, created_at, updated_at, code, source_url, added_by)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?) RETURNING id, code, title`,
+      )
+      .bind(shop.id, values.title.slice(0, 120), `از صفحه‌ی اینستاگرام @${handle}`, price, image, t, t, productCode(shop.slug), postUrl, user.id)
+      .first<{ id: number; code: string; title: string }>();
+    if (image) await db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(product!.id, image).run();
+  }
+  await addItem(db, list!.id, product!.id, 1, values.note.slice(0, 200));
+  c.executionCtx.waitUntil(
+    notifyAdmins(
+      db,
+      settings,
+      [
+        `📸 آرزوی تازه از اینستاگرام @${handle}`,
+        `«${product!.title}» — ${toman(price)}`,
+        postUrl,
+        `افزوده‌شده توسط ${user.name}`,
+        shop.invite_status ? "" : `پیام دعوت این صفحه آماده است: ${siteUrl(c)}/admin/instagram`,
+      ].filter(Boolean).join("\n"),
+    ).catch((e) => console.error("notify admins", e)),
+  );
+  return c.redirect(`/me/wishlists/${list!.id}?saved=1`);
+});
 
 account.get("/me/wishlists/new", async (c) => {
   const user = currentUser(c);

@@ -700,6 +700,15 @@ export function ProductPage(props: {
             </button>
           </div>
         )}
+        {p.source_url && (
+          <a href={p.source_url} target="_blank" rel="noopener nofollow" class="flex items-start gap-3 p-4 bg-card rounded-2xl text-xs text-muted leading-6">
+            <i class="fa-brands fa-instagram text-brand text-xl mt-0.5"></i>
+            <span>
+              این محصول از صفحه‌ی اینستاگرام <b class="text-fg ltr inline-block">{p.shop_name}</b> اضافه شده است. خریدش را ما از همان صفحه برایتان ثبت و پیگیری می‌کنیم.
+              <span class="block text-brand font-bold mt-1">مشاهده پست در اینستاگرام <i class="fa-solid fa-arrow-up-left-from-square text-[10px]"></i></span>
+            </span>
+          </a>
+        )}
         <div class="p-4 bg-card rounded-2xl flex items-center justify-between">
           <div class="flex items-center gap-3">
             <div class="w-12 h-12 rounded-xl bg-ink flex items-center justify-center overflow-hidden text-brand font-bold">

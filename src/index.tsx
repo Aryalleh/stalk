@@ -81,12 +81,15 @@ app.use(async (c, next) => {
   await next();
 });
 
+// The stand-in owner of an Instagram page's shop (an admin opens its panel via "sign in as").
+const isPlaceholder = (u: { phone: string }) => u.phone.startsWith("ig:");
+
 // Every signed-in account must connect the site's Bale/Telegram bot before using the site. Only the
 // admin is let through while no bot is connected yet, so they can set one up in /admin/settings.
 app.use(async (c, next) => {
   const user = c.get("user");
   const adminSettingUp = user?.is_admin && !activeBots(c.get("settings")).length;
-  if (user && !isConnected(user) && !adminSettingUp && !CONNECT_EXEMPT.test(c.req.path)) {
+  if (user && !isConnected(user) && !adminSettingUp && !isPlaceholder(user) && !CONNECT_EXEMPT.test(c.req.path)) {
     const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";
     return c.redirect(`/connect?next=${encodeURIComponent(back)}`);
   }
@@ -101,7 +104,7 @@ app.use(async (c, next) => {
     await assignUsername(c.env.DB, user.id);
     c.set("user", await sessionUser(c.env.DB, getCookie(c, SESSION_COOKIE)));
   }
-  if (user && needsProfile(user) && !CONNECT_EXEMPT.test(c.req.path) && c.req.path !== "/me/complete") {
+  if (user && needsProfile(user) && !isPlaceholder(user) && !CONNECT_EXEMPT.test(c.req.path) && c.req.path !== "/me/complete") {
     const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";
     return c.redirect(`/me/complete?next=${encodeURIComponent(back)}`);
   }

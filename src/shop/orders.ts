@@ -13,10 +13,18 @@ export interface Deps {
   siteUrl: string;
 }
 
-/** The chats of the shop's owner (its connected Bale/Telegram accounts). */
+/**
+ * The chats of the shop's owner (its connected Bale/Telegram accounts). An Instagram page not on
+ * the platform (an external shop) is run by the platform: its orders go to the first admin with a
+ * connected bot, who also confirms them.
+ */
 export async function shopOwnerChats(db: D1Database, shopId: number) {
   return db
-    .prepare("SELECT u.bale_chat_id, u.telegram_chat_id FROM shops s JOIN users u ON u.id = s.owner_id WHERE s.id = ?")
+    .prepare(
+      `SELECT u.bale_chat_id, u.telegram_chat_id FROM shops s JOIN users u ON u.id = CASE WHEN s.is_external = 1 THEN COALESCE(
+         (SELECT a.id FROM users a WHERE a.is_admin = 1 AND (a.bale_chat_id <> '' OR a.telegram_chat_id <> '') ORDER BY a.id LIMIT 1), s.owner_id)
+       ELSE s.owner_id END WHERE s.id = ?`,
+    )
     .bind(shopId)
     .first<Chats>();
 }

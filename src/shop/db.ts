@@ -75,6 +75,10 @@ export interface Shop {
   bale_shop_post_at: string | null;
   bale_chat_id: string;
   telegram_chat_id: string;
+  /** 1 = an Instagram page not on the platform, run by the platform (see instagram-shops.ts). */
+  is_external: number;
+  invite_status: string;
+  invited_at: string | null;
   created_at: string;
 }
 
@@ -98,6 +102,9 @@ export interface Product {
   tg_shared_message: number | null;
   tg_shared_at: string | null;
   bale_shared_at: string | null;
+  /** The Instagram post an item from an external shop was added from. */
+  source_url: string;
+  added_by: number | null;
   created_at: string;
 }
 export type ProductWithShop = Product & { shop_name: string; shop_slug: string };
@@ -159,6 +166,8 @@ export async function listProducts(db: D1Database, opts: { q?: string; shopId?: 
   if (opts.shopId) {
     where.push("p.shop_id = ?");
     binds.push(opts.shopId);
+  } else {
+    where.push("s.is_external = 0"); // items added from Instagram pages stay out of explore/search
   }
   if (opts.category) {
     where.push("p.category = ?");
