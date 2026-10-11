@@ -53,13 +53,13 @@ export function normalizeCommand(text: string) {
 /** What a shop still has to do before its wished-for items can be bought. */
 export async function setupTodo(db: D1Database, shop: Shop) {
   const { results } = await db
-    .prepare("SELECT id, title FROM products WHERE shop_id = ? AND awaiting_price = 1 AND is_active = 1 ORDER BY id")
+    .prepare("SELECT id, title, source_url FROM products WHERE shop_id = ? AND awaiting_price = 1 AND is_active = 1 ORDER BY id")
     .bind(shop.id)
-    .all<{ id: number; title: string }>();
+    .all<{ id: number; title: string; source_url: string }>();
   const lines: string[] = [];
   if (!shop.card_number) lines.push("💳 شماره کارتتان را ثبت کنید (دکمه‌ی «ثبت شماره کارت»).");
   if (results.length) {
-    lines.push("🏷 قیمت این محصولات را بدهید (دکمه‌ی «قیمت …» هر کدام):\n" + results.map((p) => `• ${p.title}`).join("\n"));
+    lines.push("🏷 قیمت این محصولات را بدهید (دکمه‌ی «قیمت …» هر کدام):\n" + results.map((p) => `• ${p.title}${p.source_url ? `\n  ${p.source_url}` : ""}`).join("\n"));
   }
   return lines;
 }
@@ -290,11 +290,11 @@ export interface ProductCard {
 async function productCards(db: D1Database, shop: Shop): Promise<ProductCard[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, title, price, awaiting_price, is_active, image_key, (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes
+      `SELECT id, title, price, awaiting_price, is_active, image_key, source_url, (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes
        FROM products p WHERE shop_id = ? ORDER BY awaiting_price DESC, id DESC LIMIT 10`,
     )
     .bind(shop.id)
-    .all<{ id: number; title: string; price: number; awaiting_price: number; is_active: number; image_key: string; wishes: number }>();
+    .all<{ id: number; title: string; price: number; awaiting_price: number; is_active: number; image_key: string; source_url: string; wishes: number }>();
   return results.map((p) => ({
     id: p.id,
     title: p.title,
@@ -302,8 +302,11 @@ async function productCards(db: D1Database, shop: Shop): Promise<ProductCard[]> 
     caption: [
       `🛍 ${p.title}`,
       `${p.awaiting_price ? "🏷 هنوز قیمت ندارد" : `🏷 ${toman(p.price)}`}${p.is_active ? "" : " — ناموجود"} — ${n(p.wishes)} آرزو`,
+      p.source_url ? `🔗 ${p.source_url}` : "",
       `↩️ برای ${p.awaiting_price ? "ثبت" : "تغییر"} قیمت، روی همین پیام ریپلای کنید و فقط مبلغ را بنویسید.`,
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
   }));
 }
 
