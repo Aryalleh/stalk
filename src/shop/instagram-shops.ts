@@ -12,8 +12,8 @@
 // so the first message to a page can't be sent by the site; it's prepared for a person to send.
 import type { Settings } from "../settings";
 import { now, randomSlug, type Shop } from "./db";
-import { fetchProfile, instagramWeb, publishPhoto, sendDm, type IgEvent } from "./crm/instagram";
-import { buttonsFor, runShopChat, setupTodo } from "./commands";
+import { fetchProfile, instagramWeb, publishPhoto, sendDm, sendImageDm, type IgEvent } from "./crm/instagram";
+import { buttonsFor, cardProduct, rememberCard, runShopChat, setupTodo, type ProductCard } from "./commands";
 import type { Deps } from "./orders";
 
 const HANDLE_RE = /^[a-z0-9._]{1,30}$/;
@@ -37,59 +37,86 @@ export function parsePostUrl(input: string) {
 }
 
 const decode = (s: string) =>
-  s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#039;|&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#064;/g, "@");
+  s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
 const meta = (html: string, prop: string) =>
   decode(
     html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']*)["']`, "i"))?.[1] ??
       html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${prop}["']`, "i"))?.[1] ??
       "",
   );
+/** HTML to plain text: line breaks kept, tags dropped, blank runs squeezed. */
+const plain = (html: string) =>
+  decode(html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""))
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
-/**
- * The cover image and page of a public post, from the preview tags Instagram serves to link
- * previews (best effort: private posts or a blocked request give nothing).
- */
-export async function fetchPost(postUrl: string): Promise<{ image: string; handle: string }> {
-  // The embed page has the bare photo / reel cover (the link-preview image of a reel carries a play
-  // icon) and the page's username.
-  const embed = await fetchEmbed(postUrl);
-  if (embed.image && embed.handle) return embed;
-  const og = await fetchPreview(postUrl);
-  return { image: embed.image || og.image, handle: embed.handle || og.handle };
+export interface PostInfo {
+  image: string;
+  handle: string;
+  /** The post's caption (becomes the product description). */
+  caption: string;
 }
 
-async function fetchEmbed(postUrl: string): Promise<{ image: string; handle: string }> {
+/**
+ * The cover image, page and caption of a public post (best effort: private posts or a blocked
+ * request give nothing).
+ */
+export async function fetchPost(postUrl: string): Promise<PostInfo> {
+  // The embed page has the bare photo / reel cover (the link-preview image of a reel carries a play
+  // icon), the page's username and the caption.
+  const embed = await fetchEmbed(postUrl);
+  if (embed.image && embed.handle && embed.caption) return embed;
+  const og = await fetchPreview(postUrl);
+  return { image: embed.image || og.image, handle: embed.handle || og.handle, caption: embed.caption || og.caption };
+}
+
+const NOTHING: PostInfo = { image: "", handle: "", caption: "" };
+
+async function fetchEmbed(postUrl: string): Promise<PostInfo> {
   try {
     const res = await fetch(`${instagramWeb()}${new URL(postUrl).pathname}embed/captioned/`, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; facebookexternalhit/1.1)", "Accept-Language": "en-US,en" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return { image: "", handle: "" };
+    if (!res.ok) return NOTHING;
     const html = (await res.text()).slice(0, 600_000);
     const tag = html.match(/<img[^>]+class=["'][^"']*EmbeddedMediaImage[^"']*["'][^>]*>/i)?.[0] ?? "";
     const image = decode(tag.match(/\ssrc=["']([^"']+)["']/i)?.[1] ?? "");
     const handle = parseHandle(decode(html.match(/class=["'][^"']*UsernameText[^"']*["'][^>]*>\s*([^<\s]+)\s*</i)?.[1] ?? ""));
-    return { image: /^https?:\/\//.test(image) ? image : "", handle };
+    // <div class="Caption"><a class="CaptionUsername">page</a><br/>caption…<div class="CaptionComments">…
+    let cap = html.match(/<div[^>]+class=["']Caption["'][^>]*>([\s\S]*?)(?:<div[^>]+class=["']CaptionComments|<\/div>)/i)?.[1] ?? "";
+    cap = cap.replace(/<a[^>]+class=["'][^"']*CaptionUsername[^"']*["'][^>]*>[\s\S]*?<\/a>/i, "");
+    return { image: /^https?:\/\//.test(image) ? image : "", handle, caption: plain(cap) };
   } catch {
-    return { image: "", handle: "" };
+    return NOTHING;
   }
 }
 
-async function fetchPreview(postUrl: string): Promise<{ image: string; handle: string }> {
+async function fetchPreview(postUrl: string): Promise<PostInfo> {
   try {
     const res = await fetch(instagramWeb() + new URL(postUrl).pathname, {
       headers: { "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "Accept-Language": "en-US,en" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return { image: "", handle: "" };
+    if (!res.ok) return NOTHING;
     const html = (await res.text()).slice(0, 400_000);
     const image = meta(html, "og:image");
-    // "12 likes, 3 comments - nice.shop on May 1, 2025: …" or "Name (@nice.shop) • Instagram reel"
-    const text = `${meta(html, "og:description")} ${meta(html, "og:title")} ${meta(html, "twitter:title")}`;
+    // "12 likes, 3 comments - nice.shop on May 1, 2025: "caption"." or "Name (@nice.shop) • Instagram reel"
+    const desc = meta(html, "og:description");
+    const text = `${desc} ${meta(html, "og:title")} ${meta(html, "twitter:title")}`;
     const handle = parseHandle(text.match(/-\s+([a-z0-9._]{1,30})\s+on\s/i)?.[1] ?? text.match(/@([a-z0-9._]{1,30})/i)?.[1] ?? "");
-    return { image: /^https?:\/\//.test(image) ? image : "", handle };
+    const caption = (desc.match(/:\s*["“]([\s\S]*)["”]\.?\s*$/)?.[1] ?? "").trim();
+    return { image: /^https?:\/\//.test(image) ? image : "", handle, caption };
   } catch {
-    return { image: "", handle: "" };
+    return NOTHING;
   }
 }
 
@@ -292,6 +319,7 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
   shop.ig_contact_id = ev.customerId;
   let reply: string;
   let buttons = await buttonsFor(db, shop);
+  let cards: ProductCard[] = [];
   if (first) {
     const todo = await setupTodo(db, shop);
     reply = [
@@ -303,7 +331,9 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
     ].join("\n\n");
   } else {
     if (ev.type === "text" || ev.payload) {
-      const r = await runShopChat(d, shop, { text: ev.body, payload: ev.payload });
+      const replyTo = await cardProduct(db, "instagram", ev.customerId, ev.replyTo);
+      const r = await runShopChat(d, shop, { text: ev.body, payload: ev.payload, replyTo });
+      cards = r.cards ?? [];
       reply = r.text;
       buttons = r.buttons;
     } else reply = "لطفاً از دکمه‌ها استفاده کنید یا دستور را به‌صورت متن بفرستید. 👇";
@@ -313,7 +343,17 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
     // Instagram caps a text DM at 1000 characters: longer replies go in parts.
     // The buttons go with the last part.
     const parts = splitMessage(reply, 990);
-    for (const [i, part] of parts.entries()) await sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, part, i === parts.length - 1 ? buttons : []);
+    const send = (text: string, last: boolean) => sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, text, last ? buttons : []);
+    for (const [i, part] of parts.entries()) await send(part, i === parts.length - 1 && !cards.length);
+    // Each product as its photo and a caption; replying to either sets that product's price.
+    for (const [i, card] of cards.entries()) {
+      if (card.image_key) {
+        const mid = await sendImageDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, `${d.siteUrl}/img/${card.image_key}`).catch(() => "");
+        if (mid) await rememberCard(db, "instagram", ev.customerId, mid, card.id);
+      }
+      const mid = await send(card.caption, i === cards.length - 1);
+      await rememberCard(db, "instagram", ev.customerId, mid, card.id);
+    }
     await log(first ? "linked" : "replied", who, ev.body.slice(0, 120));
   } catch (e) {
     await log("send_failed", who, String((e as Error).message ?? e));

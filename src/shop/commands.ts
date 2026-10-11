@@ -275,6 +275,51 @@ export interface ChatButton {
 export interface ChatReply {
   text: string;
   buttons: ChatButton[];
+  /** Products to show one by one (photo + caption); a reply to one sets its price. */
+  cards?: ProductCard[];
+}
+
+export interface ProductCard {
+  id: number;
+  title: string;
+  image_key: string;
+  caption: string;
+}
+
+/** The shop's products as chat cards: unpriced first. */
+async function productCards(db: D1Database, shop: Shop): Promise<ProductCard[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, title, price, awaiting_price, is_active, image_key, (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes
+       FROM products p WHERE shop_id = ? ORDER BY awaiting_price DESC, id DESC LIMIT 10`,
+    )
+    .bind(shop.id)
+    .all<{ id: number; title: string; price: number; awaiting_price: number; is_active: number; image_key: string; wishes: number }>();
+  return results.map((p) => ({
+    id: p.id,
+    title: p.title,
+    image_key: p.image_key,
+    caption: [
+      `🛍 ${p.title}`,
+      `${p.awaiting_price ? "🏷 هنوز قیمت ندارد" : `🏷 ${toman(p.price)}`}${p.is_active ? "" : " — ناموجود"} — ${n(p.wishes)} آرزو`,
+      `↩️ برای ${p.awaiting_price ? "ثبت" : "تغییر"} قیمت، روی همین پیام ریپلای کنید و فقط مبلغ را بنویسید.`,
+    ].join("\n"),
+  }));
+}
+
+/** Remember a card sent in a chat, so a reply to it means that product. */
+export async function rememberCard(db: D1Database, channel: string, chatId: string, messageId: string, productId: number) {
+  await db.batch([
+    db.prepare("INSERT OR REPLACE INTO chat_cards (channel, chat_id, message_id, product_id, created_at) VALUES (?, ?, ?, ?, ?)").bind(channel, chatId, messageId, productId, now()),
+    db.prepare("DELETE FROM chat_cards WHERE created_at < ?").bind(new Date(Date.now() - 30 * 86400_000).toISOString()),
+  ]);
+}
+
+/** The product whose card a chat message replied to. */
+export async function cardProduct(db: D1Database, channel: string, chatId: string, messageId: string | undefined) {
+  if (!messageId) return 0;
+  const r = await db.prepare("SELECT product_id FROM chat_cards WHERE channel = ? AND chat_id = ? AND message_id = ?").bind(channel, chatId, messageId).first<{ product_id: number }>();
+  return r?.product_id ?? 0;
 }
 
 const STATE_TTL_MS = 30 * 60_000;
@@ -308,7 +353,7 @@ const CANCEL: ChatButton = { title: "انصراف", payload: "x" };
 const COMMAND_WORD = /^(کارت|card|قیمت|price|سفارش|order|تایید|تأیید|ok|confirm|رد|reject|ارسال|ship|لغو|cancel|محصولات|کالاها|products|راهنما|help|منو|menu|عضویت|join|موجود|ناموجود)(\s|$)/i;
 
 /** A message or a button press from the shop's chat: run it and say what's next. */
-export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; payload?: string }): Promise<ChatReply> {
+export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; payload?: string; replyTo?: number }): Promise<ChatReply> {
   const db = d.db;
   const ask = async (state: string, text: string, extra: ChatButton[] = []): Promise<ChatReply> => {
     await setState(db, shop, state);
@@ -360,6 +405,14 @@ export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; p
         return { text: "لغو شد. 👇", buttons: await buttonsFor(db, shop) };
     }
   }
+  // A reply to a product card: an amount is its price, "ناموجود" / "موجود" its availability.
+  if (!command && input.replyTo) {
+    const t = normalizeCommand(input.text ?? "");
+    const p = await db.prepare("SELECT id FROM products WHERE id = ? AND shop_id = ?").bind(input.replyTo, shop.id).first<{ id: number }>();
+    if (p && /^[\d,٬]+\s*(هزار|k)?\s*(تومان)?$/i.test(t)) command = `قیمت ${p.id} ${t}`;
+    else if (p && /^(ناموجود|موجود)$/.test(t)) command = `${t} ${p.id}`;
+    if (command && shop.chat_state) await setState(db, shop, "");
+  }
   if (!command) {
     const raw = (input.text ?? "").trim();
     const fresh = shop.chat_state && shop.chat_state_at && Date.now() - Date.parse(shop.chat_state_at) < STATE_TTL_MS;
@@ -370,9 +423,16 @@ export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; p
     } else command = raw;
     if (shop.chat_state) await setState(db, shop, ""); // the question is answered (or set aside for a typed command)
   }
+  const after = () => db.prepare("SELECT * FROM shops WHERE id = ?").bind(shop.id).first<Shop>().then((x) => x ?? shop);
+  // The products as cards (photo + caption) to reply to, rather than a list of numbers.
+  if (/^(محصولات|کالاها|products)$/i.test(normalizeCommand(command))) {
+    const cards = await productCards(db, shop);
+    if (cards.length) {
+      return { text: "🛍 محصولات شما 👇\nبرای ثبت یا تغییر قیمت هر محصول، روی پیام همان محصول ریپلای کنید و فقط مبلغ را بنویسید (مثلاً 850000 یا ۸۵۰ هزار).", buttons: await buttonsFor(db, await after()), cards };
+    }
+  }
   const text = await runShopCommand(d, shop, command);
-  const after = (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(shop.id).first<Shop>()) ?? shop;
-  return { text, buttons: await buttonsFor(db, after) };
+  return { text, buttons: await buttonsFor(db, await after()) };
 }
 
 /** Chat buttons as a Bale/Telegram inline keyboard, two per row ("c:<code>" comes back as a callback). */

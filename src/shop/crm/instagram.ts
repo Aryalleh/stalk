@@ -38,6 +38,8 @@ export interface IgEvent {
   at: string;
   /** The code of the quick-reply button that was tapped, if any. */
   payload?: string;
+  /** The message this one replies to (swipe-to-reply), if any. */
+  replyTo?: string;
 }
 
 interface Payload {
@@ -56,7 +58,7 @@ interface Payload {
         is_echo?: boolean;
         is_deleted?: boolean;
         attachments?: { type?: string; payload?: { url?: string } }[];
-        reply_to?: { story?: { url?: string } };
+        reply_to?: { mid?: string; story?: { url?: string } };
       };
     }[];
   }[];
@@ -87,6 +89,7 @@ export function parseWebhook(body: unknown): IgEvent[] {
         body: body.slice(0, 4000),
         at: new Date(ev.timestamp ?? Date.now()).toISOString(),
         ...(m.quick_reply?.payload ? { payload: String(m.quick_reply.payload).slice(0, 200) } : {}),
+        ...(m.reply_to?.mid ? { replyTo: String(m.reply_to.mid) } : {}),
       });
     }
   }
@@ -97,7 +100,7 @@ export function parseWebhook(body: unknown): IgEvent[] {
 export async function sendDm(token: string, accountId: string, recipientId: string, text: string, buttons: { title: string; payload: string }[] = []) {
   // Quick replies: up to 13 buttons above the keyboard (titles up to 20 characters).
   const quick_replies = buttons.slice(0, 13).map((b) => ({ content_type: "text", title: b.title.slice(0, 20), payload: b.payload }));
-  const res = await fetch(`${GRAPH}/${encodeURIComponent(accountId)}/messages`, {
+  const res = await fetchRetry(`${GRAPH}/${encodeURIComponent(accountId)}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ recipient: { id: recipientId }, message: quick_replies.length ? { text, quick_replies } : { text } }),
@@ -105,6 +108,15 @@ export async function sendDm(token: string, accountId: string, recipientId: stri
   const data = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { message?: string } };
   if (!res.ok || !data.message_id) throw new Error(data.error?.message ?? `instagram ${res.status}`);
   return data.message_id;
+}
+
+/** Send a photo DM (by a public URL). Returns Instagram's message id. */
+export async function sendImageDm(token: string, accountId: string, recipientId: string, url: string) {
+  const d = await graph<{ message_id?: string }>(token, `${encodeURIComponent(accountId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ recipient: { id: recipientId }, message: { attachment: { type: "image", payload: { url } } } }),
+  });
+  return d.message_id ?? "";
 }
 
 /** Username and name of an Instagram user who messaged the account (best effort). */
@@ -162,8 +174,18 @@ export function parseComments(body: unknown): IgComment[] {
   return out;
 }
 
+/** fetch, tried once more when the connection drops (not on an error answer). */
+async function fetchRetry(url: string, init: RequestInit) {
+  try {
+    return await fetch(url, init);
+  } catch {
+    await new Promise((r) => setTimeout(r, 500));
+    return fetch(url, init);
+  }
+}
+
 async function graph<T>(token: string, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${GRAPH}/${path}`, {
+  const res = await fetchRetry(`${GRAPH}/${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });

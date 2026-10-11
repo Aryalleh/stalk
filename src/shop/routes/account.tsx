@@ -450,7 +450,7 @@ account.post("/me/instagram", async (c) => {
         `INSERT INTO products (shop_id, title, description, price, awaiting_price, image_key, is_active, created_at, updated_at, code, source_url, added_by)
          VALUES (?, ?, ?, 1, 1, ?, 1, ?, ?, ?, ?, ?) RETURNING id, shop_id`,
       )
-      .bind(shop.id, values.title.slice(0, 120), `از اینستاگرام @${handle}`, image, t, t, productCode(shop.slug), postUrl, user.id)
+      .bind(shop.id, values.title.slice(0, 120), post.caption.slice(0, 2000) || `از اینستاگرام @${handle}`, image, t, t, productCode(shop.slug), postUrl, user.id)
       .first<{ id: number; shop_id: number }>();
     if (image) await db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(product!.id, image).run();
   }

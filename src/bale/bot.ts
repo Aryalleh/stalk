@@ -4,11 +4,11 @@ import { normalizePhone } from "../../lib/normalize";
 import type { C, Env } from "../env";
 import { confirmOrder, rejectOrder, shopOwnerChats } from "../shop/orders";
 import { siteUrl } from "../shop/routes/helpers";
-import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, type BotKind } from "./botapi";
+import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
 import { useConnectToken } from "./connect";
 import { saveLink } from "./links";
 import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
-import { inlineKeyboard as chatButtons, runShopChat } from "../shop/commands";
+import { cardProduct, inlineKeyboard as chatButtons, rememberCard, runShopChat, type ChatReply } from "../shop/commands";
 import type { Shop } from "../shop/db";
 
 // Webhook for the site's Bale/Telegram bots (registered from /admin/settings → "connect").
@@ -29,6 +29,7 @@ interface Update {
     from?: { id?: number; first_name?: string; last_name?: string; username?: string };
     text?: string;
     contact?: { phone_number?: string; user_id?: number };
+    reply_to_message?: { message_id?: number };
   };
   callback_query?: {
     id: string;
@@ -115,8 +116,9 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
   if (text && !/^\/start(@\w+)?$/.test(text)) {
     const shop = await shopForChat(c, kind, String(chatId));
     if (shop) {
-      const r = await runShopChat(shopDeps(c), shop, { text });
-      reply(r.text.slice(0, 4000), chatButtons(r.buttons));
+      const replyTo = await cardProduct(c.env.DB, kind, String(chatId), msg?.reply_to_message?.message_id ? String(msg.reply_to_message.message_id) : undefined);
+      const r = await runShopChat(shopDeps(c), shop, { text, replyTo });
+      c.executionCtx.waitUntil(sendChatReply(c, kind, String(chatId), r).catch((e) => console.error(e)));
       return c.json({ ok: true });
     }
   }
@@ -143,6 +145,21 @@ function shopForChat(c: C, kind: BotKind, chatId: string) {
     .first<Shop>();
 }
 
+/** A shop chat reply: the text, then each product card (photo + caption; a reply to it sets the price). */
+async function sendChatReply(c: C, kind: BotKind, chatId: string, r: ChatReply) {
+  const s = c.get("settings");
+  const cards = r.cards ?? [];
+  await sendBotMessage(s, kind, chatId, r.text.slice(0, 4000), cards.length ? undefined : chatButtons(r.buttons));
+  for (const [i, card] of cards.entries()) {
+    const markup = i === cards.length - 1 ? chatButtons(r.buttons) : undefined;
+    const obj = card.image_key ? await c.env.IMAGES.get(card.image_key) : null;
+    const sent = obj
+      ? await sendBotPhoto(s, kind, chatId, { data: await obj.arrayBuffer(), type: obj.httpMetadata?.contentType ?? "image/jpeg", name: card.image_key.split("/").pop()! }, card.caption, markup)
+      : await sendBotMessage(s, kind, chatId, card.caption, markup);
+    if (sent?.message_id) await rememberCard(c.env.DB, kind, chatId, String(sent.message_id), card.id);
+  }
+}
+
 async function handleCallback(c: C, kind: BotKind, q: NonNullable<Update["callback_query"]>) {
   const s = c.get("settings");
   const chatId = String(q.message?.chat?.id ?? "");
@@ -154,7 +171,7 @@ async function handleCallback(c: C, kind: BotKind, q: NonNullable<Update["callba
     if (!shop) return answer("اجازه این کار را ندارید.");
     const r = await runShopChat(shopDeps(c), shop, { payload: btn[1] });
     await answer("✓");
-    await sendBotMessage(s, kind, chatId, r.text.slice(0, 4000), chatButtons(r.buttons)).catch((e) => console.error(e));
+    await sendChatReply(c, kind, chatId, r).catch((e) => console.error(e));
     return;
   }
   const m = q.data?.match(/^pay:(ok|no):(\d+)$/);
