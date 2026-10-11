@@ -59,6 +59,11 @@ export const DEFAULTS = {
   // {platform} the platform's @page, {dm} a link that opens a DM to it, {wishes} how many wishes.
   ig_invite_text:
     "سلام وقت بخیر 🌸\nمحصول «{product}» از صفحه‌ی شما در لیست آرزوی {site_name} قرار گرفته تا دوستان و خانواده برایش کادو بخرند 🎁\n{link}\n\nبرای اینکه بتوانند بخرند، کافی است یک پیام به صفحه‌ی {platform} بدهید ({dm}). آنجا قیمت و شماره کارتتان را می‌دهید و پول مستقیم به کارت خودتان واریز می‌شود؛ سفارش‌ها را هم همان‌جا تأیید و کد رهگیری را ثبت می‌کنید.\nاگر خواستید، با یک کلیک فروشگاه کامل خودتان را هم در {site_name} خواهید داشت (رایگان).",
+  // A page that hasn't written to the site's account yet is mentioned in a post on it (Instagram
+  // tells the page), once per page; "" turns it off. Placeholders as in ig_invite_text.
+  ig_mention_post: "1",
+  ig_mention_caption:
+    "🎁 «{product}» از {shop} در لیست آرزوی کاربران {site_name} است و دوستانشان می‌خواهند برایشان بخرند!\n{shop} عزیز، برای فعال شدن فروش و دریافت مستقیم پول به کارت خودتان، یک پیام به همین صفحه بدهید 💌\n#کادو #لیست_آرزو #هدیه",
   // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.
   ga_measurement_id: "",
   cf_analytics_token: "",

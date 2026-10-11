@@ -6,7 +6,7 @@ import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { availableByVariant, getPublicProduct, normCity, now, productCode, productImages, randomSlug, toman, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
 import { inlineKeyboard } from "../commands";
-import { dmPage, downloadImage, externalShop, fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl } from "../instagram-shops";
+import { dmPage, mentionPage, downloadImage, externalShop, fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl } from "../instagram-shops";
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
@@ -480,7 +480,8 @@ account.post("/me/instagram", async (c) => {
           Promise.all([shopOwnerChats(db, info.shop_id), db.prepare("SELECT * FROM shops WHERE id = ?").bind(info.shop_id).first<Shop>()]).then(async ([chats, shop]) =>
             chats && shop ? sendToChats(settings, chats, `${toShop}\nیا از پنل: ${site}/panel/products/${info.id}`, () => inlineKeyboard([{ title: `🏷 قیمت ${info.title.slice(0, 12)}`, payload: `pr:${info.id}` }])) : "",
           ),
-      info.ig_contact_id ? dmPage(deps, info.shop_id, toShop) : null,
+      // A page we can DM hears it there; one that hasn't written yet is mentioned in a post (once).
+      info.ig_contact_id ? dmPage(deps, info.shop_id, toShop) : info.is_external ? mentionPage(deps, info.shop_id, info.id) : null,
     ]),
   );
   return c.redirect(`/me/instagram?added=${product!.id}&list=${list!.id}`);

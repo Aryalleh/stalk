@@ -180,6 +180,27 @@ export async function subscribeWebhook(token: string) {
   await graph<{ success?: boolean }>(token, "me/subscribed_apps?subscribed_fields=messages,comments", { method: "POST" });
 }
 
+/**
+ * Publish a photo post (Content Publishing): a container for a public JPEG, then publish it.
+ * Returns the post's id.
+ */
+export async function publishPhoto(token: string, accountId: string, imageUrl: string, caption: string) {
+  const acct = encodeURIComponent(accountId);
+  const container = await graph<{ id?: string }>(token, `${acct}/media`, { method: "POST", body: JSON.stringify({ image_url: imageUrl, caption }) });
+  if (!container.id) throw new Error("instagram: no media container");
+  // The image is fetched by Instagram first; publishing too early fails, so try a few times.
+  for (let i = 0; ; i++) {
+    try {
+      const post = await graph<{ id?: string }>(token, `${acct}/media_publish`, { method: "POST", body: JSON.stringify({ creation_id: container.id }) });
+      if (!post.id) throw new Error("instagram: not published");
+      return post.id;
+    } catch (e) {
+      if (i >= 3) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+}
+
 /** Private reply: a DM to the person who commented (once per comment, within 7 days). */
 export async function privateReply(token: string, accountId: string, commentId: string, text: string) {
   const d = await graph<{ message_id?: string }>(token, `${encodeURIComponent(accountId)}/messages`, {
@@ -232,8 +253,11 @@ export async function refreshToken(token: string) {
 
 export const IG_SCOPES = ["instagram_business_basic", "instagram_business_manage_messages", "instagram_business_manage_comments"];
 
-export function authorizeUrl(appId: string, redirectUri: string, state: string) {
-  const p = new URLSearchParams({ client_id: appId, redirect_uri: redirectUri, response_type: "code", scope: IG_SCOPES.join(","), state });
+/** The site's own account also publishes (the posts that mention pages it can't DM first). */
+export const PLATFORM_IG_SCOPES = [...IG_SCOPES, "instagram_business_content_publish"];
+
+export function authorizeUrl(appId: string, redirectUri: string, state: string, scopes = IG_SCOPES) {
+  const p = new URLSearchParams({ client_id: appId, redirect_uri: redirectUri, response_type: "code", scope: scopes.join(","), state });
   return `https://www.instagram.com/oauth/authorize?force_reauth=true&${p}`;
 }
 

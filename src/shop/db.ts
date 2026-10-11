@@ -91,6 +91,9 @@ export interface Shop {
   /** A chat button's question waiting for its answer (commands.ts), and when it was asked. */
   chat_state: string;
   chat_state_at: string | null;
+  /** When the site's Instagram account mentioned this page in a post to reach it, and that post. */
+  mention_at: string | null;
+  mention_post_id: string;
   created_at: string;
 }
 

@@ -25,7 +25,7 @@ import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
 import { handOver, igLog, inviteText } from "../instagram-shops";
-import { authorizeUrl, exchangeCode, fetchAccount, subscribeWebhook } from "../crm/instagram";
+import { PLATFORM_IG_SCOPES, authorizeUrl, exchangeCode, fetchAccount, subscribeWebhook } from "../crm/instagram";
 import { cleanIgToken } from "../crm/routes";
 
 export const panel = new Hono<Env>();
@@ -863,6 +863,8 @@ admin.post("/admin/instagram/settings", async (c) => {
     platform_instagram: (f.platform_instagram ?? "").trim().replace(/^@/, "").toLowerCase().slice(0, 60),
     platform_ig_account_id: (f.platform_ig_account_id ?? "").replace(/\D/g, "").slice(0, 30),
     ig_invite_text: (f.ig_invite_text ?? "").replace(/\r/g, "").trim().slice(0, 2000),
+    ig_mention_post: f.ig_mention_post ? "1" : "",
+    ig_mention_caption: (f.ig_mention_caption ?? "").replace(/\r/g, "").trim().slice(0, 2000),
   };
   const token = cleanIgToken(f.platform_ig_token ?? "");
   if (token) {
@@ -916,7 +918,7 @@ admin.get("/admin/instagram/connect", (c) => {
   if (!s.ig_app_id || !s.meta_app_secret) return igBack(c, "اول Instagram app ID و App secret را در «تنظیمات سایت» وارد کنید.", false);
   const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
   setCookie(c, PLATFORM_IG_STATE, state, { httpOnly: true, secure: true, sameSite: "Lax", path: "/panel/settings/instagram", maxAge: 600 });
-  return c.redirect(authorizeUrl(s.ig_app_id, platformRedirect(c), state));
+  return c.redirect(authorizeUrl(s.ig_app_id, platformRedirect(c), state, PLATFORM_IG_SCOPES));
 });
 
 /** The site account's login coming back; anything else (a shop connecting) goes on to the shops' handler. */

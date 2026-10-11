@@ -1744,6 +1744,8 @@ const LOG_LABEL: Record<string, [string, string]> = {
   no_username: ["⚠️", "نام کاربری فرستنده از اینستاگرام گرفته نشد (دسترسی توکن یا حالت Development اپ)"],
   send_failed: ["❌", "پیام رسید ولی ارسال جواب ناموفق بود"],
   subscribe_failed: ["❌", "اشتراک وبهوک ناموفق بود"],
+  mentioned: ["📣", "پستی با منشن این پیج منتشر شد؛ اینستاگرام به پیج خبر داد"],
+  mention_failed: ["❌", "انتشار پست منشن ناموفق بود"],
   not_connected: ["❌", "پیام رسید ولی پیج سایت وصل نیست (توکن ندارد)"],
   unknown_account: ["⚠️", "پیامی برای حسابی رسید که نه پیج سایت است نه فروشگاه وصل‌شده؛ شناسه را با شناسه‌ی پیج سایت مقایسه کنید"],
   bad_signature: ["❌", "تحویل وبهوک رد شد: امضا نامعتبر است؛ App secret در تنظیمات سایت را بررسی کنید"],
@@ -1920,6 +1922,16 @@ export function AdminInstagramPage(props: {
         <p class="small muted" style="margin:6px 0 0">
           جایگزین‌ها: <span class="ltr">{"{shop} {product} {link} {platform} {dm} {site} {site_name} {wishes}"}</span>
         </p>
+        <label class="row" style="margin-top:14px;color:var(--fg)">
+          <input type="checkbox" name="ig_mention_post" value="1" checked={!!s.ig_mention_post} /> پیام اول خودکار: منشن فروشنده در یک پست صفحه‌ی سایت
+        </label>
+        <p class="small muted" style="margin:4px 0 0;line-height:1.9">
+          اینستاگرام اجازه نمی‌دهد صفحه‌ی سایت اول به فروشنده دایرکت بدهد. به‌جایش برای هر فروشنده‌ی تازه یک بار پستی با عکس محصول منتشر می‌شود که او را منشن می‌کند؛
+          اینستاگرام به او خبر می‌دهد و از اولین پیامش همه‌چیز خودکار است. نیاز به دسترسی <span class="ltr">instagram_business_content_publish</span> دارد
+          (یک بار «ورود دوباره» بزنید) و عکس محصول باید JPEG باشد.
+        </p>
+        <label>متن پست منشن</label>
+        <textarea name="ig_mention_caption" rows={5}>{s.ig_mention_caption}</textarea>
         <p><button>ذخیره</button></p>
       </form>
     </AdminShell>

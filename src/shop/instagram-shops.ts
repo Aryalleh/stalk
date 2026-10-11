@@ -12,7 +12,7 @@
 // so the first message to a page can't be sent by the site; it's prepared for a person to send.
 import type { Settings } from "../settings";
 import { now, randomSlug, type Shop } from "./db";
-import { fetchProfile, instagramWeb, sendDm, type IgEvent } from "./crm/instagram";
+import { fetchProfile, instagramWeb, publishPhoto, sendDm, type IgEvent } from "./crm/instagram";
 import { buttonsFor, runShopChat, setupTodo } from "./commands";
 import type { Deps } from "./orders";
 
@@ -212,6 +212,57 @@ export async function dmPage(d: Deps, shopId: number, text: string) {
     return true;
   } catch (e) {
     console.error("instagram dm to page", shopId, e);
+    return false;
+  }
+}
+
+/**
+ * Reach a page that hasn't written to the site's account yet. Instagram doesn't let the account
+ * DM it first (there is no id to write to until it does), so the account publishes a post with
+ * the item's photo that mentions the page: Instagram notifies the page, and the caption asks it to
+ * send a message. Once per page; logged either way. Returns whether the post went up.
+ */
+export async function mentionPage(d: Deps, shopId: number, productId: number) {
+  const s = d.settings;
+  if (!s.ig_mention_post || !platformReady(s)) return false;
+  const db = d.db;
+  const row = await db
+    .prepare(
+      `SELECT s.instagram, s.ig_contact_id, s.mention_at, s.is_external, p.title, p.source_url, p.image_key,
+              (SELECT COUNT(*) FROM wishlist_items i JOIN products q ON q.id = i.product_id WHERE q.shop_id = s.id) AS wishes
+       FROM shops s JOIN products p ON p.shop_id = s.id WHERE s.id = ? AND p.id = ?`,
+    )
+    .bind(shopId, productId)
+    .first<{ instagram: string; ig_contact_id: string; mention_at: string | null; is_external: number; title: string; source_url: string; image_key: string; wishes: number }>();
+  if (!row || !row.is_external || row.ig_contact_id || row.mention_at) return false;
+  const who = `@${row.instagram}`;
+  const log = (result: string, detail = "") => igLog(db, { account_id: s.platform_ig_account_id, sender: who, result, detail });
+  // Instagram publishes JPEG photos only, from a public address.
+  if (!/\.jpe?g$/i.test(row.image_key)) return log("mention_failed", "عکس محصول JPEG نیست").then(() => false);
+  // Claim the page first, so two wishes at once don't post twice.
+  const claim = await db.prepare("UPDATE shops SET mention_at = ? WHERE id = ? AND mention_at IS NULL").bind(now(), shopId).run();
+  if (!claim.meta.changes) return false;
+  const caption = fill(s.ig_mention_caption, {
+    site: d.siteUrl,
+    site_name: s.site_name,
+    shop: who,
+    product: row.title,
+    link: row.source_url,
+    wishes: String(row.wishes),
+    platform: s.platform_instagram ? `@${s.platform_instagram}` : s.site_name,
+    dm: s.platform_instagram ? dmLink(s.platform_instagram) : d.siteUrl,
+  });
+  try {
+    const id = await publishPhoto(s.platform_ig_token, s.platform_ig_account_id, `${d.siteUrl}/img/${row.image_key}`, caption.slice(0, 2200));
+    await db.prepare("UPDATE shops SET mention_post_id = ?, invite_status = CASE WHEN invite_status = '' THEN 'invited' ELSE invite_status END, invited_at = COALESCE(invited_at, ?) WHERE id = ?")
+      .bind(id, now(), shopId)
+      .run();
+    await log("mentioned", `post ${id}`);
+    return true;
+  } catch (e) {
+    // Not posted: let a later wish try again.
+    await db.prepare("UPDATE shops SET mention_at = NULL WHERE id = ?").bind(shopId).run();
+    await log("mention_failed", String((e as Error).message ?? e).slice(0, 300));
     return false;
   }
 }
