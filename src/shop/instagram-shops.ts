@@ -122,7 +122,7 @@ async function fetchPreview(postUrl: string): Promise<PostInfo> {
 }
 
 /** Download a post's cover so it outlives Instagram's expiring CDN link. */
-export async function downloadImage(url: string): Promise<{ data: ArrayBuffer; type: string } | null> {
+export async function downloadImage(url: string, tries = 2): Promise<{ data: ArrayBuffer; type: string } | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();
@@ -130,7 +130,10 @@ export async function downloadImage(url: string): Promise<{ data: ArrayBuffer; t
     const data = await res.arrayBuffer();
     return data.byteLength > 0 && data.byteLength <= 8 * 1024 * 1024 ? { data, type } : null;
   } catch {
-    return null;
+    // A dropped connection: once more.
+    if (tries <= 1) return null;
+    await new Promise((r) => setTimeout(r, 500));
+    return downloadImage(url, tries - 1);
   }
 }
 

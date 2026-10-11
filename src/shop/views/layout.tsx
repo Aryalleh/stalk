@@ -658,3 +658,35 @@ export function Errors(props: { errors?: (string | undefined)[] }) {
 export function Thumb(props: { imageKey: string; alt: string }) {
   return <div class="thumb">{props.imageKey ? <img src={`/img/${props.imageKey}`} alt={props.alt} loading="lazy" /> : "🎁"}</div>;
 }
+
+/** "Seen it on Instagram? Add it": the entry to /me/instagram (home, wishlists). */
+export function InstagramCta(props: { list?: number; compact?: boolean; class?: string }) {
+  const href = `/me/instagram${props.list ? `?list=${props.list}` : ""}`;
+  if (props.compact) {
+    return (
+      <a href={href} class={`flex items-center gap-3 rounded-2xl p-3 text-white bg-gradient-to-l from-fuchsia-500 via-pink-500 to-amber-400 shadow-lg shadow-pink-500/20 active:scale-[.98] transition-transform ${props.class ?? ""}`}>
+        <span class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shrink-0"><i class="fa-brands fa-instagram"></i></span>
+        <span class="flex-1 min-w-0">
+          <b class="block text-sm">افزودن از اینستاگرام</b>
+          <span class="block text-[11px] text-white/85 truncate">لینک پست یا ریلز را بده، به لیستت اضافه می‌شود</span>
+        </span>
+        <i class="fa-solid fa-chevron-left text-sm"></i>
+      </a>
+    );
+  }
+  return (
+    <a href={href} class={`group block relative overflow-hidden rounded-3xl p-5 text-white bg-gradient-to-br from-fuchsia-500 via-pink-500 to-amber-400 shadow-xl shadow-pink-500/20 ${props.class ?? ""}`}>
+      <i class="fa-brands fa-instagram absolute -left-4 -bottom-6 text-[120px] text-white/10 group-hover:rotate-12 transition-transform duration-500"></i>
+      <div class="relative flex items-center gap-4">
+        <span class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-3xl shrink-0"><i class="fa-brands fa-instagram"></i></span>
+        <div class="flex-1 min-w-0">
+          <h2 class="text-base font-black">محصولی در اینستاگرام دیدی؟ 😍</h2>
+          <p class="text-xs text-white/90 leading-6 mt-0.5">لینک پستش را بده تا به لیست آرزویت اضافه شود؛ دوستانت مستقیم از همان پیج برایت می‌خرند 🎁</p>
+        </div>
+      </div>
+      <span class="relative mt-4 inline-flex items-center gap-2 bg-white text-pink-600 font-black text-sm px-4 py-2.5 rounded-2xl shadow">
+        <i class="fa-solid fa-plus"></i> افزودن از اینستاگرام
+      </span>
+    </a>
+  );
+}

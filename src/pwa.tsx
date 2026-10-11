@@ -53,7 +53,10 @@ pwa.get("/manifest.webmanifest", (c) => {
         { src: "/static/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         { src: "/static/icon.svg", sizes: "any", type: "image/svg+xml" },
       ],
+      // Share a post from the Instagram app straight into "add from Instagram" (Android, installed app).
+      share_target: { action: "/me/instagram", method: "GET", params: { title: "title", text: "text", url: "url" } },
       shortcuts: [
+        { name: "افزودن از اینستاگرام", url: "/me/instagram", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
         { name: "لیست‌های آرزوی من", url: "/me/wishlists", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
         { name: "جستجوی هدیه", url: "/#search", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },
         { name: "پنل فروشگاه", url: "/panel", icons: [{ src: "/static/icon-192.png", sizes: "192x192" }] },

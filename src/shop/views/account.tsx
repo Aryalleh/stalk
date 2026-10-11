@@ -3,7 +3,7 @@ import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, priceLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { useSite } from "../../render";
-import { Avatar, Errors, FilePicker, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
+import { Avatar, Errors, FilePicker, InstagramCta, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
@@ -651,9 +651,9 @@ export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items:
       <div class="row" style="margin-bottom:16px">
         <h1 style="margin:0">لیست‌های آرزوی من</h1>
         <span class="sp" />
-        <a class="btn small secondary" href="/me/instagram"><i class="fa-brands fa-instagram"></i> از اینستاگرام</a>
         <a class="btn small" href="/me/wishlists/new"><i class="fa-solid fa-plus"></i> لیست جدید</a>
       </div>
+      <InstagramCta compact class="mb-4" />
       {props.lists.length === 0 && <div class="card muted">هنوز لیستی نساخته‌اید. یک لیست بسازید و از صفحه محصولات آرزوهایتان را اضافه کنید.</div>}
       {props.lists.map((w) => (
         <div class="card" style="display:flex;gap:14px;align-items:center">
@@ -1004,7 +1004,7 @@ export function InstagramAddPage(props: {
   const a = props.added;
   return (
     <Layout title="آرزو از اینستاگرام" user={props.user} nav="wishes">
-      <h1><i class="fa-brands fa-instagram ml-1 text-brand"></i> آرزو از اینستاگرام</h1>
+      {a ? <h1><i class="fa-brands fa-instagram ml-1 text-brand"></i> آرزو از اینستاگرام</h1> : null}
       {a ? (
         <>
           <div class="card" style="display:flex;gap:14px;align-items:center">
@@ -1050,9 +1050,20 @@ export function InstagramAddPage(props: {
         </>
       ) : (
         <>
-          <div class="card small muted" style="line-height:1.9">
-            محصولی را در یک صفحه‌ی اینستاگرامی دیده‌اید؟ لینک پست و نام محصول را بدهید؛ عکس و صفحه را خودمان از پست برمی‌داریم.
-            قیمت و شماره کارت را خود فروشگاه ثبت می‌کند و دوستانتان مستقیم از او برایتان می‌خرند.
+          <div class="relative overflow-hidden rounded-3xl p-5 mb-4 text-white bg-gradient-to-br from-fuchsia-500 via-pink-500 to-amber-400 shadow-xl shadow-pink-500/20">
+            <i class="fa-brands fa-instagram absolute -left-5 -bottom-8 text-[130px] text-white/10"></i>
+            <div class="relative flex items-center gap-3">
+              <span class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl shrink-0"><i class="fa-brands fa-instagram"></i></span>
+              <div>
+                <h1 class="!m-0 !text-white text-xl font-black">آرزو از اینستاگرام</h1>
+                <p class="text-xs text-white/90 mt-0.5">دوستانت مستقیم از همان پیج برایت می‌خرند 🎁</p>
+              </div>
+            </div>
+            <ol class="relative mt-4 grid grid-cols-3 gap-2 text-[11px] leading-5 text-center">
+              <li class="bg-white/15 rounded-2xl p-2.5"><b class="block text-lg">۱</b>در اینستاگرام روی ⋯ یا ➤ پست بزن و «Copy link»</li>
+              <li class="bg-white/15 rounded-2xl p-2.5"><b class="block text-lg">۲</b>لینک را این پایین بچسبان</li>
+              <li class="bg-white/15 rounded-2xl p-2.5"><b class="block text-lg">۳</b>اسمش را بنویس و تمام!</li>
+            </ol>
           </div>
           <Errors errors={props.errors} />
           {props.member && (
@@ -1067,9 +1078,13 @@ export function InstagramAddPage(props: {
           ) : (
             <form method="post" action="/me/instagram" enctype="multipart/form-data" class="card">
               <label style="margin-top:0">لینک پست یا ریلز محصول</label>
-              <input name="post_url" class="ltr" required placeholder="https://www.instagram.com/p/…" value={v.post_url ?? ""} />
+              <div class="flex gap-2 items-stretch">
+                <input id="ig-url" name="post_url" class="ltr flex-1 min-w-0" required inputmode="url" autocomplete="off" placeholder="https://www.instagram.com/p/…" value={v.post_url ?? ""} />
+                <button type="button" id="ig-paste" class="secondary small !m-0 shrink-0 hidden"><i class="fa-regular fa-paste ml-1"></i>چسباندن</button>
+              </div>
+              <p id="ig-found" class="small hidden" style="margin:6px 0 0"></p>
               <label>نام محصول</label>
-              <input name="title" required maxlength={120} placeholder="مثلاً کیف چرمی قهوه‌ای" value={v.title ?? ""} />
+              <input id="ig-title" name="title" required maxlength={120} placeholder="مثلاً کیف چرمی قهوه‌ای" value={v.title ?? ""} />
               <label>لیست</label>
               <select name="wishlist_id">
                 {props.wishlists.map((w) => <option value={String(w.id)} selected={v.wishlist_id === String(w.id)}>{w.title}</option>)}
@@ -1083,9 +1098,10 @@ export function InstagramAddPage(props: {
                 <label>عکس محصول</label>
                 <FilePicker name="photo" accept="image/jpeg,image/png,image/webp" icon="fa-image" label="انتخاب عکس" />
               </details>
-              <p><button><i class="fa-solid fa-heart ml-1"></i> افزودن به لیست آرزو</button></p>
+              <p><button class="w-full !py-3.5 !text-base"><i class="fa-solid fa-heart ml-1"></i> افزودن به لیست آرزو</button></p>
             </form>
           )}
+          <script dangerouslySetInnerHTML={{ __html: INSTAGRAM_ADD_SCRIPT }} />
         </>
       )}
     </Layout>
@@ -1114,3 +1130,21 @@ export function ClaimShopPage(props: { user: User; shop: { name: string; instagr
     </Layout>
   );
 }
+
+/**
+ * The add-from-Instagram form: a paste button (where the browser allows reading the clipboard),
+ * and once a post link is in, the page it's from and its caption (which fills an empty name).
+ */
+const INSTAGRAM_ADD_SCRIPT = `(function(){
+var u=document.getElementById('ig-url'),t=document.getElementById('ig-title'),p=document.getElementById('ig-paste'),f=document.getElementById('ig-found');if(!u)return;
+var re=/instagram\\.com\\/(?:[\\w.]+\\/)?(?:p|reels?|tv)\\/[\\w-]{5,}/i,last='';
+function look(){var m=(u.value||'').match(/https?:\\/\\/\\S+/);if(m)u.value=m[0];if(!re.test(u.value)||u.value===last)return;last=u.value;
+  f.className='small muted';f.textContent='در حال خواندن پست…';
+  fetch('/me/instagram/preview?url='+encodeURIComponent(u.value),{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok){f.className='small muted';f.textContent='پست پیدا نشد؛ اگر خصوصی است، اسم را بنویس و آیدی پیج را پایین وارد کن.';return;}
+    f.className='small';f.style.color='var(--c-brand)';f.textContent='✓ پست پیدا شد'+(d.handle?' — از پیج @'+d.handle:'')+(d.member?' (عضو کادوچی)':'');
+    if(d.title&&!t.value){t.value=d.title;}
+  }).catch(function(){f.className='small hidden';});}
+u.addEventListener('input',look);u.addEventListener('change',look);
+if(navigator.clipboard&&navigator.clipboard.readText){p.classList.remove('hidden');p.addEventListener('click',function(){navigator.clipboard.readText().then(function(x){u.value=(x||'').trim();look();t.focus();}).catch(function(){u.focus();});});}
+if(u.value)look();else u.focus();})();`;

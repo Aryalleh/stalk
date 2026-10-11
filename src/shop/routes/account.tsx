@@ -395,7 +395,27 @@ async function addedItem(c: C, productId: number) {
 account.get("/me/instagram", async (c) => {
   const lists = await myLists(c);
   const added = Number(c.req.query("added")) ? await addedItem(c, Number(c.req.query("added"))) : undefined;
-  return render(c, <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: c.req.query("list") ?? "" }} added={added} />);
+  // Shared from the Instagram app (the installed app is a share target): the link is in url or text.
+  const shared = [c.req.query("url"), c.req.query("text"), c.req.query("title")].join(" ").match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i)?.[0] ?? "";
+  return render(c, <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: c.req.query("list") ?? "", post_url: shared }} added={added} />);
+});
+
+// What the form shows once a post link is in: whose post it is, and a name from its caption.
+account.get("/me/instagram/preview", async (c) => {
+  const url = parsePostUrl(c.req.query("url") ?? "");
+  if (!url) return c.json({ ok: false });
+  const known = await c.env.DB.prepare(
+    "SELECT p.title, s.instagram, s.ig_username, s.is_external FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND p.deleted_at IS NULL LIMIT 1",
+  )
+    .bind(url)
+    .first<{ title: string; instagram: string; ig_username: string; is_external: number }>();
+  if (known) return c.json({ ok: true, title: known.title, handle: known.is_external ? known.instagram : known.ig_username || parseHandle(known.instagram), member: !known.is_external });
+  const post = await fetchPost(url);
+  if (!post.handle && !post.caption && !post.image) return c.json({ ok: false });
+  // The caption's first line, without hashtags and mentions, as a name.
+  const title = (post.caption.split("\n").map((l) => l.replace(/[#@][^\s#@]+/g, "").trim()).find((l) => l.length > 1) ?? "").slice(0, 80);
+  const member = post.handle ? !!(await memberShopFor(c.env.DB, post.handle)) : false;
+  return c.json({ ok: true, title, handle: post.handle, member });
 });
 
 account.post("/me/instagram", async (c) => {

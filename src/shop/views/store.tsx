@@ -28,7 +28,7 @@ import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
 import { STEPS, faqs } from "../../content";
-import { Avatar, Errors, IconButton, Layout, MenuButton, SiteLogo, ProfileHero, TitleBar } from "./layout";
+import { Avatar, Errors, IconButton, InstagramCta, Layout, MenuButton, SiteLogo, ProfileHero, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
 // a Pinterest-like masonry feed of image cards with the title and price over a dark gradient.
@@ -256,6 +256,7 @@ export function HomePage(props: {
             {props.q && <>نتیجه جستجوی «<b class="text-fg">{props.q}</b>»</>} {props.category && <>در دسته <b class="text-fg">{props.category}</b></>}
           </p>
         )}
+        {isHome && props.page === 1 && <InstagramCta class="mb-6" />}
         {!props.q && !props.category && props.products.length > 0 && <h2 class="text-lg font-bold mb-4">تازه‌ترین هدیه‌ها</h2>}
         <Masonry products={props.products} />
         <Pager page={props.page} hasNext={props.hasNext} base={feedUrl(props.q, props.category)} />
@@ -1140,6 +1141,19 @@ export function WishlistPublicPage(props: {
         {!w.is_open && <p class="mt-4 text-sm font-bold text-amber-500">این لیست بسته شده و فعلاً امکان خرید ندارد.</p>}
       </ProfileHero>
       <section class="px-4">
+        {props.isOwner && (
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+            <InstagramCta compact list={w.id} />
+            <a href="/" class="flex items-center gap-3 rounded-2xl p-3 bg-card border border-fg/5 active:scale-[.98] transition-transform">
+              <span class="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-store"></i></span>
+              <span class="flex-1 min-w-0">
+                <b class="block text-sm text-fg">افزودن از فروشگاه‌ها</b>
+                <span class="block text-[11px] text-muted truncate">محصولات فروشگاه‌های کادوچی را ببین</span>
+              </span>
+              <i class="fa-solid fa-chevron-left text-sm text-muted"></i>
+            </a>
+          </div>
+        )}
         {props.items.length === 0 && <p class="text-center text-muted py-10">هنوز آرزویی اضافه نشده.</p>}
         <div class="masonry">
           {props.items.map((it) => {
