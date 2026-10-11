@@ -88,6 +88,9 @@ export interface Shop {
   claim_token: string;
   /** A phone number the page sent to sign up with, waiting for its one-time code. */
   claim_phone: string;
+  /** A chat button's question waiting for its answer (commands.ts), and when it was asked. */
+  chat_state: string;
+  chat_state_at: string | null;
   created_at: string;
 }
 

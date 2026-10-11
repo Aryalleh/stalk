@@ -13,7 +13,7 @@
 import type { Settings } from "../settings";
 import { now, randomSlug, type Shop } from "./db";
 import { fetchProfile, instagramWeb, sendDm, type IgEvent } from "./crm/instagram";
-import { runShopCommand, setupTodo, COMMANDS_HELP } from "./commands";
+import { buttonsFor, runShopChat, setupTodo } from "./commands";
 import type { Deps } from "./orders";
 
 const HANDLE_RE = /^[a-z0-9._]{1,30}$/;
@@ -205,10 +205,10 @@ const platformReady = (s: Settings) => !!(s.platform_ig_account_id && s.platform
 /** DM a page that has written to the site's Instagram account (fails quietly outside the 24-hour window). */
 export async function dmPage(d: Deps, shopId: number, text: string) {
   if (!platformReady(d.settings)) return false;
-  const shop = await d.db.prepare("SELECT ig_contact_id FROM shops WHERE id = ?").bind(shopId).first<{ ig_contact_id: string }>();
+  const shop = await d.db.prepare("SELECT * FROM shops WHERE id = ?").bind(shopId).first<Shop>();
   if (!shop?.ig_contact_id) return false;
   try {
-    await sendDm(d.settings.platform_ig_token, d.settings.platform_ig_account_id, shop.ig_contact_id, text);
+    await sendDm(d.settings.platform_ig_token, d.settings.platform_ig_account_id, shop.ig_contact_id, text, await buttonsFor(d.db, shop));
     return true;
   } catch (e) {
     console.error("instagram dm to page", shopId, e);
@@ -240,22 +240,29 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
     .run();
   shop.ig_contact_id = ev.customerId;
   let reply: string;
+  let buttons = await buttonsFor(db, shop);
   if (first) {
     const todo = await setupTodo(db, shop);
     reply = [
       `سلام 🌸 به ${s.site_name} خوش آمدید! محصولات صفحه‌ی @${shop.instagram} در لیست آرزوی کاربران ما هستند و دوستانشان می‌خواهند برایشان بخرند 🎁`,
       "پول مستقیم به کارت خودتان واریز می‌شود و همه‌چیز را از همین گفتگو مدیریت می‌کنید.",
       ...todo,
-      "📱 برای فروش راحت‌تر (پنل، همه محصولات، سفارش‌ها در بات): کافی است شماره موبایلتان را همین‌جا بفرستید تا ثبت‌نامتان انجام شود.",
-      COMMANDS_HELP,
+      "📱 برای فروش راحت‌تر (پنل، همه محصولات، سفارش‌ها در بات): «ثبت‌نام در سایت» را بزنید یا شماره موبایلتان را همین‌جا بفرستید.",
+      "👇 کارها را با دکمه‌های زیر انجام دهید.",
     ].join("\n\n");
   } else {
-    reply = ev.type === "text" ? await runShopCommand(d, shop, ev.body) : "لطفاً دستور را به‌صورت متن بفرستید. «راهنما» فهرست دستورها را نشان می‌دهد.";
+    if (ev.type === "text" || ev.payload) {
+      const r = await runShopChat(d, shop, { text: ev.body, payload: ev.payload });
+      reply = r.text;
+      buttons = r.buttons;
+    } else reply = "لطفاً از دکمه‌ها استفاده کنید یا دستور را به‌صورت متن بفرستید. 👇";
   }
   const who = `${ev.customerId} @${shop.instagram}`;
   try {
     // Instagram caps a text DM at 1000 characters: longer replies go in parts.
-    for (const part of splitMessage(reply, 990)) await sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, part);
+    // The buttons go with the last part.
+    const parts = splitMessage(reply, 990);
+    for (const [i, part] of parts.entries()) await sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, part, i === parts.length - 1 ? buttons : []);
     await log(first ? "linked" : "replied", who, ev.body.slice(0, 120));
   } catch (e) {
     await log("send_failed", who, String((e as Error).message ?? e));

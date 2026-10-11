@@ -8,7 +8,7 @@ import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, 
 import { useConnectToken } from "./connect";
 import { saveLink } from "./links";
 import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
-import { runShopCommand } from "../shop/commands";
+import { inlineKeyboard as chatButtons, runShopChat } from "../shop/commands";
 import type { Shop } from "../shop/db";
 
 // Webhook for the site's Bale/Telegram bots (registered from /admin/settings → "connect").
@@ -110,19 +110,13 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     return c.json({ ok: true });
   }
 
-  // A shop's admin can run the shop from here with text commands (src/shop/commands.ts).
+  // A shop's admin can run the shop from here with buttons and text commands (src/shop/commands.ts).
   const text = msg?.text?.trim();
   if (text && !/^\/start(@\w+)?$/.test(text)) {
-    const col = kind === "bale" ? "bale_chat_id" : "telegram_chat_id";
-    const shop = await c.env.DB.prepare(
-      `SELECT s.* FROM users u JOIN shops s ON s.id = u.shop_id
-       WHERE u.${col} = ? AND (u.shop_role = 'admin' OR s.owner_id = u.id) AND s.is_external = 0 LIMIT 1`,
-    )
-      .bind(String(chatId))
-      .first<Shop>();
+    const shop = await shopForChat(c, kind, String(chatId));
     if (shop) {
-      const deps = { db: c.env.DB, images: c.env.IMAGES, settings: s, siteUrl: siteUrl(c) };
-      reply((await runShopCommand(deps, shop, text)).slice(0, 4000));
+      const r = await runShopChat(shopDeps(c), shop, { text });
+      reply(r.text.slice(0, 4000), chatButtons(r.buttons));
       return c.json({ ok: true });
     }
   }
@@ -136,11 +130,34 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
   return c.json({ ok: true });
 });
 
+const shopDeps = (c: C) => ({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) });
+
+/** The shop whose admin this chat belongs to (they run it from here). */
+function shopForChat(c: C, kind: BotKind, chatId: string) {
+  const col = kind === "bale" ? "bale_chat_id" : "telegram_chat_id";
+  return c.env.DB.prepare(
+    `SELECT s.* FROM users u JOIN shops s ON s.id = u.shop_id
+     WHERE u.${col} = ? AND (u.shop_role = 'admin' OR s.owner_id = u.id) AND s.is_external = 0 LIMIT 1`,
+  )
+    .bind(chatId)
+    .first<Shop>();
+}
+
 async function handleCallback(c: C, kind: BotKind, q: NonNullable<Update["callback_query"]>) {
   const s = c.get("settings");
-  const m = q.data?.match(/^pay:(ok|no):(\d+)$/);
   const chatId = String(q.message?.chat?.id ?? "");
   const answer = (text: string) => answerCallback(s, kind, q.id, text).catch((e) => console.error(e));
+  // A shop chat button.
+  const btn = q.data?.match(/^c:(.{1,62})$/);
+  if (btn && chatId) {
+    const shop = await shopForChat(c, kind, chatId);
+    if (!shop) return answer("اجازه این کار را ندارید.");
+    const r = await runShopChat(shopDeps(c), shop, { payload: btn[1] });
+    await answer("✓");
+    await sendBotMessage(s, kind, chatId, r.text.slice(0, 4000), chatButtons(r.buttons)).catch((e) => console.error(e));
+    return;
+  }
+  const m = q.data?.match(/^pay:(ok|no):(\d+)$/);
   if (!m || !chatId) return answer("دستور نامعتبر");
   const orderId = Number(m[2]);
   const order = await c.env.DB.prepare("SELECT id, shop_id, status FROM orders WHERE id = ?").bind(orderId).first<{ id: number; shop_id: number; status: string }>();

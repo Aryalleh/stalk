@@ -13,7 +13,7 @@ import { handOver } from "./instagram-shops";
 const n = (x: number) => x.toLocaleString("fa-IR", { useGrouping: false });
 
 export const COMMANDS_HELP = [
-  "📋 دستورها (هر کدام را جدا بفرستید؛ عدد فارسی یا انگلیسی فرقی ندارد):",
+  "👇 کارها را با دکمه‌ها انجام دهید؛ یا این دستورها را تایپ کنید (عدد فارسی یا انگلیسی فرقی ندارد):",
   "",
   "💳 کارت 6037991234567890 نام صاحب کارت — کارتی که خریداران به آن واریز می‌کنند",
   "🛍 محصولات — فهرست محصولات با شماره‌شان",
@@ -57,9 +57,9 @@ export async function setupTodo(db: D1Database, shop: Shop) {
     .bind(shop.id)
     .all<{ id: number; title: string }>();
   const lines: string[] = [];
-  if (!shop.card_number) lines.push("💳 شماره کارتتان را بفرستید، مثلاً:\nکارت 6037991234567890 علی رضایی");
+  if (!shop.card_number) lines.push("💳 شماره کارتتان را ثبت کنید (دکمه‌ی «ثبت شماره کارت»).");
   if (results.length) {
-    lines.push("🏷 قیمت این محصولات را بفرستید:\n" + results.map((p) => `• ${p.title} → قیمت ${p.id} مبلغ‌به‌تومان`).join("\n"));
+    lines.push("🏷 قیمت این محصولات را بدهید (دکمه‌ی «قیمت …» هر کدام):\n" + results.map((p) => `• ${p.title}`).join("\n"));
   }
   return lines;
 }
@@ -262,4 +262,126 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
   }
 
   return `دستور را متوجه نشدم 🙏\n\n${COMMANDS_HELP}`;
+}
+
+// ---------- buttons ----------
+// Replies carry buttons (Instagram quick replies, Bale/Telegram inline buttons). A button sends a
+// short code (payload); one that needs a value asks for it and the next message is the answer.
+
+export interface ChatButton {
+  title: string;
+  payload: string;
+}
+export interface ChatReply {
+  text: string;
+  buttons: ChatButton[];
+}
+
+const STATE_TTL_MS = 30 * 60_000;
+const short = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1)}…` : t);
+
+async function setState(db: D1Database, shop: Shop, state: string) {
+  shop.chat_state = state;
+  await db.prepare("UPDATE shops SET chat_state = ?, chat_state_at = ? WHERE id = ?").bind(state, state ? now() : null, shop.id).run();
+}
+
+/** The buttons that fit the shop right now: open orders first, then what's missing, then the menu. */
+export async function buttonsFor(db: D1Database, shop: Shop): Promise<ChatButton[]> {
+  const [orders, unpriced] = await db.batch([
+    db.prepare("SELECT id, status FROM orders WHERE shop_id = ? AND status IN ('awaiting', 'paid') ORDER BY (status = 'awaiting') DESC, id LIMIT 4").bind(shop.id),
+    db.prepare("SELECT id, title FROM products WHERE shop_id = ? AND awaiting_price = 1 AND is_active = 1 ORDER BY id LIMIT 3").bind(shop.id),
+  ]);
+  const b: ChatButton[] = [];
+  for (const o of orders.results as { id: number; status: string }[]) {
+    if (o.status === "awaiting") b.push({ title: `✅ تایید #${n(o.id)}`, payload: `ok:${o.id}` }, { title: `❌ رد #${n(o.id)}`, payload: `no:${o.id}` });
+    else b.push({ title: `🚚 ارسال #${n(o.id)}`, payload: `sh:${o.id}` });
+  }
+  if (!shop.card_number) b.push({ title: "💳 ثبت شماره کارت", payload: "card" });
+  for (const p of unpriced.results as { id: number; title: string }[]) b.push({ title: `🏷 قیمت ${short(p.title, 12)}`, payload: `pr:${p.id}` });
+  b.push({ title: "📦 سفارش‌ها", payload: "o" }, { title: "🛍 محصولات", payload: "p" });
+  if (shop.is_external) b.push({ title: "📱 ثبت‌نام در سایت", payload: "su" });
+  b.push({ title: "❓ راهنما", payload: "h" });
+  return b.slice(0, 13);
+}
+
+const CANCEL: ChatButton = { title: "انصراف", payload: "x" };
+const COMMAND_WORD = /^(کارت|card|قیمت|price|سفارش|order|تایید|تأیید|ok|confirm|رد|reject|ارسال|ship|لغو|cancel|محصولات|کالاها|products|راهنما|help|منو|menu|عضویت|join|موجود|ناموجود)(\s|$)/i;
+
+/** A message or a button press from the shop's chat: run it and say what's next. */
+export async function runShopChat(d: Deps, shop: Shop, input: { text?: string; payload?: string }): Promise<ChatReply> {
+  const db = d.db;
+  const ask = async (state: string, text: string, extra: ChatButton[] = []): Promise<ChatReply> => {
+    await setState(db, shop, state);
+    return { text, buttons: [...extra, CANCEL] };
+  };
+  let command = "";
+  if (input.payload) {
+    if (shop.chat_state) await setState(db, shop, "");
+    const [kind, arg] = input.payload.split(":");
+    const id = Number(arg) || 0;
+    switch (kind) {
+      case "m":
+      case "h":
+        command = "راهنما";
+        break;
+      case "o":
+        command = "سفارشها";
+        break;
+      case "p":
+        command = "محصولات";
+        break;
+      case "ok":
+        command = `تایید ${id}`;
+        break;
+      case "no":
+        command = `رد ${id}`;
+        break;
+      case "od":
+        command = `سفارش ${id}`;
+        break;
+      case "sh0":
+        command = `ارسال ${id}`;
+        break;
+      case "join":
+        command = "عضویت";
+        break;
+      case "card":
+        return ask("card", "💳 شماره کارت ۱۶ رقمی و نام صاحب کارت را بفرستید، مثلاً:\n6037991234567890 علی رضایی");
+      case "pr": {
+        const p = await db.prepare("SELECT title FROM products WHERE id = ? AND shop_id = ?").bind(id, shop.id).first<{ title: string }>();
+        if (!p) break;
+        return ask(`price:${id}`, `🏷 قیمت «${p.title}» را به تومان بفرستید، مثلاً 850000`);
+      }
+      case "sh":
+        return ask(`ship:${id}`, `🚚 کد رهگیری مرسوله‌ی سفارش ${n(id)} را بفرستید.`, [{ title: "بدون کد رهگیری", payload: `sh0:${id}` }]);
+      case "su":
+        return ask("signup", "📱 شماره موبایلتان را بفرستید (مثل 09121234567). یک کد در «بله» برایتان می‌آید که همین‌جا می‌فرستید.");
+      case "x":
+        return { text: "لغو شد. 👇", buttons: await buttonsFor(db, shop) };
+    }
+  }
+  if (!command) {
+    const raw = (input.text ?? "").trim();
+    const fresh = shop.chat_state && shop.chat_state_at && Date.now() - Date.parse(shop.chat_state_at) < STATE_TTL_MS;
+    const t = normalizeCommand(raw);
+    if (fresh && !COMMAND_WORD.test(t)) {
+      const [st, arg] = shop.chat_state.split(":");
+      command = st === "card" ? `کارت ${raw}` : st === "price" ? `قیمت ${arg} ${raw}` : st === "ship" ? `ارسال ${arg} ${raw}` : raw;
+    } else command = raw;
+    if (shop.chat_state) await setState(db, shop, ""); // the question is answered (or set aside for a typed command)
+  }
+  const text = await runShopCommand(d, shop, command);
+  const after = (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(shop.id).first<Shop>()) ?? shop;
+  return { text, buttons: await buttonsFor(db, after) };
+}
+
+/** Chat buttons as a Bale/Telegram inline keyboard, two per row ("c:<code>" comes back as a callback). */
+export function inlineKeyboard(buttons: ChatButton[]) {
+  if (!buttons.length) return undefined;
+  const rows: { text: string; callback_data: string }[][] = [];
+  buttons.forEach((b, i) => {
+    if (i % 2 === 0) rows.push([]);
+    rows[rows.length - 1].push({ text: b.title, callback_data: `c:${b.payload}`.slice(0, 64) });
+  });
+  return { inline_keyboard: rows };
 }

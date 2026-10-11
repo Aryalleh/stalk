@@ -36,6 +36,8 @@ export interface IgEvent {
   type: string; // text / image / video / audio / story_reply / share / ...
   body: string;
   at: string;
+  /** The code of the quick-reply button that was tapped, if any. */
+  payload?: string;
 }
 
 interface Payload {
@@ -50,6 +52,7 @@ interface Payload {
       message?: {
         mid?: string;
         text?: string;
+        quick_reply?: { payload?: string };
         is_echo?: boolean;
         is_deleted?: boolean;
         attachments?: { type?: string; payload?: { url?: string } }[];
@@ -83,6 +86,7 @@ export function parseWebhook(body: unknown): IgEvent[] {
         type,
         body: body.slice(0, 4000),
         at: new Date(ev.timestamp ?? Date.now()).toISOString(),
+        ...(m.quick_reply?.payload ? { payload: String(m.quick_reply.payload).slice(0, 200) } : {}),
       });
     }
   }
@@ -90,11 +94,13 @@ export function parseWebhook(body: unknown): IgEvent[] {
 }
 
 /** Send a text DM. Returns Instagram's message id. */
-export async function sendDm(token: string, accountId: string, recipientId: string, text: string) {
+export async function sendDm(token: string, accountId: string, recipientId: string, text: string, buttons: { title: string; payload: string }[] = []) {
+  // Quick replies: up to 13 buttons above the keyboard (titles up to 20 characters).
+  const quick_replies = buttons.slice(0, 13).map((b) => ({ content_type: "text", title: b.title.slice(0, 20), payload: b.payload }));
   const res = await fetch(`${GRAPH}/${encodeURIComponent(accountId)}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
+    body: JSON.stringify({ recipient: { id: recipientId }, message: quick_replies.length ? { text, quick_replies } : { text } }),
   });
   const data = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { message?: string } };
   if (!res.ok || !data.message_id) throw new Error(data.error?.message ?? `instagram ${res.status}`);
