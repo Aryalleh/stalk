@@ -4,9 +4,10 @@ import { render } from "../../render";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
-import { availableByVariant, getPublicProduct, normCity, now, productCode, productImages, randomSlug, toman, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
-import { inlineKeyboard } from "../commands";
-import { dmPage, enrichShop, mentionPage, downloadImage, externalShop, fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl, useLoginLink } from "../instagram-shops";
+import { availableByVariant, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
+import { addInstagramWish, addItem, defaultWishlist, linkCode, linkInstagram, titleFromCaption, useLinkToken } from "../ig-wish";
+import { sendDm } from "../crm/instagram";
+import { fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostUrl, useLoginLink } from "../instagram-shops";
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
@@ -15,13 +16,13 @@ import { birthDate, fullName } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
-import { activeBots, botLink, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
+import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
 import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
-import { answerChange, shopOwnerChats } from "../orders";
+import { answerChange } from "../orders";
 
 const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
@@ -353,17 +354,6 @@ async function ownWishlist(c: C) {
   return c.env.DB.prepare("SELECT * FROM wishlists WHERE id = ? AND user_id = ? AND is_direct = 0").bind(intParam(c, "id"), currentUser(c).id).first<Wishlist>();
 }
 
-async function addItem(db: D1Database, wishlistId: number, productId: number, quantity = 1, note = "", size = "", color = "") {
-  await db
-    .prepare(
-      `INSERT INTO wishlist_items (wishlist_id, product_id, quantity, note, size, color, created_at)
-       SELECT ?, p.id, ?, ?, ?, ?, ? FROM products p WHERE p.id = ? AND p.is_active = 1
-       ON CONFLICT (wishlist_id, product_id) DO UPDATE SET quantity = excluded.quantity, note = excluded.note, size = excluded.size, color = excluded.color`,
-    )
-    .bind(wishlistId, quantity, note, size, color, now(), productId)
-    .run();
-}
-
 /** A product's size table and colors (to validate the variant a form picked). */
 const productOptions = async (db: D1Database, productId: number) =>
   (await db.prepare("SELECT size_guide, colors FROM products WHERE id = ?").bind(productId).first<{ size_guide: string; colors: string }>()) ?? {
@@ -392,12 +382,54 @@ async function addedItem(c: C, productId: number) {
   return { ...row, member: !row.is_external, ready: !!row.card_number && !row.awaiting_price, message: inviteText(c.get("settings"), siteUrl(c), row, row, row.wishes) };
 }
 
+/** The add page's Instagram link box: the account linked, or a code to send in the DM (when the site's page is connected). */
+async function igLinkState(c: C) {
+  const s = c.get("settings");
+  if (!s.platform_instagram || !s.platform_ig_token) return undefined;
+  const me = await c.env.DB.prepare("SELECT ig_user_id, ig_username FROM users WHERE id = ?").bind(currentUser(c).id).first<{ ig_user_id: string | null; ig_username: string }>();
+  return me?.ig_user_id ? { page: s.platform_instagram, linked: me.ig_username || "✓" } : { page: s.platform_instagram, code: await linkCode(c.env.DB, currentUser(c).id) };
+}
+
+// A one-time link sent in the DM to someone who sent a post before linking: links their Instagram
+// to this account and adds that post.
+account.get("/me/ig-link/:token{[A-Za-z0-9]{24,64}}", async (c) => {
+  const row = await useLinkToken(c.env.DB, c.req.param("token"));
+  if (!row) return notFoundPage(c, "این لینک منقضی شده یا قبلاً استفاده شده است؛ دوباره لینک پست را در دایرکت بفرستید.");
+  const user = currentUser(c);
+  await linkInstagram(c.env.DB, user.id, row.igsid, row.username);
+  const s = c.get("settings");
+  const deps = { db: c.env.DB, images: c.env.IMAGES, settings: s, siteUrl: siteUrl(c) };
+  let next = "/me/instagram?linked=1";
+  if (row.post_url) {
+    const list = await defaultWishlist(c.env.DB, user);
+    const r = await addInstagramWish(deps, user, { postUrl: row.post_url, wishlistId: list.id });
+    if (r.ok) {
+      c.executionCtx.waitUntil(r.notify);
+      next = `/me/instagram?added=${r.productId}&list=${list.id}`;
+    }
+  }
+  if (s.platform_ig_token) {
+    c.executionCtx.waitUntil(
+      sendDm(s.platform_ig_token, s.platform_ig_account_id, row.igsid, `✅ اینستاگرام شما به ${s.site_name} وصل شد 🎉 از این به بعد لینک هر پستی بفرستید، مستقیم به لیست آرزویتان اضافه می‌شود 🎁`).catch(() => undefined),
+    );
+  }
+  return c.redirect(next);
+});
+
+account.post("/me/ig-unlink", async (c) => {
+  await c.env.DB.prepare("UPDATE users SET ig_user_id = NULL, ig_username = '' WHERE id = ?").bind(currentUser(c).id).run();
+  return c.redirect("/me/instagram");
+});
+
 account.get("/me/instagram", async (c) => {
   const lists = await myLists(c);
   const added = Number(c.req.query("added")) ? await addedItem(c, Number(c.req.query("added"))) : undefined;
   // Shared from the Instagram app (the installed app is a share target): the link is in url or text.
   const shared = [c.req.query("url"), c.req.query("text"), c.req.query("title")].join(" ").match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i)?.[0] ?? "";
-  return render(c, <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: c.req.query("list") ?? "", post_url: shared }} added={added} />);
+  return render(
+    c,
+    <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: c.req.query("list") ?? "", post_url: shared }} added={added} igLink={await igLinkState(c)} linked={c.req.query("linked") === "1"} />,
+  );
 });
 
 // What the form shows once a post link is in: whose post it is, and a name from its caption.
@@ -413,7 +445,7 @@ account.get("/me/instagram/preview", async (c) => {
   const post = await fetchPost(url);
   if (!post.handle && !post.caption && !post.image) return c.json({ ok: false });
   // The caption's first line, without hashtags and mentions, as a name.
-  const title = (post.caption.split("\n").map((l) => l.replace(/[#@][^\s#@]+/g, "").trim()).find((l) => l.length > 1) ?? "").slice(0, 80);
+  const title = titleFromCaption(post.caption);
   const member = post.handle ? !!(await memberShopFor(c.env.DB, post.handle)) : false;
   return c.json({ ok: true, title, handle: post.handle, member });
 });
@@ -436,77 +468,19 @@ account.post("/me/instagram", async (c) => {
     if (e) errors.push(e);
   }
   const page = (extra: { errors?: string[]; member?: { name: string; slug: string }; askHandle?: boolean }) =>
-    render(c, <InstagramAddPage user={user} wishlists={lists} values={values} {...extra} />, 400);
+    render(c, <InstagramAddPage user={user} wishlists={lists} values={values} igLink={undefined} {...extra} />, 400);
   if (errors.length) return page({ errors });
-  const db = c.env.DB;
-  // The same post added again (by anyone) is the same product, so its wishes add up.
-  let product = await db
-    .prepare("SELECT p.id, p.shop_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.source_url = ? AND p.deleted_at IS NULL AND s.status <> 'suspended' ORDER BY s.is_external LIMIT 1")
-    .bind(postUrl)
-    .first<{ id: number; shop_id: number }>();
-  if (!product) {
-    // The page and the cover photo come from the post itself.
-    const post = await fetchPost(postUrl);
-    const handle = parseHandle(values.handle) || post.handle || parseHandle(values.post_url.replace(/\/(p|reel|reels|tv)\/.*/i, ""));
-    if (!handle) return page({ errors: ["صفحه‌ی این پست پیدا نشد؛ آیدی صفحه‌ی فروشگاه را هم بنویسید (مثل ‎@shop_name)."], askHandle: true });
-    // A page that is already a shop here gets the item in its own shop (it sets the price);
-    // otherwise its stand-in shop.
-    const member = await memberShopFor(db, handle);
-    const shop = member ? (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(member.id).first<Shop>())! : await externalShop(db, handle);
-    // The page's name and profile photo, from Instagram (in the background).
-    if (shop.is_external && !shop.logo_key) c.executionCtx.waitUntil(enrichShop(db, c.env.IMAGES, shop.id).catch((e) => console.error("enrich shop", e)));
-    if (shop.status === "suspended") return page({ errors: ["افزودن از این صفحه فعلاً ممکن نیست."] });
-    let image = "";
-    if (photo) image = await storeImage(c.env.IMAGES, photo, "p");
-    else if (post.image) {
-      const img = await downloadImage(post.image);
-      if (img) {
-        image = `p/${randomSlug(16)}.${img.type === "image/png" ? "png" : img.type === "image/webp" ? "webp" : "jpg"}`;
-        await c.env.IMAGES.put(image, img.data, { httpMetadata: { contentType: img.type } });
-      }
-    }
-    const t = now();
-    // No price yet: the shop sets it (src/shop/commands.ts or its panel); 1 is a placeholder the price check accepts.
-    product = await db
-      .prepare(
-        `INSERT INTO products (shop_id, title, description, price, awaiting_price, image_key, is_active, created_at, updated_at, code, source_url, added_by)
-         VALUES (?, ?, ?, 1, 1, ?, 1, ?, ?, ?, ?, ?) RETURNING id, shop_id`,
-      )
-      .bind(shop.id, values.title.slice(0, 120), post.caption.slice(0, 2000) || `از اینستاگرام @${handle}`, image, t, t, productCode(shop.slug), postUrl, user.id)
-      .first<{ id: number; shop_id: number }>();
-    if (image) await db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(product!.id, image).run();
-  }
-  await addItem(db, list!.id, product!.id, 1, values.note.slice(0, 200));
-  const settings = c.get("settings");
-  const info = (await db
-    .prepare("SELECT p.id, p.title, p.source_url, p.awaiting_price, s.id AS shop_id, s.instagram, s.ig_username, s.ig_contact_id, s.is_external FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ?")
-    .bind(product!.id)
-    .first<{ id: number; title: string; source_url: string; awaiting_price: number; shop_id: number; instagram: string; ig_username: string; ig_contact_id: string; is_external: number }>())!;
-  const site = siteUrl(c);
-  const deps = { db, images: c.env.IMAGES, settings, siteUrl: site };
-  const igPage = `@${info.is_external ? info.instagram : info.ig_username || parseHandle(info.instagram) || info.instagram}`;
-  const price = info.awaiting_price ? `\nبرای فعال شدن خرید، قیمتش را بفرستید:\nقیمت ${info.id} مبلغ‌به‌تومان` : "";
-  const toShop = `🎁 یک کاربر «${info.title}» را از پست اینستاگرام شما به لیست آرزویش اضافه کرد.\n${info.source_url}${price}`;
-  c.executionCtx.waitUntil(
-    Promise.allSettled([
-      info.is_external
-        ? // The site can't DM a page first (Instagram's rule): the admins get the message ready to send.
-          notifyAdmins(
-            db,
-            settings,
-            info.ig_contact_id
-              ? `📸 آرزوی تازه از ${igPage}: «${info.title}» (فروشگاه در دایرکت با ما در ارتباط است و خبرش کردیم)`
-              : [`📸 آرزوی تازه از ${igPage}: «${info.title}» — این پیام را برای فروشگاه بفرستید:`, `https://ig.me/m/${info.instagram}`, "", inviteText(settings, site, info, info, 1)].join("\n"),
-          )
-        : // A member shop hears it in its bot right away, and can price it there with the same command.
-          Promise.all([shopOwnerChats(db, info.shop_id), db.prepare("SELECT * FROM shops WHERE id = ?").bind(info.shop_id).first<Shop>()]).then(async ([chats, shop]) =>
-            chats && shop ? sendToChats(settings, chats, `${toShop}\nیا از پنل: ${site}/panel/products/${info.id}`, () => inlineKeyboard([{ title: `🏷 قیمت ${info.title.slice(0, 12)}`, payload: `pr:${info.id}` }])) : "",
-          ),
-      // A page we can DM hears it there; one that hasn't written yet is mentioned in a post (once).
-      info.ig_contact_id ? dmPage(deps, info.shop_id, toShop) : info.is_external ? mentionPage(deps, info.shop_id, info.id) : null,
-    ]),
-  );
-  return c.redirect(`/me/instagram?added=${product!.id}&list=${list!.id}`);
+  const r = await addInstagramWish({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, user, {
+    postUrl: postUrl,
+    wishlistId: list!.id,
+    title: values.title,
+    note: values.note,
+    handle: values.handle || parseHandle(values.post_url.replace(/\/(p|reel|reels|tv)\/.*/i, "")),
+    photo,
+  });
+  if (!r.ok) return page({ errors: [r.error], askHandle: r.askHandle });
+  c.executionCtx.waitUntil(r.notify);
+  return c.redirect(`/me/instagram?added=${r.productId}&list=${list!.id}`);
 });
 
 // A one-time link from the shop's chat ("پنل"): signs an Instagram page into its shop's web panel.

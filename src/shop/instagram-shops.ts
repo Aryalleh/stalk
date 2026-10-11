@@ -16,6 +16,8 @@ import { fetchProfile, instagramWeb, publishPhoto, sendDm, sendImageDm, type IgE
 import { buttonsFor, cardProduct, rememberCard, runShopChat, setupTodo, type ProductCard } from "./commands";
 import type { Deps } from "./orders";
 import { assignUsername } from "../session";
+import { toLatinDigits } from "../../lib/normalize";
+import { addInstagramWish, defaultWishlist, linkInstagram, linkToken } from "./ig-wish";
 
 const HANDLE_RE = /^[a-z0-9._]{1,30}$/;
 
@@ -389,12 +391,17 @@ export async function handlePlatformDm(d: Deps, ev: IgEvent) {
   let shop = await db.prepare("SELECT * FROM shops WHERE ig_contact_id = ?").bind(ev.customerId).first<Shop>();
   let first = false;
   if (!shop) {
+    // A wisher: linked to a site account, sending a link code, or a post to add (ig-wish.ts).
+    const wisher = await db.prepare("SELECT id, name, phone FROM users WHERE ig_user_id = ?").bind(ev.customerId).first<{ id: number; name: string; phone: string }>();
+    if (wisher || /\bKD-?\d{6}\b/i.test(toLatinDigits(ev.body))) return handleWisherDm(d, ev, wisher);
     // Who is writing: the page's own account proves it runs the page (its username comes from Instagram).
     const profile = await fetchProfile(s.platform_ig_token, ev.customerId);
     const handle = parseHandle(profile.username ?? "");
+    shop = handle ? await db.prepare("SELECT * FROM shops WHERE is_external = 1 AND instagram = ?").bind(handle).first<Shop>() : null;
+    // Not a page with wishes: someone sending a post to add, or a message left for a person to answer.
+    if (!shop && (postLinkIn(ev.body) || SHARED.has(ev.type))) return handleWisherDm(d, ev, null, handle);
     if (!handle) return log("no_username", ev.customerId, ev.body.slice(0, 120));
-    shop = await db.prepare("SELECT * FROM shops WHERE is_external = 1 AND instagram = ?").bind(handle).first<Shop>();
-    if (!shop) return log("no_wishes", `${ev.customerId} @${handle}`, ev.body.slice(0, 120)); // left for a person to answer
+    if (!shop) return log("no_wishes", `${ev.customerId} @${handle}`, ev.body.slice(0, 120));
     await enrichShop(db, d.images, shop.id, profile).catch((e) => console.error("enrich shop", e));
     shop = (await db.prepare("SELECT * FROM shops WHERE id = ?").bind(shop.id).first<Shop>())!;
     await db.prepare("UPDATE shops SET ig_contact_id = '' WHERE ig_contact_id = ?").bind(ev.customerId).run();
@@ -461,4 +468,64 @@ export function splitMessage(text: string, max: number) {
   }
   if (cur) parts.push(cur);
   return parts;
+}
+
+/** Attachment types of a post or reel shared into the DM (they may not carry the post's link). */
+const SHARED = new Set(["share", "ig_reel", "reel", "ig_post", "post"]);
+
+/** The Instagram post or reel link in a message, cleaned, or "". */
+export const postLinkIn = (text: string) => parsePostUrl(text.match(/(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/\S+/i)?.[0] ?? "");
+
+/**
+ * Someone who isn't a shop writes to the site's account: a link code from the site links their
+ * account; a post link goes onto their wishlist (or, before they link, brings them a one-time link
+ * that links and adds it).
+ */
+async function handleWisherDm(d: Deps, ev: IgEvent, wisher: { id: number; name: string; phone: string } | null, handle = "") {
+  const s = d.settings;
+  const db = d.db;
+  const log = (result: string, detail = "") => igLog(db, { account_id: ev.accountId, sender: `${ev.customerId}${handle ? ` @${handle}` : ""}`, result, detail });
+  const say = (text: string) => sendDm(s.platform_ig_token, s.platform_ig_account_id, ev.customerId, text);
+  const body = toLatinDigits(ev.body);
+  try {
+    const code = body.match(/\bKD-?(\d{6})\b/i);
+    if (code) {
+      const row = await db.prepare("DELETE FROM ig_link_codes WHERE code = ? RETURNING user_id, expires_at").bind(`KD-${code[1]}`).first<{ user_id: number; expires_at: number }>();
+      if (!row || row.expires_at < Date.now()) {
+        await say("این کد معتبر نیست یا منقضی شده؛ از صفحه‌ی «آرزو از اینستاگرام» در سایت یک کد تازه بگیرید.");
+        return log("wisher_bad_code");
+      }
+      const name = handle || parseHandle((await fetchProfile(s.platform_ig_token, ev.customerId)).username ?? "");
+      await linkInstagram(db, row.user_id, ev.customerId, name);
+      await say(`✅ اینستاگرام شما به ${s.site_name} وصل شد 🎉\nاز این به بعد لینک هر پست یا ریلزی را که دوست دارید همین‌جا بفرستید (⋯ ← Copy link)؛ به لیست آرزویتان اضافه می‌شود 🎁`);
+      return log("wisher_linked", `user ${row.user_id}`);
+    }
+    const url = postLinkIn(body);
+    if (!url) {
+      if (SHARED.has(ev.type)) {
+        // A shared post often comes without its link.
+        await say("لینک این پست به دست ما نرسید 🙏 لطفاً در اینستاگرام روی ⋯ (یا ➤) پست بزنید، «Copy link» را انتخاب کنید و لینک را همین‌جا بفرستید.");
+        return log("wisher_need_link", ev.type);
+      }
+      await say(`سلام${wisher ? ` ${wisher.name}` : ""} 👋 لینک پست یا ریلز محصولی را که دوست دارید بفرستید تا به لیست آرزویتان در ${s.site_name} اضافه شود 🎁`);
+      return log("wisher_help");
+    }
+    if (!wisher) {
+      const name = handle || parseHandle((await fetchProfile(s.platform_ig_token, ev.customerId)).username ?? "");
+      const token = await linkToken(db, ev.customerId, name, url);
+      await say(`برای اینکه این محصول به لیست آرزوی شما در ${s.site_name} اضافه شود، یک بار حساب خود را وصل کنید (با همین لینک، کمتر از یک دقیقه):\n${d.siteUrl}/me/ig-link/${token}\n\nبعد از آن هر لینکی بفرستید، مستقیم اضافه می‌شود ✨`);
+      return log("wisher_link_sent", url);
+    }
+    const list = await defaultWishlist(db, wisher);
+    const r = await addInstagramWish(d, wisher, { postUrl: url, wishlistId: list.id });
+    if (!r.ok) {
+      await say(`${r.error.replace("؛ آیدی صفحه‌ی فروشگاه را هم بنویسید (مثل ‎@shop_name).", "")} می‌توانید از سایت اضافه‌اش کنید: ${d.siteUrl}/me/instagram`);
+      return log("wisher_failed", r.error);
+    }
+    await say(`✅ «${r.title}» به لیست «${list.title}» اضافه شد 🎁\n${d.siteUrl}/me/instagram?added=${r.productId}&list=${list.id}`);
+    await log("wisher_added", url);
+    await r.notify;
+  } catch (e) {
+    await log("send_failed", String((e as Error).message ?? e).slice(0, 300));
+  }
 }

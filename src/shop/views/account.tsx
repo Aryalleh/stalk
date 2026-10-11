@@ -999,6 +999,10 @@ export function InstagramAddPage(props: {
   /** The page couldn't be read from the post: ask for it. */
   askHandle?: boolean;
   added?: AddedFromInstagram;
+  /** Adding by DM: the site's page, and the user's linked Instagram or the code to link it. */
+  igLink?: { page: string; linked?: string; code?: string };
+  /** Just linked (from the link sent in the DM). */
+  linked?: boolean;
 }) {
   const v = props.values;
   const a = props.added;
@@ -1065,6 +1069,8 @@ export function InstagramAddPage(props: {
               <li class="bg-white/15 rounded-2xl p-2.5"><b class="block text-lg">۳</b>اسمش را بنویس و تمام!</li>
             </ol>
           </div>
+          {props.linked && <div class="okbox">✅ اینستاگرام شما وصل شد؛ از این به بعد لینک پست‌ها را در دایرکت بفرستید.</div>}
+          {props.igLink && <IgLinkBox {...props.igLink} />}
           <Errors errors={props.errors} />
           {props.member && (
             <div class="card">
@@ -1148,3 +1154,58 @@ function look(){var m=(u.value||'').match(/https?:\\/\\/\\S+/);if(m)u.value=m[0]
 u.addEventListener('input',look);u.addEventListener('change',look);
 if(navigator.clipboard&&navigator.clipboard.readText){p.classList.remove('hidden');p.addEventListener('click',function(){navigator.clipboard.readText().then(function(x){u.value=(x||'').trim();look();t.focus();}).catch(function(){u.focus();});});}
 if(u.value)look();else u.focus();})();`;
+
+/**
+ * "Add from your DMs too": the linked Instagram account, or a button that opens a small modal with
+ * the code to send to the site's page (opened by itself once per browser).
+ */
+function IgLinkBox(props: { page: string; linked?: string; code?: string }) {
+  const dm = `https://ig.me/m/${props.page}`;
+  if (props.linked) {
+    return (
+      <div class="card flex items-center gap-3 !py-3">
+        <span class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-amber-400 text-white flex items-center justify-center text-lg shrink-0"><i class="fa-brands fa-instagram"></i></span>
+        <div class="flex-1 min-w-0 small">
+          <b class="block text-fg">اینستاگرام {props.linked !== "✓" ? <span class="ltr inline-block">@{props.linked}</span> : null} وصل است</b>
+          <span class="muted">لینک پست‌ها را در دایرکت <span class="ltr inline-block">@{props.page}</span> بفرستید تا اضافه شوند.</span>
+        </div>
+        <a class="btn small secondary !m-0" href={dm} target="_blank" rel="noopener">دایرکت</a>
+        <form method="post" action="/me/ig-unlink" class="m-0"><button class="small secondary !m-0" title="جدا کردن اینستاگرام" aria-label="جدا کردن اینستاگرام"><i class="fa-solid fa-link-slash"></i></button></form>
+      </div>
+    );
+  }
+  return (
+    <>
+      <button type="button" data-ig-link class="w-full card flex items-center gap-3 !py-3 text-right">
+        <span class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-amber-400 text-white flex items-center justify-center text-lg shrink-0"><i class="fa-brands fa-instagram"></i></span>
+        <span class="flex-1 min-w-0 small">
+          <b class="block text-fg">از دایرکت اینستاگرام هم اضافه کن 📲</b>
+          <span class="muted">حسابت را وصل کن؛ بعد لینک هر پستی را به <span class="ltr inline-block">@{props.page}</span> بفرستی، به لیستت اضافه می‌شود.</span>
+        </span>
+        <i class="fa-solid fa-chevron-left muted"></i>
+      </button>
+      <dialog id="ig-link-modal" class="m-auto w-[92vw] max-w-sm rounded-3xl p-0 bg-card text-fg shadow-2xl backdrop:bg-black/60">
+        <div class="p-5 text-white bg-gradient-to-br from-fuchsia-500 via-pink-500 to-amber-400 text-center">
+          <i class="fa-brands fa-instagram text-4xl"></i>
+          <h2 class="!m-0 !mt-2 !text-white text-lg font-black">اینستاگرامت را وصل کن</h2>
+          <p class="text-xs text-white/90 mt-1">بعد از آن، هر پستی که دوست داشتی را در دایرکت بفرست؛ خودش به لیست آرزویت اضافه می‌شود 🎁</p>
+        </div>
+        <div class="p-5 space-y-3 small">
+          <p class="!m-0">۱. این کد را کپی کن:</p>
+          <button type="button" data-copy={props.code} data-copied="کپی شد ✓" class="w-full !m-0 !py-3 !text-2xl font-black tracking-widest ltr secondary">{props.code}</button>
+          <p class="!m-0">۲. آن را در دایرکت <b class="ltr inline-block">@{props.page}</b> بفرست:</p>
+          <a href={dm} target="_blank" rel="noopener" class="btn w-full !m-0 !bg-gradient-to-l !from-fuchsia-500 !to-amber-400 !border-0"><i class="fa-brands fa-instagram ml-1"></i> باز کردن دایرکت @{props.page}</a>
+          <p class="muted !m-0">کد تا ۳۰ دقیقه معتبر است. یا لینک یک پست را بفرست؛ لینکی برای وصل شدن برایت می‌آید.</p>
+          <form method="dialog" class="m-0"><button class="w-full !m-0 secondary">بعداً</button></form>
+        </div>
+      </dialog>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `(function(){var d=document.getElementById('ig-link-modal'),b=document.querySelector('[data-ig-link]');if(!d||!d.showModal)return;
+b.addEventListener('click',function(){d.showModal();});
+try{if(!localStorage.getItem('igLinkAsked')&&!location.search.match(/added=/)){localStorage.setItem('igLinkAsked','1');setTimeout(function(){d.showModal();},700);}}catch(e){}})();`,
+        }}
+      />
+    </>
+  );
+}
