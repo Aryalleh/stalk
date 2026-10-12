@@ -126,7 +126,8 @@ async function fetchPreview(postUrl: string): Promise<PostInfo> {
 /** Download a post's cover so it outlives Instagram's expiring CDN link. */
 export async function downloadImage(url: string, tries = 2): Promise<{ data: ArrayBuffer; type: string } | null> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    // JPEG when the CDN has it: Instagram publishes JPEG only (mentionPage).
+    const res = await fetch(url, { headers: { Accept: "image/jpeg,image/*;q=0.8" }, signal: AbortSignal.timeout(10000) });
     const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();
     if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return null;
     const data = await res.arrayBuffer();
@@ -351,8 +352,6 @@ export async function mentionPage(d: Deps, shopId: number, productId: number) {
   if (!row || !row.is_external || row.ig_contact_id || row.mention_at) return false;
   const who = `@${row.instagram}`;
   const log = (result: string, detail = "") => igLog(db, { account_id: s.platform_ig_account_id, sender: who, result, detail });
-  // Instagram publishes JPEG photos only, from a public address.
-  if (!/\.jpe?g$/i.test(row.image_key)) return log("mention_failed", "عکس محصول JPEG نیست").then(() => false);
   // Claim the page first, so two wishes at once don't post twice.
   const claim = await db.prepare("UPDATE shops SET mention_at = ? WHERE id = ? AND mention_at IS NULL").bind(now(), shopId).run();
   if (!claim.meta.changes) return false;
@@ -366,19 +365,53 @@ export async function mentionPage(d: Deps, shopId: number, productId: number) {
     platform: s.platform_instagram ? `@${s.platform_instagram}` : s.site_name,
     dm: s.platform_instagram ? dmLink(s.platform_instagram) : d.siteUrl,
   });
-  try {
-    const id = await publishPhoto(s.platform_ig_token, s.platform_ig_account_id, `${d.siteUrl}/img/${row.image_key}`, caption.slice(0, 2200));
-    await db.prepare("UPDATE shops SET mention_post_id = ?, invite_status = CASE WHEN invite_status = '' THEN 'invited' ELSE invite_status END, invited_at = COALESCE(invited_at, ?) WHERE id = ?")
-      .bind(id, now(), shopId)
-      .run();
-    await log("mentioned", `post ${id}`);
-    return true;
-  } catch (e) {
-    // Not posted: let a later wish try again.
-    await db.prepare("UPDATE shops SET mention_at = NULL WHERE id = ?").bind(shopId).run();
-    await log("mention_failed", String((e as Error).message ?? e).slice(0, 300));
-    return false;
+  // Instagram fetches the photo itself and takes JPEG only. The post's own photo on Instagram's CDN
+  // reaches it best (our copy may be WebP, and our domain sits behind a CDN in Iran); ours is the fallback.
+  const fresh = row.source_url ? (await fetchPost(row.source_url).catch(() => null))?.image : "";
+  const images = [fresh, /\.jpe?g$/i.test(row.image_key) ? `${d.siteUrl}/img/${row.image_key}` : ""].filter((x): x is string => !!x);
+  const errors: string[] = [];
+  for (const image of images) {
+    try {
+      const id = await publishPhoto(s.platform_ig_token, s.platform_ig_account_id, image, caption.slice(0, 2200));
+      await db.prepare("UPDATE shops SET mention_post_id = ?, invite_status = CASE WHEN invite_status = '' THEN 'invited' ELSE invite_status END, invited_at = COALESCE(invited_at, ?) WHERE id = ?")
+        .bind(id, now(), shopId)
+        .run();
+      await log("mentioned", `post ${id}`);
+      return true;
+    } catch (e) {
+      errors.push(String((e as Error).message ?? e).slice(0, 200));
+    }
   }
+  // Not posted: a later wish (or the daily retry) tries again.
+  await db.prepare("UPDATE shops SET mention_at = NULL WHERE id = ?").bind(shopId).run();
+  await log("mention_failed", errors.join(" | ") || "عکسی برای پست پیدا نشد");
+  return false;
+}
+
+/** Mention a page that hasn't heard from us (its most wished item), e.g. after a failed try. */
+export async function mentionShop(d: Deps, shopId: number) {
+  const p = await d.db
+    .prepare(
+      `SELECT p.id FROM products p LEFT JOIN wishlist_items i ON i.product_id = p.id
+       WHERE p.shop_id = ? AND p.deleted_at IS NULL GROUP BY p.id ORDER BY p.awaiting_price DESC, COUNT(i.id) DESC, p.id DESC LIMIT 1`,
+    )
+    .bind(shopId)
+    .first<{ id: number }>();
+  return p ? mentionPage(d, shopId, p.id) : false;
+}
+
+/** Daily: try again for pages with wishes whose mention post failed (a few a day). */
+export async function retryMentions(d: Deps, limit = 5) {
+  const { results } = await d.db
+    .prepare(
+      `SELECT s.id FROM shops s
+       WHERE s.is_external = 1 AND s.status <> 'suspended' AND s.mention_at IS NULL AND s.ig_contact_id = ''
+         AND EXISTS (SELECT 1 FROM wishlist_items i JOIN products p ON p.id = i.product_id WHERE p.shop_id = s.id)
+       ORDER BY s.id DESC LIMIT ?`,
+    )
+    .bind(limit)
+    .all<{ id: number }>();
+  for (const r of results) await mentionShop(d, r.id);
 }
 
 /** A DM to the site's Instagram account: a page with a stand-in shop runs it by commands. */

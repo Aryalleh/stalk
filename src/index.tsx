@@ -18,6 +18,7 @@ import { bot } from "./bale/bot";
 import { store } from "./shop/routes/store";
 import { miniapp } from "./bale/miniapp";
 import { igWebhook, refreshIgTokens } from "./shop/crm/webhook";
+import { retryMentions } from "./shop/instagram-shops";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { pageRoute, seo } from "./seo";
@@ -172,8 +173,15 @@ export default {
     const visitor = fromTrustedProxy(req, env.PROXY_SECRET);
     return visitor instanceof Response ? visitor : app.fetch(visitor, env, ctx);
   },
-  // Daily cron (wrangler.jsonc "triggers"): keep shops' Instagram tokens alive.
+  // Daily cron (wrangler.jsonc "triggers"): keep shops' Instagram tokens alive, and retry the
+  // mention posts that failed (instagram-shops.ts).
   async scheduled(_event: ScheduledController, env: Env["Bindings"], ctx: ExecutionContext) {
-    ctx.waitUntil(ensureMigrated(env.DB).then(() => refreshIgTokens(env.DB)));
+    ctx.waitUntil(
+      ensureMigrated(env.DB).then(async () => {
+        await refreshIgTokens(env.DB);
+        const settings = await loadSettings(env.DB);
+        if (settings.site_url) await retryMentions({ db: env.DB, images: env.IMAGES, settings, siteUrl: settings.site_url.replace(/\/$/, "") });
+      }),
+    );
   },
 } satisfies ExportedHandler<Env["Bindings"]>;

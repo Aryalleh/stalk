@@ -1736,6 +1736,7 @@ export interface ExternalShopRow {
   invite_status: string;
   invited_at: string | null;
   ig_contact_at: string | null;
+  mention_at: string | null;
   card_number: string;
   created_at: string;
   products: number;
@@ -1851,6 +1852,11 @@ export function AdminInstagramPage(props: {
                       {x.invite_status === "" && <button class="small secondary" name="status" value="invited">پیام فرستاده شد</button>}
                       {x.invite_status !== "declined" && <button class="small secondary" name="status" value="declined">نمی‌خواهد</button>}
                     </form>
+                    {!x.mention_at && !x.ig_contact_at && x.wishes > 0 && (
+                      <form method="post" action={`/admin/instagram/${x.id}/mention`} style="margin-top:6px">
+                        <button class="small secondary"><i class="fa-solid fa-at ml-1"></i> پست منشن دوباره</button>
+                      </form>
+                    )}
                     <form method="post" action={`/admin/users/${x.owner_id}/login-as`} style="margin-top:6px">
                       <input type="hidden" name="next" value="/panel" />
                       <button class="small secondary"><i class="fa-solid fa-store ml-1"></i> پنل این صفحه</button>

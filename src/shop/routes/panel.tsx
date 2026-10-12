@@ -24,7 +24,7 @@ import { miniAppLink } from "../telegram/channel";
 import { upcomingMonthDays } from "../../../lib/people";
 import { crmPanel } from "../crm/routes";
 import { forbiddenPage } from "../../errorpage";
-import { handOver, igLog, inviteText, joinWithPhone } from "../instagram-shops";
+import { handOver, igLog, inviteText, joinWithPhone, mentionShop } from "../instagram-shops";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { PLATFORM_IG_SCOPES, authorizeUrl, exchangeCode, fetchAccount, subscribeWebhook } from "../crm/instagram";
 import { cleanIgToken } from "../crm/routes";
@@ -910,7 +910,7 @@ admin.get("/admin/instagram", async (c) => {
   const site = siteUrl(c);
   const [shops, orders, log] = await db.batch([
     db.prepare(
-      `SELECT s.id, s.slug, s.instagram, s.owner_id, s.status, s.invite_status, s.invited_at, s.ig_contact_at, s.card_number, s.created_at,
+      `SELECT s.id, s.slug, s.instagram, s.owner_id, s.status, s.invite_status, s.invited_at, s.ig_contact_at, s.mention_at, s.card_number, s.created_at,
               (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id) AS products,
               (SELECT COUNT(*) FROM products p WHERE p.shop_id = s.id AND p.awaiting_price = 1 AND p.is_active = 1) AS unpriced,
               (SELECT COUNT(*) FROM wishlist_items i JOIN products p ON p.id = i.product_id WHERE p.shop_id = s.id) AS wishes,
@@ -1047,6 +1047,12 @@ admin.post("/admin/instagram/:id{[0-9]+}/invite", async (c) => {
     .bind(status, status === "invited" ? now() : null, intParam(c, "id"))
     .run();
   return c.redirect("/admin/instagram");
+});
+
+// Post the mention again for a page whose post failed (it also retries daily on its own).
+admin.post("/admin/instagram/:id{[0-9]+}/mention", async (c) => {
+  const ok = await mentionShop(deps(c), intParam(c, "id"));
+  return igBack(c, ok ? "پست منشن منتشر شد." : "منتشر نشد؛ علتش در گزارش پایین صفحه است.", ok);
 });
 
 // Hand a page's stand-in shop to its owner's account (pages usually do this themselves with "عضویت").
