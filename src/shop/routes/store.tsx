@@ -25,6 +25,7 @@ import {
 import { PUBLIC_IMAGE } from "../images";
 import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGift } from "../views/profile";
 import { sendReceiptToShop } from "../orders";
+import { inviteText } from "../instagram-shops";
 import { CheckoutPage, HomePage, type ProductShopInfo, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
@@ -191,13 +192,22 @@ store.get("/w/:slug", async (c) => {
   const w = await wishlistWithOwner(c.env.DB, "w.slug = ?", c.req.param("slug"));
   if (!w || w.is_direct) return c.notFound();
   const user = c.get("user");
+  const items = await wishlistItems(c.env.DB, w.id);
+  // An Instagram page that hasn't priced an item yet: a message anyone here can send it.
+  const askShop: Record<number, { handle: string; text: string }> = {};
+  for (const it of items) {
+    if ((it.waiting_shop || it.awaiting_price) && it.shop_ig) {
+      askShop[it.id] = { handle: it.shop_ig, text: inviteText(c.get("settings"), siteUrl(c), { instagram: it.shop_ig }, it, 1) };
+    }
+  }
   return render(
     c,
     <WishlistPublicPage
       user={user}
       wishlist={w}
       owner={{ name: w.owner_name, avatar_key: w.owner_avatar, banner_key: w.owner_banner, username: w.owner_username ?? "" }}
-      items={await wishlistItems(c.env.DB, w.id)}
+      items={items}
+      askShop={askShop}
       isOwner={user?.id === w.user_id}
       shareUrl={`${siteUrl(c)}/w/${w.slug}`}
     />,

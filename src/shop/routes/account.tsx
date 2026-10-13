@@ -402,7 +402,7 @@ account.get("/me/ig-link/:token{[A-Za-z0-9]{24,64}}", async (c) => {
   let next = "/me/instagram?linked=1";
   if (row.post_url) {
     const list = await defaultWishlist(c.env.DB, user);
-    const r = await addInstagramWish(deps, user, { postUrl: row.post_url, wishlistId: list.id });
+    const r = await addInstagramWish(deps, user, { postUrl: row.post_url, wishlistId: list.id, mention: false }); // sent in our DM
     if (r.ok) {
       c.executionCtx.waitUntil(r.notify);
       next = `/me/instagram?added=${r.productId}&list=${list.id}`;

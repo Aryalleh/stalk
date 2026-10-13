@@ -162,6 +162,8 @@ export type ItemView = {
   shop_ok: number; // approved, has a card number to receive transfers, and the item has a price
   awaiting_price: number; // added from Instagram; the page hasn't priced it yet
   waiting_shop: number; // an Instagram page still has to send its price / card
+  shop_ig: string; // the shop's Instagram username (for a message to it)
+  source_url: string; // the Instagram post it was added from
   shop_city: string;
   courier_enabled: number;
   courier_fee: number;
@@ -214,8 +216,10 @@ export async function listProducts(db: D1Database, opts: { q?: string; shopId?: 
   if (opts.shopId) {
     where.push("p.shop_id = ?");
     binds.push(opts.shopId);
+  } else {
+    // Items added from Instagram join explore once their page has priced them (a shop's own page lists them all).
+    where.push("p.awaiting_price = 0");
   }
-  // Items added from Instagram (even before the page has priced them) are part of explore too.
   if (opts.category) {
     where.push("p.category = ?");
     binds.push(opts.category);
@@ -247,6 +251,7 @@ export async function wishlistItems(db: D1Database, wishlistId: number): Promise
               p.title, p.price, p.image_key, p.is_active AS product_active, p.awaiting_price,
               s.name AS shop_name, s.slug AS shop_slug, (s.status = 'approved' AND s.card_number <> '' AND p.awaiting_price = 0) AS shop_ok,
               (s.is_external = 1 AND (s.card_number = '' OR p.awaiting_price = 1)) AS waiting_shop,
+              CASE WHEN s.is_external = 1 THEN s.instagram ELSE s.ig_username END AS shop_ig, p.source_url,
               s.city AS shop_city, s.courier_enabled, s.courier_fee, s.post_enabled, s.post_fee,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.status IN ${SOLD}) AS bought,
               (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND ${HOLDS("?1")} AND o.status NOT IN ${SOLD}) AS reserved,

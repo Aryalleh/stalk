@@ -35,11 +35,11 @@ seo.get("/sitemap.xml", async (c) => {
   const origin = siteOrigin(c);
   const db = c.env.DB;
   const [shops, products] = await db.batch([
-    // Every shop page and every product, those added from Instagram pages included.
+    // Every shop page and every product; one added from Instagram once its page has priced it.
     db.prepare("SELECT slug, logo_key, created_at FROM shops WHERE status = 'approved' ORDER BY id LIMIT 5000"),
     db.prepare(
       `SELECT p.id, p.code, p.title, p.image_key, p.updated_at FROM products p JOIN shops s ON s.id = p.shop_id
-       WHERE p.is_active = 1 AND p.deleted_at IS NULL AND s.status = 'approved' ORDER BY p.id DESC LIMIT 40000`,
+       WHERE p.is_active = 1 AND p.deleted_at IS NULL AND p.awaiting_price = 0 AND s.status = 'approved' ORDER BY p.id DESC LIMIT 40000`,
     ),
   ]);
   const url = (loc: string, opts: { lastmod?: string; priority?: string; image?: string; imageTitle?: string } = {}) =>

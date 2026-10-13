@@ -550,12 +550,17 @@ async function handleWisherDm(d: Deps, ev: IgEvent, wisher: { id: number; name: 
       return log("wisher_link_sent", url);
     }
     const list = await defaultWishlist(db, wisher);
-    const r = await addInstagramWish(d, wisher, { postUrl: url, wishlistId: list.id });
+    const r = await addInstagramWish(d, wisher, { postUrl: url, wishlistId: list.id, mention: false });
     if (!r.ok) {
       await say(`${r.error.replace("؛ آیدی صفحه‌ی فروشگاه را هم بنویسید (مثل ‎@shop_name).", "")} می‌توانید از سایت اضافه‌اش کنید: ${d.siteUrl}/me/instagram`);
       return log("wisher_failed", r.error);
     }
     await say(`✅ «${r.title}» به لیست «${list.title}» اضافه شد 🎁\n${d.siteUrl}/me/instagram?added=${r.productId}&list=${list.id}`);
+    if (r.askShop) {
+      // We don't post about links sent here (one may be a slip): the wisher tells the page, with this message.
+      await say(`📩 این فروشگاه هنوز در ${s.site_name} قیمت نگذاشته. پیام زیر را برای @${r.askShop.handle} در دایرکت بفرستید تا قیمت و جزئیات سفارش را ثبت کند:\n${dmLink(r.askShop.handle)}`);
+      await say(r.askShop.text);
+    }
     await log("wisher_added", url);
     await r.notify;
   } catch (e) {

@@ -78,7 +78,8 @@ window.addEventListener('beforeinstallprompt', function (e) {
 window.addEventListener('appinstalled', function () { document.querySelectorAll('[data-install]').forEach(function (b) { b.classList.add('hidden'); }); });
 document.addEventListener('click', function (e) {
   var c = e.target.closest('[data-copy]');
-  if (c) { e.preventDefault(); navigator.clipboard && navigator.clipboard.writeText(c.getAttribute('data-copy'));
+  // (A link with data-copy copies, then still opens: e.g. a message to paste in an Instagram DM.)
+  if (c) { if (!c.href) e.preventDefault(); navigator.clipboard && navigator.clipboard.writeText(c.getAttribute('data-copy'));
     var t = c.getAttribute('data-copied'); if (t) { var o = c.innerHTML; c.innerHTML = t; setTimeout(function () { c.innerHTML = o; }, 1500); } }
   var s = e.target.closest('[data-share]');
   if (s) { e.preventDefault(); var url = s.getAttribute('data-share') || location.href, title = document.title;

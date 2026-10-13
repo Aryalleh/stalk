@@ -31,10 +31,12 @@ export interface WishInput {
   note?: string;
   handle?: string; // the page, when the post doesn't tell
   photo?: File | null;
+  /** Mention a page that hasn't written to us in a post (default). A post link sent in our DM may be a slip, so not for those. */
+  mention?: boolean;
 }
 
 export type WishResult =
-  | { ok: true; productId: number; wishlistId: number; title: string; notify: Promise<unknown> }
+  | { ok: true; productId: number; wishlistId: number; title: string; notify: Promise<unknown>; askShop?: { handle: string; text: string } }
   | { ok: false; error: string; askHandle?: boolean };
 
 /**
@@ -113,9 +115,11 @@ export async function addInstagramWish(d: Deps, user: { id: number; name: string
             : "",
         ),
     // A page we can DM hears it there; one that hasn't written yet is mentioned in a post (once).
-    info.ig_contact_id ? dmPage(d, info.shop_id, toShop) : info.is_external ? mentionPage(d, info.shop_id, info.id) : Promise.resolve(),
+    info.ig_contact_id ? dmPage(d, info.shop_id, toShop) : info.is_external && inp.mention !== false ? mentionPage(d, info.shop_id, info.id) : Promise.resolve(),
   );
-  return { ok: true, productId: info.id, wishlistId: inp.wishlistId, title: info.title, notify: Promise.allSettled(background) };
+  // A page we can't reach ourselves hears it from the wisher: the message to send it.
+  const askShop = info.awaiting_price && info.is_external && !info.ig_contact_id ? { handle: info.instagram, text: inviteText(s, site, info, info, 1) } : undefined;
+  return { ok: true, productId: info.id, wishlistId: inp.wishlistId, title: info.title, notify: Promise.allSettled(background), askShop };
 }
 
 // ---------- wishes sent as Instagram posts in a DM ----------

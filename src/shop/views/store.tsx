@@ -528,7 +528,7 @@ export function ProductPage(props: {
   const images = props.images.length ? props.images.map((i) => i.image_key) : p.image_key ? [p.image_key] : [];
   const url = `${site.origin}${productPath(p)}`;
   const seo: Seo = {
-    index: true,
+    index: !p.awaiting_price, // an Instagram item stays out of search until its page prices it
     canonical: productPath(p),
     type: "product",
     description: summary(p.description ? `${p.title}: ${p.description}` : `خرید ${p.title} از فروشگاه ${p.shop_name} در ${site.site_name}؛ به لیست آرزویت اضافه کن تا دوستانت برایت کادو بخرند، یا مستقیم بخر.`),
@@ -1088,6 +1088,7 @@ export function WishlistPublicPage(props: {
   wishlist: Wishlist;
   owner: { name: string; avatar_key: string; username: string; banner_key: string };
   items: ItemView[];
+  askShop?: Record<number, { handle: string; text: string }>; // items an Instagram page still has to price
   isOwner: boolean;
   shareUrl: string;
 }) {
@@ -1205,7 +1206,23 @@ export function WishlistPublicPage(props: {
                   <div class={`text-[11px] font-bold ${fulfilled ? "text-white/70 line-through" : "text-brand"}`}>{priceLabel(it)}</div>
                   {variantLabel(it.size, it.color) && <div class="text-[10px] text-fg/80">{variantLabel(it.size, it.color)}</div>}
                   {it.note && <div class="text-[10px] text-muted truncate">{it.note}</div>}
-                  {buyable && !fulfilled && !props.isOwner ? (
+                  {!fulfilled && props.askShop?.[it.id] ? (
+                    <div class="mt-3">
+                      <a
+                        href={`https://ig.me/m/${props.askShop[it.id].handle}`}
+                        target="_blank"
+                        rel="noopener"
+                        data-copy={props.askShop[it.id].text}
+                        data-copied="✓ پیام کپی شد؛ در دایرکت بچسبانید"
+                        class="block w-full py-2 bg-gradient-to-l from-fuchsia-600 to-orange-500 text-white text-center rounded-xl text-[11px] font-bold shadow-lg"
+                      >
+                        <i class="fa-brands fa-instagram ml-1"></i> پیام به <span class="ltr">@{props.askShop[it.id].handle}</span>
+                      </a>
+                      <span class="block mt-1.5 text-[10px] text-white/85 text-center leading-relaxed">
+                        منتظر قیمت از فروشگاه — پیام کپی می‌شود؛ در دایرکت بفرستید تا قیمت و جزئیات سفارش ثبت شود.
+                      </span>
+                    </div>
+                  ) : buyable && !fulfilled && !props.isOwner ? (
                     <a href={`/gift/${it.id}`} class="mt-3 block w-full py-2 bg-brand text-white text-center rounded-xl text-[11px] font-bold shadow-lg shadow-brand/20">
                       🎁 کادو بده
                     </a>
