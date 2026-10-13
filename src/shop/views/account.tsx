@@ -816,8 +816,10 @@ export interface GiftRow {
   person: string; // the giver (received) or the recipient (given); "" = anonymous
   person_username: string | null;
   id?: number;
-  needs_address?: number; // received from a list without a fixed address; the recipient hasn't given it yet
-  address_editable?: number; // given, not shipped yet: can still change
+  needs_address?: number; // paid: the recipient still has to give or confirm the address
+  address_editable?: number; // given / confirmed, not shipped yet: can still change
+  has_address?: number; // a saved address to confirm (else one to give)
+  address_due_at?: string | null; // confirm it until then, else the saved one is used
 }
 
 /** "کادوهای من": gifts I received and gifts I gave, as two tabs. */
@@ -873,7 +875,8 @@ export function MyGiftsPage(props: { user: User; tab: "received" | "given"; rece
                   </p>
                   {!given && g.needs_address ? (
                     <a href={`/me/gifts/${g.id}/address`} class="mt-1 inline-block px-3 py-1.5 bg-brand text-white rounded-xl text-[11px] font-bold shadow-lg shadow-brand/20">
-                      <i class="fa-solid fa-location-dot ml-1"></i> آدرس فعلی‌ام را می‌دهم
+                      <i class="fa-solid fa-location-dot ml-1"></i> {g.has_address ? "تأیید یا تغییر آدرس" : "آدرس فعلی‌ام را می‌دهم"}
+                      {g.has_address && g.address_due_at ? <span class="font-normal opacity-90"> · تا <span class="dt">{formatJalali(g.address_due_at)}</span></span> : null}
                     </a>
                   ) : !given && g.address_editable ? (
                     <a href={`/me/gifts/${g.id}/address`} class="text-brand font-bold text-[11px]">تغییر آدرس (تا قبل از ارسال)</a>
@@ -903,12 +906,26 @@ export function GiftAddressPage(props: {
   const o = props.order;
   const v = props.values;
   const lockedCity = o.delivery_method === "courier" && o.ship_city ? o.ship_city : "";
+  const confirm = !o.address_at && !!o.ship_address.trim(); // a saved address to confirm or change
   return (
     <Layout title="آدرس ارسال کادو" user={props.user} nav="wishes">
       <div class="card" style="text-align:center">
         <div style="font-size:40px">🎁</div>
         <h1 style="margin:6px 0">کادوی «{o.product_title}» در راه است!</h1>
-        <p class="muted">فروشگاه خرید را تأیید کرده. آدرس فعلی‌تان را بدهید تا کادو ارسال شود؛ فقط فروشگاه آن را می‌بیند، نه خریدار.</p>
+        {o.address_at ? (
+          <p class="muted">آدرس برای فروشگاه فرستاده شده. اگر جابه‌جا شده‌اید، تا قبل از ارسال می‌توانید عوضش کنید.</p>
+        ) : confirm ? (
+          <p class="muted">
+            فروشگاه خرید را تأیید کرده. آدرس ثبت‌شده‌تان هنوز درست است؟ تأییدش کنید یا آدرس فعلی‌تان را بنویسید.
+            {o.address_due_at && (
+              <b class="block" style="margin-top:6px;color:var(--fg)">
+                تا <span class="dt">{formatJalali(o.address_due_at)}</span> فرصت دارید؛ بعد از آن کادو به همین آدرس ثبت‌شده فرستاده می‌شود.
+              </b>
+            )}
+          </p>
+        ) : (
+          <p class="muted">فروشگاه خرید را تأیید کرده. آدرس فعلی‌تان را بدهید تا کادو ارسال شود؛ فقط فروشگاه آن را می‌بیند، نه خریدار.</p>
+        )}
       </div>
       <Errors errors={props.errors} />
       <form method="post" class="card">
@@ -932,7 +949,12 @@ export function GiftAddressPage(props: {
         <textarea name="address" required maxlength={400}>{v.address}</textarea>
         <label>کد پستی</label>
         <input name="postal_code" value={v.postal_code} class="ltr" inputmode="numeric" required />
-        <p><button><i class="fa-solid fa-location-dot ml-1"></i> ثبت آدرس و ارسال برای فروشگاه</button></p>
+        <p>
+          <button>
+            <i class="fa-solid fa-location-dot ml-1"></i> {confirm ? "تأیید آدرس و ارسال برای فروشگاه" : o.address_at ? "ذخیره‌ی آدرس جدید" : "ثبت آدرس و ارسال برای فروشگاه"}
+          </button>
+        </p>
+        {confirm && <p class="small muted">اگر آدرس عوض شده، همین‌جا ویرایشش کنید و بعد دکمه را بزنید.</p>}
       </form>
     </Layout>
   );

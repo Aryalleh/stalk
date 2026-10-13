@@ -3,7 +3,7 @@ import { formatCard } from "../../../lib/normalize";
 import { birthdayLabel } from "../../../lib/people";
 import { mask, type Settings } from "../../settings";
 import { CITIES } from "../cities";
-import { STATUS_LABEL, priceLabel, showCode, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
+import { STATUS_LABEL, addressPending, priceLabel, showCode, toman, type Order, type Product, type ProductImage, type ProductPackage, type Shop } from "../db";
 import { DELIVERY_LABEL } from "../notify";
 import { CLOTHING_TEMPLATE } from "../sizes";
 import { variantKey, variantLabel, variants, type Variant } from "../variants";
@@ -505,8 +505,14 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; v
         </div>
         <div class="card">
           <h2>ارسال به 📦</h2>
-          {confirmed && !o.ship_address.trim() ? (
-            <p class="muted">📍 گیرنده آدرس ثابتی ثبت نکرده بود؛ از او خواستیم آدرس فعلی‌اش را بدهد. به‌محض ثبت، آدرس همین‌جا نمایش داده می‌شود و در بات هم برایتان می‌فرستیم. تا آن موقع ارسال نکنید.</p>
+          {confirmed && (addressPending(o) || !o.ship_address.trim()) ? (
+            <p class="muted">
+              {o.ship_address.trim() ? (
+                <>📍 گیرنده در حال تأیید یا به‌روزرسانی آدرسش است{o.address_due_at ? <> (حداکثر تا <span class="dt">{formatJalali(o.address_due_at)}</span>)</> : null}. بعد از آن آدرس همین‌جا نمایش داده می‌شود و در بات هم برایتان می‌فرستیم. تا آن موقع ارسال نکنید.</>
+              ) : (
+                <>📍 گیرنده آدرس ثابتی ثبت نکرده بود؛ از او خواستیم آدرس فعلی‌اش را بدهد. به‌محض ثبت، آدرس همین‌جا نمایش داده می‌شود و در بات هم برایتان می‌فرستیم. تا آن موقع ارسال نکنید.</>
+              )}
+            </p>
           ) : confirmed ? (
             <>
               <p>

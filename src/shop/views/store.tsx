@@ -1148,7 +1148,7 @@ export function WishlistPublicPage(props: {
             <span class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-location-dot"></i></span>
             <span class="flex-1 min-w-0">
               <b class="block text-sm">{fa(props.needAddress)} کادو منتظر آدرس شماست 🎁</b>
-              <span class="block text-[11px] opacity-90">آدرس فعلی‌تان را بدهید تا فروشگاه ارسال کند</span>
+              <span class="block text-[11px] opacity-90">آدرستان را بدهید یا تأیید کنید تا فروشگاه ارسال کند</span>
             </span>
             <i class="fa-solid fa-chevron-left text-sm"></i>
           </a>

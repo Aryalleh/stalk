@@ -679,7 +679,9 @@ account.get("/me/gifts", async (c) => {
     db
       .prepare(
         `SELECT o.id, o.token, o.product_title, o.status, o.cancel_kind, COALESCE(o.paid_at, o.created_at) AS at, o.tracking_code, o.gift_message,
-                (o.status = 'paid' AND TRIM(o.ship_address) = '') AS needs_address, (o.status = 'paid' AND o.address_at IS NOT NULL) AS address_editable,
+                (o.status = 'paid' AND o.address_asked_at IS NOT NULL AND o.address_at IS NULL) AS needs_address,
+                (o.status = 'paid' AND o.address_asked_at IS NOT NULL AND o.address_at IS NOT NULL) AS address_editable,
+                (TRIM(o.ship_address) <> '') AS has_address, o.address_due_at,
                 COALESCE(p.image_key, '') AS image_key, COALESCE(p.code, '') AS product_code, o.product_id,
                 CASE WHEN o.is_anonymous = 1 THEN '' ELSE COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست') END AS person,
                 CASE WHEN o.is_anonymous = 1 THEN NULL ELSE gu.username END AS person_username
@@ -702,14 +704,14 @@ account.get("/me/gifts", async (c) => {
   return render(c, <MyGiftsPage user={user} tab={tab} received={received.results as GiftRow[]} given={given.results as GiftRow[]} addressSaved={c.req.query("address") === "1"} />);
 });
 
-// ---------- a gift from a list without a fixed address: the recipient gives it after the purchase ----------
+// ---------- after the shop confirms a gift: the recipient gives (no saved address) or confirms it ----------
 
-/** A paid gift bought from one of my lists that still waits for (or may change) its address. */
+/** A paid gift bought from one of my lists whose address I give, confirm or (until it ships) change. */
 const myGiftToAddress = (c: C) =>
   c.env.DB.prepare(
     `SELECT o.*, w.recipient_name AS w_name, w.recipient_phone AS w_phone, w.city AS w_city, w.address AS w_address, w.postal_code AS w_postal
      FROM orders o JOIN wishlists w ON w.id = o.wishlist_id
-     WHERE o.id = ? AND w.user_id = ? AND w.is_direct = 0 AND o.status = 'paid' AND (TRIM(o.ship_address) = '' OR o.address_at IS NOT NULL)`,
+     WHERE o.id = ? AND w.user_id = ? AND w.is_direct = 0 AND o.status = 'paid' AND o.address_asked_at IS NOT NULL`,
   )
     .bind(intParam(c, "id"), currentUser(c).id)
     .first<Order & { w_name: string; w_phone: string; w_city: string; w_address: string; w_postal: string }>();
@@ -740,7 +742,7 @@ account.post("/me/gifts/:id{[0-9]+}/address", async (c) => {
   if (!values.name) errors.push("نام گیرنده لازم است.");
   if (!MOBILE.test(values.phone)) errors.push("موبایل گیرنده نامعتبر است.");
   if (!values.city) errors.push("شهر را بنویسید.");
-  if (values.address.length < 10) errors.push("آدرس کامل را بنویسید.");
+  if (!values.address) errors.push("آدرس کامل را بنویسید.");
   if (!/^\d{10}$/.test(values.postal_code)) errors.push("کد پستی باید ۱۰ رقم باشد.");
   if (errors.length) return render(c, <GiftAddressPage user={currentUser(c)} order={o} values={values} errors={errors} />, 400);
   const deps = { db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) };

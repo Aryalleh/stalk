@@ -1,7 +1,7 @@
 // Order actions shared by the shop panel and the bot's inline buttons.
 import { sendPhotoToChats, sendToChats, type Chats } from "../bale/botapi";
 import type { Settings } from "../settings";
-import { adjustStock, cancelOutOfStock, confirmPayment, now, rejectPayment, toman, type Order } from "./db";
+import { addressPending, adjustStock, cancelOutOfStock, confirmPayment, now, rejectPayment, toman, type Order } from "./db";
 import { variantLabel } from "./variants";
 import { syncGiftBuyer } from "./crm/db";
 import { receiptButtons, receiptCaption, shipMessage } from "./notify";
@@ -71,74 +71,135 @@ export async function sendReceiptToShop(d: Deps, orderId: number) {
   await recordNotify(d.db, o.id, error);
 }
 
-/** Shop confirmed the money arrived: mark paid and send the delivery details. Returns false if not awaiting. */
+/**
+ * Shop confirmed the money arrived: mark paid, then the recipient gives (no saved address) or confirms
+ * the address first — within 24 hours, else the saved one is used. The shop sees the address only
+ * then, so nothing goes to an old address. Returns false if not awaiting.
+ */
 export async function confirmOrder(d: Deps, orderId: number, shopId: number) {
   if (!(await confirmPayment(d.db, orderId, shopId))) return false;
-  const o = await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
+  let o = await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>();
   if (o) await syncGiftBuyer(d.db, o).catch((e) => console.error("crm sync", e));
   if (!o) return true;
-  const needsAddress = !o.ship_address.trim(); // a list without a fixed address: the recipient gives it now
-  // (An Instagram page confirming from its DM gets the address in the reply there.)
+  const list = await d.db.prepare("SELECT is_direct FROM wishlists WHERE id = ?").bind(o.wishlist_id).first<{ is_direct: number }>();
+  // A purchase for oneself carries the address just typed: nothing to confirm.
+  const ask: AddressAsk = list?.is_direct ? "none" : o.ship_address.trim() ? "confirm" : "give";
+  if (ask !== "none") {
+    const t = now();
+    await d.db
+      .prepare("UPDATE orders SET address_asked_at = ?, address_due_at = ? WHERE id = ?")
+      .bind(t, ask === "confirm" ? new Date(Date.now() + ADDRESS_HOURS * 3600_000).toISOString() : null, o.id)
+      .run();
+    o = { ...o, address_asked_at: t };
+  }
+  // (An Instagram page confirming from its DM gets the same in the reply there.)
   const external = await d.db.prepare("SELECT is_external FROM shops WHERE id = ?").bind(shopId).first<{ is_external: number }>();
   const chats = external?.is_external ? null : await shopOwnerChats(d.db, shopId);
   if (chats) {
-    const text = needsAddress ? waitingAddressMessage(o) : shipMessage(o, d.siteUrl);
+    const text = ask === "none" ? shipMessage(o, d.siteUrl) : waitingAddressMessage(o, ask);
     await recordNotify(d.db, o.id, await sendToChats(d.settings, chats, text).catch((e) => String(e)));
   }
-  if (needsAddress) await d.db.prepare("UPDATE orders SET address_asked_at = ? WHERE id = ?").bind(now(), o.id).run();
-  await tellPaid(d, o, needsAddress);
+  await tellPaid(d, o, ask);
   return true;
 }
 
-const waitingAddressMessage = (o: Order) =>
-  `✅ پرداخت سفارش #${o.id} («${o.product_title}») تأیید شد.\n📍 گیرنده آدرس ثابتی ثبت نکرده؛ از او آدرس فعلی‌اش را خواستیم و به‌محض ثبت، آدرس را برایتان می‌فرستیم. تا آن موقع ارسال نکنید.`;
+type AddressAsk = "none" | "give" | "confirm";
+/** How long a recipient has to confirm or change a saved address. */
+export const ADDRESS_HOURS = 24;
+const hoursFa = ADDRESS_HOURS.toLocaleString("fa-IR");
 
-/** The page where the recipient gives the address for a gift bought from a list without one. */
+const waitingAddressMessage = (o: Order, ask: AddressAsk) =>
+  `✅ پرداخت سفارش #${o.id} («${o.product_title}») تأیید شد.\n📍 ` +
+  (ask === "give"
+    ? "گیرنده آدرس ثابتی ثبت نکرده؛ از او آدرس فعلی‌اش را خواستیم و به‌محض ثبت، آدرس را برایتان می‌فرستیم."
+    : `از گیرنده خواستیم آدرسش را تأیید یا به‌روز کند (حداکثر ${hoursFa} ساعت)؛ بعد آدرس را برایتان می‌فرستیم.`) +
+  " تا آن موقع ارسال نکنید.";
+
+/** The page where the recipient gives or confirms the address for a gift. */
 export const addressLink = (d: Deps, o: { id: number }) => `${d.siteUrl}/me/gifts/${o.id}/address`;
 
+/** Send the shop the delivery details (an Instagram page in its DM, else its owner's / the admins' bot). */
+async function sendAddressToShop(d: Deps, o: Order, header: string) {
+  const text = `${header}\n${shipMessage(o, d.siteUrl)}`;
+  const external = await d.db.prepare("SELECT is_external FROM shops WHERE id = ?").bind(o.shop_id).first<{ is_external: number }>();
+  if (external?.is_external && (await dmPage(d, o.shop_id, `${text}\n\nبعد از ارسال: ارسال ${o.id} کدرهگیری`))) {
+    await recordNotify(d.db, o.id, "");
+    return;
+  }
+  const chats = await shopOwnerChats(d.db, o.shop_id);
+  await recordNotify(d.db, o.id, chats ? await sendToChats(d.settings, chats, text).catch((e) => String(e)) : "no connected chat");
+}
+
 /**
- * The recipient gave the address for a paid order: save it and send the shop the delivery details
- * (an Instagram page in its DM, else its owner's / the admins' bot). Returns false if it's too late.
+ * The recipient gave, confirmed or changed the address of a paid order: save it and send the shop the
+ * delivery details. Returns false if it's too late (shipped).
  */
 export async function setOrderAddress(d: Deps, orderId: number, a: { name: string; phone: string; city: string; address: string; postal_code: string }) {
-  const first = await d.db.prepare("SELECT address_at FROM orders WHERE id = ? AND status = 'paid'").bind(orderId).first<{ address_at: string | null }>();
-  if (!first) return false;
+  const before = await d.db.prepare("SELECT * FROM orders WHERE id = ? AND status = 'paid'").bind(orderId).first<Order>();
+  if (!before) return false;
   await d.db
     .prepare("UPDATE orders SET ship_name = ?, ship_phone = ?, ship_city = ?, ship_address = ?, ship_postal_code = ?, address_at = ? WHERE id = ? AND status = 'paid'")
     .bind(a.name, a.phone, a.city, a.address, a.postal_code, now(), orderId)
     .run();
   const o = (await d.db.prepare("SELECT * FROM orders WHERE id = ?").bind(orderId).first<Order>())!;
-  const text = `${first.address_at ? "🔄 گیرنده آدرس را تغییر داد.\n" : "📍 گیرنده آدرسش را فرستاد.\n"}${shipMessage(o, d.siteUrl)}`;
-  const external = await d.db.prepare("SELECT is_external FROM shops WHERE id = ?").bind(o.shop_id).first<{ is_external: number }>();
-  if (external?.is_external && (await dmPage(d, o.shop_id, `${text}\n\nبعد از ارسال: ارسال ${o.id} کدرهگیری`))) {
-    await recordNotify(d.db, o.id, "");
-  } else {
-    const chats = await shopOwnerChats(d.db, o.shop_id);
-    await recordNotify(d.db, o.id, chats ? await sendToChats(d.settings, chats, text).catch((e) => String(e)) : "no connected chat");
+  const same =
+    before.ship_name === o.ship_name && before.ship_phone === o.ship_phone && before.ship_city === o.ship_city &&
+    before.ship_address === o.ship_address && before.ship_postal_code === o.ship_postal_code;
+  const header = before.address_at
+    ? same ? "" : "🔄 گیرنده آدرس را تغییر داد؛ به این آدرس بفرستید:"
+    : !before.ship_address.trim() ? "📍 گیرنده آدرسش را فرستاد." : same ? "📍 گیرنده آدرسش را تأیید کرد." : "📍 گیرنده آدرسش را به‌روز کرد.";
+  if (before.address_at && same) return true; // nothing new for the shop
+  await sendAddressToShop(d, o, header);
+  if (!before.address_at) {
+    const people = await orderPeople(d.db, o);
+    await say(d, people.giver, `📍 گیرنده آدرسش را ثبت کرد و فروشگاه به‌زودی «${o.product_title}» را ارسال می‌کند.\nپیگیری سفارش: ${orderLink(d, o)}`);
   }
-  const people = await orderPeople(d.db, o);
-  await say(d, people.giver, `📍 گیرنده آدرسش را ثبت کرد و فروشگاه به‌زودی «${o.product_title}» را ارسال می‌کند.\nپیگیری سفارش: ${orderLink(d, o)}`);
   return true;
 }
 
+/**
+ * Saved addresses whose time to confirm ran out go to the shop as they are (hourly cron; also right
+ * before a shop looks at the order). `orderId` limits it to one order.
+ */
+export async function releaseDueAddresses(d: Deps, orderId?: number) {
+  const t = now();
+  const { results } = await d.db
+    .prepare(
+      `UPDATE orders SET address_at = ?1
+       WHERE status = 'paid' AND address_at IS NULL AND address_due_at IS NOT NULL AND address_due_at <= ?1 AND TRIM(ship_address) <> ''
+         AND (?2 IS NULL OR id = ?2)
+       RETURNING *`,
+    )
+    .bind(t, orderId ?? null)
+    .all<Order>();
+  for (const o of results) {
+    await sendAddressToShop(d, o, `⏰ گیرنده در ${hoursFa} ساعت آدرس را تغییر نداد؛ آدرس ثبت‌شده‌ی او:`);
+    const people = await orderPeople(d.db, o);
+    await say(d, people.owner, `📦 آدرس ثبت‌شده‌تان برای ارسال «${o.product_title}» به فروشگاه فرستاده شد. اگر لازم است، تا قبل از ارسال هنوز می‌توانید عوضش کنید:\n${addressLink(d, o)}`);
+  }
+  return results.length;
+}
+
 /** Payment confirmed: the buyer hears it's on its way soon, the recipient that someone bought them a gift. */
-async function tellPaid(d: Deps, o: Order, needsAddress = false) {
+async function tellPaid(d: Deps, o: Order, ask: AddressAsk) {
   const people = await orderPeople(d.db, o);
   await say(
     d,
     people.giver,
-    needsAddress
-      ? `✅ فروشگاه پرداخت سفارش «${o.product_title}» را تأیید کرد. از گیرنده آدرس فعلی‌اش را خواستیم؛ بعد از ثبت آدرس ارسال می‌شود.\nپیگیری سفارش: ${orderLink(d, o)}`
-      : `✅ فروشگاه پرداخت سفارش «${o.product_title}» را تأیید کرد و به‌زودی آن را ارسال می‌کند.\nپیگیری سفارش: ${orderLink(d, o)}`,
+    ask === "none"
+      ? `✅ فروشگاه پرداخت سفارش «${o.product_title}» را تأیید کرد و به‌زودی آن را ارسال می‌کند.\nپیگیری سفارش: ${orderLink(d, o)}`
+      : `✅ فروشگاه پرداخت سفارش «${o.product_title}» را تأیید کرد. گیرنده آدرسش را ${ask === "give" ? "ثبت" : "تأیید"} می‌کند و بعد کادو ارسال می‌شود.\nپیگیری سفارش: ${orderLink(d, o)}`,
   );
   if (!people.isDirect) {
     const who = o.is_anonymous ? "یک دوست ناشناس" : await giverName(d.db, o);
-    const text = needsAddress
-      ? `🎁 ${who} برایتان «${o.product_title}» را از لیست آرزویتان خرید و فروشگاه تأییدش کرد!\n📍 آدرس فعلی‌تان را بفرستید تا کادو ارسال شود:\n${addressLink(d, o)}`
-      : `🎁 ${who} برایتان «${o.product_title}» را از لیست آرزویتان خرید!\nفروشگاه پرداخت را تأیید کرد و به‌زودی کادو را برایتان می‌فرستد.`;
+    const head = `🎁 ${who} برایتان «${o.product_title}» را از لیست آرزویتان خرید و فروشگاه پرداخت را تأیید کرد!`;
+    const text =
+      ask === "give"
+        ? `${head}\n📍 آدرس فعلی‌تان را بفرستید تا کادو ارسال شود:\n${addressLink(d, o)}`
+        : `${head}\n📍 آدرس ثبت‌شده‌تان هنوز درست است؟ تا ${hoursFa} ساعت آینده تأییدش کنید یا آدرس فعلی‌تان را بدهید؛ وگرنه کادو به همان آدرس ثبت‌شده فرستاده می‌شود:\n${addressLink(d, o)}`;
     await say(d, people.owner, text);
     // Someone who adds wishes from Instagram may read it there first (only within Instagram's 24h window).
-    if (needsAddress && people.ownerIg && d.settings.platform_ig_token) {
+    if (people.ownerIg && d.settings.platform_ig_token) {
       await sendDm(d.settings.platform_ig_token, d.settings.platform_ig_account_id, people.ownerIg, text).catch(() => undefined);
     }
   }
@@ -152,7 +213,7 @@ async function tellPaid(d: Deps, o: Order, needsAddress = false) {
 export async function shipOrder(d: Deps, orderId: number, shopId: number, tracking: string) {
   const before = await d.db.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ?").bind(orderId, shopId).first<Order>();
   if (!before || (before.status !== "paid" && before.status !== "shipped")) return false;
-  if (!before.ship_address.trim()) return false; // the recipient hasn't given the address yet
+  if (addressPending(before) || !before.ship_address.trim()) return false; // the recipient gives / confirms the address first
   await d.db
     .prepare("UPDATE orders SET status = 'shipped', tracking_code = ?, shipped_at = COALESCE(shipped_at, ?) WHERE id = ?")
     .bind(tracking, now(), orderId)

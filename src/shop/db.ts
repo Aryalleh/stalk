@@ -397,8 +397,9 @@ export interface Order {
   created_at: string;
   paid_at: string | null;
   shipped_at: string | null;
-  address_asked_at: string | null; // a list without a fixed address: the recipient was asked for it
-  address_at: string | null; // ...and gave it
+  address_asked_at: string | null; // the recipient was asked to give (no saved one) or confirm the address
+  address_at: string | null; // ...and gave or confirmed it (or the time to confirm ran out): the shop sees it from then
+  address_due_at: string | null; // a saved address: confirm / change it until then
   color: string;
   change_color: string;
   show_on_profile: number;
@@ -523,3 +524,7 @@ export const orderStatusLabel = (o: Pick<Order, "status" | "cancel_kind">) =>
   o.status === "rejected" && o.cancel_kind === "out_of_stock" ? "لغو شد — ناموجود" : STATUS_LABEL[o.status];
 
 export const toman = (n: number) => `${n.toLocaleString("fa-IR")} تومان`;
+
+/** A paid gift whose address the recipient still has to give or confirm: the shop can't see it or ship yet. */
+export const addressPending = (o: { status: string; address_asked_at: string | null; address_at: string | null }) =>
+  o.status === "paid" && !!o.address_asked_at && !o.address_at;

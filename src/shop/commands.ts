@@ -2,8 +2,8 @@
 // (for Instagram pages not on the site yet) and in the site's Bale/Telegram bot (for any shop).
 // Each command returns the reply text.
 import { cardNumberError, formatCard, toLatinDigits } from "../../lib/normalize";
-import { cancelForStock, confirmOrder, rejectOrder, shipOrder, type Deps } from "./orders";
-import { deleteProduct, now, toman, type Order, type Shop } from "./db";
+import { ADDRESS_HOURS, cancelForStock, confirmOrder, rejectOrder, releaseDueAddresses, shipOrder, type Deps } from "./orders";
+import { addressPending, deleteProduct, now, toman, type Order, type Shop } from "./db";
 import { variantLabel } from "./variants";
 import { cancelCode, issueCode, verifyCode } from "../bale/otp";
 import { SafirError, sendSafirOtp } from "../bale/safir";
@@ -75,8 +75,12 @@ function orderDetails(o: Order) {
     lines.push(`واریز: پیگیری ${o.transfer_ref || "—"}، ۴ رقم آخر کارت خریدار ${o.transfer_card_last4 || "—"}${o.transfer_at ? `، ${o.transfer_at}` : ""}`);
     lines.push(`اگر مبلغ به کارتتان رسید: تایید ${o.id}\nاگر نرسید: رد ${o.id} دلیل`);
   }
-  if (o.status === "paid" && !o.ship_address.trim()) {
-    lines.push("📍 منتظر آدرس گیرنده: از او خواستیم آدرس فعلی‌اش را ثبت کند؛ به‌محض ثبت، آدرس را همین‌جا می‌فرستیم. تا آن موقع ارسال نکنید.");
+  if (addressPending(o) || (o.status === "paid" && !o.ship_address.trim())) {
+    lines.push(
+      o.ship_address.trim()
+        ? `📍 گیرنده آدرسش را تأیید یا به‌روز می‌کند (حداکثر ${n(ADDRESS_HOURS)} ساعت)؛ بعد آدرس را همین‌جا می‌فرستیم. تا آن موقع ارسال نکنید.`
+        : "📍 منتظر آدرس گیرنده: از او خواستیم آدرس فعلی‌اش را ثبت کند؛ به‌محض ثبت، آدرس را همین‌جا می‌فرستیم. تا آن موقع ارسال نکنید.",
+    );
   } else if (o.status === "paid" || o.status === "shipped") {
     lines.push(
       "ارسال به:",
@@ -94,7 +98,10 @@ function orderDetails(o: Order) {
 export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise<string> {
   const db = d.db;
   const t = normalizeCommand(text);
-  const order = (id: string) => db.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ?").bind(Number(id), shop.id).first<Order>();
+  const order = async (id: string) => {
+    await releaseDueAddresses(d, Number(id)); // a recipient's time to confirm the address may have run out
+    return db.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ?").bind(Number(id), shop.id).first<Order>();
+  };
   let m: RegExpMatchArray | null;
 
   if (/^(راهنما|help|کمک|دستورها|start|سلام|منو|menu|\?|؟)$/i.test(t)) {
@@ -185,7 +192,7 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
     const o = await order(m[1]);
     if (!o) return `سفارش ${n(Number(m[1]))} پیدا نشد.`;
     if (o.status !== "paid" && o.status !== "shipped") return `سفارش ${n(o.id)}: ${STATUS[o.status] ?? o.status}.`;
-    if (!o.ship_address.trim()) return `📍 سفارش ${n(o.id)} هنوز آدرس ندارد: گیرنده باید آدرس فعلی‌اش را ثبت کند؛ به‌محض ثبت برایتان می‌فرستیم.`;
+    if (addressPending(o) || !o.ship_address.trim()) return `📍 سفارش ${n(o.id)} هنوز آدرس نهایی ندارد: گیرنده آدرسش را ثبت یا تأیید می‌کند؛ به‌محض آن برایتان می‌فرستیم.`;
     const tracking = m[2].replace(/\s+/g, "").slice(0, 60);
     await shipOrder(d, o.id, shop.id, tracking || o.tracking_code);
     return `🚚 سفارش ${n(o.id)} ارسال‌شده ثبت شد${tracking ? ` (کد رهگیری ${tracking})` : ""} و به خریدار و گیرنده خبر دادیم.`;
@@ -325,7 +332,13 @@ async function setState(db: D1Database, shop: Shop, state: string) {
 /** The buttons that fit the shop right now: open orders first, then what's missing, then the menu. */
 export async function buttonsFor(db: D1Database, shop: Shop): Promise<ChatButton[]> {
   const [orders, unpriced] = await db.batch([
-    db.prepare("SELECT id, status FROM orders WHERE shop_id = ? AND status IN ('awaiting', 'paid') ORDER BY (status = 'awaiting') DESC, id LIMIT 4").bind(shop.id),
+    // (A paid order whose recipient still gives / confirms the address can't be shipped yet: no button.)
+    db
+      .prepare(
+        `SELECT id, status FROM orders WHERE shop_id = ? AND (status = 'awaiting' OR (status = 'paid' AND NOT (address_asked_at IS NOT NULL AND address_at IS NULL)))
+         ORDER BY (status = 'awaiting') DESC, id LIMIT 4`,
+      )
+      .bind(shop.id),
     db.prepare("SELECT id, title FROM products WHERE shop_id = ? AND deleted_at IS NULL AND awaiting_price = 1 AND is_active = 1 ORDER BY id LIMIT 3").bind(shop.id),
   ]);
   const b: ChatButton[] = [];

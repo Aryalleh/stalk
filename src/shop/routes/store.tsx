@@ -193,10 +193,10 @@ store.get("/w/:slug", async (c) => {
   if (!w || w.is_direct) return c.notFound();
   const user = c.get("user");
   const items = await wishlistItems(c.env.DB, w.id);
-  // Gifts bought from this list that wait for the owner's address.
+  // Gifts bought from this list that wait for the owner to give or confirm the address.
   const needAddress =
     user?.id === w.user_id
-      ? ((await c.env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE wishlist_id = ? AND status = 'paid' AND TRIM(ship_address) = ''").bind(w.id).first<{ n: number }>())?.n ?? 0)
+      ? ((await c.env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE wishlist_id = ? AND status = 'paid' AND address_asked_at IS NOT NULL AND address_at IS NULL").bind(w.id).first<{ n: number }>())?.n ?? 0)
       : 0;
   // An Instagram page that hasn't priced an item yet: a message anyone here can send it.
   const askShop: Record<number, { handle: string; text: string }> = {};

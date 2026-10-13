@@ -16,7 +16,8 @@
   ],
   // Product images and transfer receipts. Create with: npx wrangler r2 bucket create gift-shop-images
   "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "gift-shop-images" }],
-  // Daily: refresh shops' Instagram tokens (they expire after 60 days).
-  "triggers": { "crons": ["17 3 * * *"] }
+  // Daily: refresh shops' Instagram tokens (they expire after 60 days). Hourly: send shops the saved
+  // addresses whose recipients didn't confirm them within 24 hours.
+  "triggers": { "crons": ["17 3 * * *", "41 * * * *"] }
   // No vars or secrets: site name, bot tokens etc. are edited at /admin/settings and stored in D1.
 }

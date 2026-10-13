@@ -12,7 +12,7 @@ import { fileField, imageError, storeImage } from "../images";
 import { BUILTIN_PAGES, RESERVED_SLUGS, SLUG_RE, allPages, footerIndex, getPage, type Page } from "../../pages";
 import { SafirError, sendSafirOtp, sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
-import { answerChange, cancelForStock, confirmOrder, rejectOrder, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
+import { answerChange, cancelForStock, confirmOrder, rejectOrder, releaseDueAddresses, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
 import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl, startSession } from "./helpers";
@@ -194,6 +194,7 @@ panel.get("/panel/orders", async (c) => {
 
 /** Orders the shop may see: anything the giver has reported a transfer for. */
 async function shopOrder(c: C) {
+  await releaseDueAddresses(deps(c), intParam(c, "id")); // the recipient's time to confirm the address may have run out
   return c.env.DB.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ? AND status <> 'pending'")
     .bind(intParam(c, "id"), shopOf(c).id)
     .first<Order>();
