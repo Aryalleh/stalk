@@ -193,6 +193,11 @@ store.get("/w/:slug", async (c) => {
   if (!w || w.is_direct) return c.notFound();
   const user = c.get("user");
   const items = await wishlistItems(c.env.DB, w.id);
+  // Gifts bought from this list that wait for the owner's address.
+  const needAddress =
+    user?.id === w.user_id
+      ? ((await c.env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE wishlist_id = ? AND status = 'paid' AND TRIM(ship_address) = ''").bind(w.id).first<{ n: number }>())?.n ?? 0)
+      : 0;
   // An Instagram page that hasn't priced an item yet: a message anyone here can send it.
   const askShop: Record<number, { handle: string; text: string }> = {};
   for (const it of items) {
@@ -208,6 +213,7 @@ store.get("/w/:slug", async (c) => {
       owner={{ name: w.owner_name, avatar_key: w.owner_avatar, banner_key: w.owner_banner, username: w.owner_username ?? "" }}
       items={items}
       askShop={askShop}
+      needAddress={needAddress}
       isOwner={user?.id === w.user_id}
       shareUrl={`${siteUrl(c)}/w/${w.slug}`}
     />,

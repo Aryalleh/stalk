@@ -672,6 +672,14 @@ export function MyWishlistsPage(props: { user: User; lists: (Wishlist & { items:
   );
 }
 
+// "Address later": hide the address fields while it's on (the server checks the rules either way).
+const ASK_ADDRESS_SCRIPT = `(function () {
+  var box = document.querySelector('[data-ask-address]'), f = document.querySelector('[data-address-fields]'), h = document.querySelector('[data-city-hint]');
+  if (!box || !f) return;
+  function sync() { f.style.display = box.checked ? 'none' : ''; if (h) h.textContent = box.checked ? '(اختیاری؛ اگر بدانید، ارسال با پیک هم ممکن می‌شود)' : ''; }
+  box.addEventListener('change', sync); sync();
+})();`;
+
 export function WishlistFormPage(props: {
   user: User;
   wishlist: Wishlist | null;
@@ -727,13 +735,23 @@ export function WishlistFormPage(props: {
             <input name="recipient_name" value={v.recipient_name ?? ""} required maxlength={80} />
             <label>موبایل گیرنده</label>
             <input name="recipient_phone" value={v.recipient_phone ?? ""} class="ltr" inputmode="tel" required />
-            <label>آدرس کامل</label>
-            <textarea name="address" required maxlength={400}>{v.address ?? ""}</textarea>
-            <label>شهر گیرنده</label>
-            <input name="city" value={v.city ?? ""} list="cities" required maxlength={40} placeholder="مثلاً تهران" autocomplete="off" />
+            <label class="row" style="color:var(--fg);align-items:flex-start;gap:8px;margin:10px 0">
+              <input type="checkbox" name="ask_address" value="1" style="width:auto;margin-top:4px" checked={v.ask_address === "1"} data-ask-address />
+              <span>
+                <b>آدرس را بعداً می‌دهم</b>
+                <span class="block small muted">وقتی کسی کادویی از این لیست خرید و فروشگاه تأیید کرد، از شما آدرس فعلی‌تان را می‌پرسیم (مناسب اگر جابه‌جا می‌شوید یا نمی‌خواهید آدرس از قبل ثبت باشد).</span>
+              </span>
+            </label>
+            <div data-address-fields>
+              <label>آدرس کامل</label>
+              <textarea name="address" maxlength={400}>{v.address ?? ""}</textarea>
+              <label>کد پستی</label>
+              <input name="postal_code" value={v.postal_code ?? ""} class="ltr" inputmode="numeric" />
+            </div>
+            <label>شهر گیرنده <span class="muted small" data-city-hint>{v.ask_address === "1" ? "(اختیاری؛ اگر بدانید، ارسال با پیک هم ممکن می‌شود)" : ""}</span></label>
+            <input name="city" value={v.city ?? ""} list="cities" maxlength={40} placeholder="مثلاً تهران" autocomplete="off" />
             <datalist id="cities">{CITIES.map((c) => <option value={c} />)}</datalist>
-            <label>کد پستی</label>
-            <input name="postal_code" value={v.postal_code ?? ""} class="ltr" inputmode="numeric" required />
+            <script dangerouslySetInnerHTML={{ __html: ASK_ADDRESS_SCRIPT }} />
           </div>
         </div>
         <p><button>{w ? "ذخیره" : "ساخت لیست"}</button></p>
@@ -797,10 +815,13 @@ export interface GiftRow {
   gift_message: string;
   person: string; // the giver (received) or the recipient (given); "" = anonymous
   person_username: string | null;
+  id?: number;
+  needs_address?: number; // received from a list without a fixed address; the recipient hasn't given it yet
+  address_editable?: number; // given, not shipped yet: can still change
 }
 
 /** "کادوهای من": gifts I received and gifts I gave, as two tabs. */
-export function MyGiftsPage(props: { user: User; tab: "received" | "given"; received: GiftRow[]; given: GiftRow[] }) {
+export function MyGiftsPage(props: { user: User; tab: "received" | "given"; received: GiftRow[]; given: GiftRow[]; addressSaved?: boolean }) {
   const given = props.tab === "given";
   const rows = given ? props.given : props.received;
   const tab = (key: "received" | "given", icon: string, label: string, n: number) => (
@@ -820,6 +841,9 @@ export function MyGiftsPage(props: { user: User; tab: "received" | "given"; rece
       <div class="px-4 md:px-10 py-6 md:py-10">
         <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">کادوهای من</h1>
         <p class="text-sm text-muted mb-5">کادوهایی که از لیست آرزویتان برایتان خریده‌اند و کادوهایی که شما به دیگران داده‌اید.</p>
+        {props.addressSaved && (
+          <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">✅ آدرس ثبت شد و برای فروشگاه فرستادیم؛ به‌زودی کادو ارسال می‌شود.</div>
+        )}
         <div class="flex gap-1 p-1 bg-card rounded-2xl border border-fg/5 mb-6 max-w-md">
           {tab("received", "fa-gift", "دریافتی", props.received.length)}
           {tab("given", "fa-hand-holding-heart", "داده‌شده", props.given.length)}
@@ -847,6 +871,13 @@ export function MyGiftsPage(props: { user: User; tab: "received" | "given"; rece
                     <span class="mr-2 dt">{formatJalali(g.at, false)}</span>
                     {g.tracking_code && <span class="mr-2">کد رهگیری: <span class="dt ltr">{g.tracking_code}</span></span>}
                   </p>
+                  {!given && g.needs_address ? (
+                    <a href={`/me/gifts/${g.id}/address`} class="mt-1 inline-block px-3 py-1.5 bg-brand text-white rounded-xl text-[11px] font-bold shadow-lg shadow-brand/20">
+                      <i class="fa-solid fa-location-dot ml-1"></i> آدرس فعلی‌ام را می‌دهم
+                    </a>
+                  ) : !given && g.address_editable ? (
+                    <a href={`/me/gifts/${g.id}/address`} class="text-brand font-bold text-[11px]">تغییر آدرس (تا قبل از ارسال)</a>
+                  ) : null}
                 </div>
                 {given && (
                   <a href={`/order/${g.token}`} aria-label="جزئیات سفارش" class="w-9 h-9 rounded-full bg-ink text-muted flex items-center justify-center shrink-0">
@@ -858,6 +889,51 @@ export function MyGiftsPage(props: { user: User; tab: "received" | "given"; rece
           </div>
         )}
       </div>
+    </Layout>
+  );
+}
+
+/** The recipient gives the address for a gift bought from a list without a fixed one. */
+export function GiftAddressPage(props: {
+  user: User;
+  order: Order;
+  values: { name: string; phone: string; city: string; address: string; postal_code: string };
+  errors?: string[];
+}) {
+  const o = props.order;
+  const v = props.values;
+  const lockedCity = o.delivery_method === "courier" && o.ship_city ? o.ship_city : "";
+  return (
+    <Layout title="آدرس ارسال کادو" user={props.user} nav="wishes">
+      <div class="card" style="text-align:center">
+        <div style="font-size:40px">🎁</div>
+        <h1 style="margin:6px 0">کادوی «{o.product_title}» در راه است!</h1>
+        <p class="muted">فروشگاه خرید را تأیید کرده. آدرس فعلی‌تان را بدهید تا کادو ارسال شود؛ فقط فروشگاه آن را می‌بیند، نه خریدار.</p>
+      </div>
+      <Errors errors={props.errors} />
+      <form method="post" class="card">
+        <label>نام گیرنده</label>
+        <input name="name" value={v.name} required maxlength={80} />
+        <label>موبایل گیرنده</label>
+        <input name="phone" value={v.phone} class="ltr" inputmode="tel" required />
+        <label>شهر</label>
+        {lockedCity ? (
+          <>
+            <input value={lockedCity} disabled />
+            <p class="small muted" style="margin-top:4px">این کادو با پیک در {lockedCity} ارسال می‌شود.</p>
+          </>
+        ) : (
+          <>
+            <input name="city" value={v.city} list="cities" required maxlength={40} placeholder="مثلاً تهران" autocomplete="off" />
+            <datalist id="cities">{CITIES.map((c) => <option value={c} />)}</datalist>
+          </>
+        )}
+        <label>آدرس کامل</label>
+        <textarea name="address" required maxlength={400}>{v.address}</textarea>
+        <label>کد پستی</label>
+        <input name="postal_code" value={v.postal_code} class="ltr" inputmode="numeric" required />
+        <p><button><i class="fa-solid fa-location-dot ml-1"></i> ثبت آدرس و ارسال برای فروشگاه</button></p>
+      </form>
     </Layout>
   );
 }

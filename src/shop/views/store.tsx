@@ -1089,6 +1089,7 @@ export function WishlistPublicPage(props: {
   owner: { name: string; avatar_key: string; username: string; banner_key: string };
   items: ItemView[];
   askShop?: Record<number, { handle: string; text: string }>; // items an Instagram page still has to price
+  needAddress?: number; // (owner) gifts bought from this list waiting for the address
   isOwner: boolean;
   shareUrl: string;
 }) {
@@ -1142,6 +1143,16 @@ export function WishlistPublicPage(props: {
         {!w.is_open && <p class="mt-4 text-sm font-bold text-amber-500">این لیست بسته شده و فعلاً امکان خرید ندارد.</p>}
       </ProfileHero>
       <section class="px-4">
+        {props.isOwner && !!props.needAddress && (
+          <a href="/me/gifts" class="flex items-center gap-3 rounded-2xl p-3 mb-4 bg-brand text-white shadow-lg shadow-brand/20">
+            <span class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-location-dot"></i></span>
+            <span class="flex-1 min-w-0">
+              <b class="block text-sm">{fa(props.needAddress)} کادو منتظر آدرس شماست 🎁</b>
+              <span class="block text-[11px] opacity-90">آدرس فعلی‌تان را بدهید تا فروشگاه ارسال کند</span>
+            </span>
+            <i class="fa-solid fa-chevron-left text-sm"></i>
+          </a>
+        )}
         {props.isOwner && (
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
             <InstagramCta compact list={w.id} />

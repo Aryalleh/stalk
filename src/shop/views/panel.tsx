@@ -505,7 +505,9 @@ export function OrderDetailPage(props: { user: User; shop: Shop; order: Order; v
         </div>
         <div class="card">
           <h2>ارسال به 📦</h2>
-          {confirmed ? (
+          {confirmed && !o.ship_address.trim() ? (
+            <p class="muted">📍 گیرنده آدرس ثابتی ثبت نکرده بود؛ از او خواستیم آدرس فعلی‌اش را بدهد. به‌محض ثبت، آدرس همین‌جا نمایش داده می‌شود و در بات هم برایتان می‌فرستیم. تا آن موقع ارسال نکنید.</p>
+          ) : confirmed ? (
             <>
               <p>
                 {o.ship_name}<br />

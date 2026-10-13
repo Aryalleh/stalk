@@ -20,9 +20,9 @@ import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/bota
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
-import { answerChange } from "../orders";
+import { answerChange, setOrderAddress } from "../orders";
 
 const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
@@ -340,13 +340,22 @@ function cleanWishlist(f: Record<string, string>) {
     postal_code: normalizeDigits(f.postal_code ?? ""),
     city: normCity(f.city ?? ""),
     is_open: f.is_open === "1" ? "1" : "0",
+    ask_address: f.ask_address === "1" ? "1" : "0",
   };
   const errors: string[] = [];
   if (!values.title) errors.push("عنوان لیست لازم است.");
-  if (!values.recipient_name || !values.address) errors.push("نام گیرنده و آدرس برای ارسال لازم است.");
+  if (!values.recipient_name) errors.push("نام گیرنده لازم است.");
   if (!MOBILE.test(values.recipient_phone)) errors.push("موبایل گیرنده نامعتبر است.");
-  if (!/^\d{10}$/.test(values.postal_code)) errors.push("کد پستی باید ۱۰ رقم باشد.");
-  if (!values.city) errors.push("شهر گیرنده را انتخاب کنید.");
+  if (values.ask_address === "1") {
+    // The address comes later, when a gift is bought; none is kept meanwhile (a kept one would be
+    // sent instead of asking). The city, if given, still decides courier vs post.
+    values.address = "";
+    values.postal_code = "";
+  } else {
+    if (!values.address) errors.push("آدرس برای ارسال لازم است (یا «آدرس را بعداً می‌دهم» را بزنید).");
+    if (!/^\d{10}$/.test(values.postal_code)) errors.push("کد پستی باید ۱۰ رقم باشد.");
+    if (!values.city) errors.push("شهر گیرنده را انتخاب کنید.");
+  }
   return { values, errors };
 }
 
@@ -534,10 +543,10 @@ account.post("/me/wishlists/new", async (c) => {
   const { values, errors } = cleanWishlist({ ...f, is_open: "1" });
   if (errors.length) return render(c, <WishlistFormPage user={user} wishlist={null} values={values} errors={errors} productId={f.product} variant={f.v} siteUrl={siteUrl(c)} />, 400);
   const row = await c.env.DB.prepare(
-    `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, ask_address, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(user.id, randomSlug(), values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, now())
+    .bind(user.id, randomSlug(), values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, Number(values.ask_address), now())
     .first<{ id: number }>();
   if (f.product) {
     // A product with sizes needs a pick (made on the product page and passed as v); without one,
@@ -574,9 +583,9 @@ account.post("/me/wishlists/:id{[0-9]+}", async (c) => {
   }
   await c.env.DB.prepare(
     `UPDATE wishlists SET title = ?, description = ?, occasion_date = ?, recipient_name = ?, recipient_phone = ?,
-       address = ?, postal_code = ?, city = ?, is_open = ? WHERE id = ?`,
+       address = ?, postal_code = ?, city = ?, is_open = ?, ask_address = ? WHERE id = ?`,
   )
-    .bind(values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, Number(values.is_open), w.id)
+    .bind(values.title, values.description, values.occasion_date, values.recipient_name, values.recipient_phone, values.address, values.postal_code, values.city, Number(values.is_open), Number(values.ask_address), w.id)
     .run();
   return c.redirect(`/me/wishlists/${w.id}?saved=1`);
 });
@@ -641,7 +650,7 @@ account.post("/p/:id{[0-9]+}/buy", async (c) => {
   const product = await getPublicProduct(c.env.DB, productId);
   if (!product) return c.notFound();
   const f = await form(c);
-  const { values, errors } = cleanWishlist({ ...f, title: `خرید مستقیم: ${product.title}`.slice(0, 120), is_open: "1" });
+  const { values, errors } = cleanWishlist({ ...f, title: `خرید مستقیم: ${product.title}`.slice(0, 120), is_open: "1", ask_address: "0" });
   const v = pickVariant(product, hasChoice(product) ? variantFromForm(f) : "|");
   if (!v) errors.push("سایز / رنگ را انتخاب کنید.");
   if (product.awaiting_price) errors.push("فروشگاه هنوز قیمت این محصول را ثبت نکرده است.");
@@ -669,7 +678,8 @@ account.get("/me/gifts", async (c) => {
   const [received, given] = await db.batch([
     db
       .prepare(
-        `SELECT o.token, o.product_title, o.status, o.cancel_kind, COALESCE(o.paid_at, o.created_at) AS at, o.tracking_code, o.gift_message,
+        `SELECT o.id, o.token, o.product_title, o.status, o.cancel_kind, COALESCE(o.paid_at, o.created_at) AS at, o.tracking_code, o.gift_message,
+                (o.status = 'paid' AND TRIM(o.ship_address) = '') AS needs_address, (o.status = 'paid' AND o.address_at IS NOT NULL) AS address_editable,
                 COALESCE(p.image_key, '') AS image_key, COALESCE(p.code, '') AS product_code, o.product_id,
                 CASE WHEN o.is_anonymous = 1 THEN '' ELSE COALESCE(NULLIF(gu.nickname, ''), NULLIF(o.giver_name, ''), 'یک دوست') END AS person,
                 CASE WHEN o.is_anonymous = 1 THEN NULL ELSE gu.username END AS person_username
@@ -689,7 +699,53 @@ account.get("/me/gifts", async (c) => {
       .bind(user.phone),
   ]);
   const tab = c.req.query("tab") === "given" ? "given" : "received";
-  return render(c, <MyGiftsPage user={user} tab={tab} received={received.results as GiftRow[]} given={given.results as GiftRow[]} />);
+  return render(c, <MyGiftsPage user={user} tab={tab} received={received.results as GiftRow[]} given={given.results as GiftRow[]} addressSaved={c.req.query("address") === "1"} />);
+});
+
+// ---------- a gift from a list without a fixed address: the recipient gives it after the purchase ----------
+
+/** A paid gift bought from one of my lists that still waits for (or may change) its address. */
+const myGiftToAddress = (c: C) =>
+  c.env.DB.prepare(
+    `SELECT o.*, w.recipient_name AS w_name, w.recipient_phone AS w_phone, w.city AS w_city, w.address AS w_address, w.postal_code AS w_postal
+     FROM orders o JOIN wishlists w ON w.id = o.wishlist_id
+     WHERE o.id = ? AND w.user_id = ? AND w.is_direct = 0 AND o.status = 'paid' AND (TRIM(o.ship_address) = '' OR o.address_at IS NOT NULL)`,
+  )
+    .bind(intParam(c, "id"), currentUser(c).id)
+    .first<Order & { w_name: string; w_phone: string; w_city: string; w_address: string; w_postal: string }>();
+
+account.get("/me/gifts/:id{[0-9]+}/address", async (c) => {
+  const o = await myGiftToAddress(c);
+  if (!o) return c.redirect("/me/gifts");
+  const values = o.ship_address.trim()
+    ? { name: o.ship_name, phone: o.ship_phone, city: o.ship_city, address: o.ship_address, postal_code: o.ship_postal_code }
+    : { name: o.ship_name || o.w_name, phone: o.ship_phone || o.w_phone, city: o.ship_city || o.w_city, address: o.w_address, postal_code: o.w_postal };
+  return render(c, <GiftAddressPage user={currentUser(c)} order={o} values={values} />);
+});
+
+account.post("/me/gifts/:id{[0-9]+}/address", async (c) => {
+  const o = await myGiftToAddress(c);
+  if (!o) return c.redirect("/me/gifts");
+  const f = await form(c);
+  // A courier delivers in the shop's city only, so its city stays the one the gift was bought for.
+  const lockedCity = o.delivery_method === "courier" && o.ship_city ? o.ship_city : "";
+  const values = {
+    name: (f.name ?? "").trim().slice(0, 80),
+    phone: normalizePhone(f.phone ?? ""),
+    city: lockedCity || normCity(f.city ?? ""),
+    address: (f.address ?? "").trim().slice(0, 400),
+    postal_code: normalizeDigits(f.postal_code ?? ""),
+  };
+  const errors: string[] = [];
+  if (!values.name) errors.push("نام گیرنده لازم است.");
+  if (!MOBILE.test(values.phone)) errors.push("موبایل گیرنده نامعتبر است.");
+  if (!values.city) errors.push("شهر را بنویسید.");
+  if (values.address.length < 10) errors.push("آدرس کامل را بنویسید.");
+  if (!/^\d{10}$/.test(values.postal_code)) errors.push("کد پستی باید ۱۰ رقم باشد.");
+  if (errors.length) return render(c, <GiftAddressPage user={currentUser(c)} order={o} values={values} errors={errors} />, 400);
+  const deps = { db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) };
+  if (!(await setOrderAddress(deps, o.id, values))) return c.redirect("/me/gifts");
+  return c.redirect("/me/gifts?address=1");
 });
 
 account.get("/me/orders", async (c) => {

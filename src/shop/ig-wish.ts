@@ -166,15 +166,15 @@ export async function useLinkToken(db: D1Database, token: string) {
   return row && row.expires_at > Date.now() ? row : null;
 }
 
-/** The user's most recent wishlist (one is made if they have none). */
+/** The user's most recent wishlist (one is made if they have none; its address is asked when a gift is bought). */
 export async function defaultWishlist(db: D1Database, user: { id: number; name: string; phone: string }) {
   const w = await db.prepare("SELECT id, title FROM wishlists WHERE user_id = ? AND is_direct = 0 ORDER BY id DESC LIMIT 1").bind(user.id).first<{ id: number; title: string }>();
   if (w) return w;
   const title = "لیست آرزوی من";
   const row = await db
     .prepare(
-      `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, created_at)
-       VALUES (?, ?, ?, '', '', ?, ?, '', '', '', ?) RETURNING id`,
+      `INSERT INTO wishlists (user_id, slug, title, description, occasion_date, recipient_name, recipient_phone, address, postal_code, city, ask_address, created_at)
+       VALUES (?, ?, ?, '', '', ?, ?, '', '', '', 1, ?) RETURNING id`,
     )
     .bind(user.id, randomSlug(), title, user.name, user.phone.startsWith("09") ? user.phone : "", now())
     .first<{ id: number }>();

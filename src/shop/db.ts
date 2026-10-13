@@ -141,6 +141,7 @@ export interface Wishlist {
   city: string;
   is_open: number;
   is_direct: number; // 1 = "buy for myself" (hidden list holding the buyer's own address)
+  ask_address: number; // 1 = no fixed address: the wisher gives one when a gift is bought
   created_at: string;
 }
 
@@ -396,6 +397,8 @@ export interface Order {
   created_at: string;
   paid_at: string | null;
   shipped_at: string | null;
+  address_asked_at: string | null; // a list without a fixed address: the recipient was asked for it
+  address_at: string | null; // ...and gave it
   color: string;
   change_color: string;
   show_on_profile: number;

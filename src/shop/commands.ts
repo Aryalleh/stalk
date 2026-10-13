@@ -75,7 +75,9 @@ function orderDetails(o: Order) {
     lines.push(`واریز: پیگیری ${o.transfer_ref || "—"}، ۴ رقم آخر کارت خریدار ${o.transfer_card_last4 || "—"}${o.transfer_at ? `، ${o.transfer_at}` : ""}`);
     lines.push(`اگر مبلغ به کارتتان رسید: تایید ${o.id}\nاگر نرسید: رد ${o.id} دلیل`);
   }
-  if (o.status === "paid" || o.status === "shipped") {
+  if (o.status === "paid" && !o.ship_address.trim()) {
+    lines.push("📍 منتظر آدرس گیرنده: از او خواستیم آدرس فعلی‌اش را ثبت کند؛ به‌محض ثبت، آدرس را همین‌جا می‌فرستیم. تا آن موقع ارسال نکنید.");
+  } else if (o.status === "paid" || o.status === "shipped") {
     lines.push(
       "ارسال به:",
       `${o.ship_name} — ${o.ship_phone}`,
@@ -183,6 +185,7 @@ export async function runShopCommand(d: Deps, shop: Shop, text: string): Promise
     const o = await order(m[1]);
     if (!o) return `سفارش ${n(Number(m[1]))} پیدا نشد.`;
     if (o.status !== "paid" && o.status !== "shipped") return `سفارش ${n(o.id)}: ${STATUS[o.status] ?? o.status}.`;
+    if (!o.ship_address.trim()) return `📍 سفارش ${n(o.id)} هنوز آدرس ندارد: گیرنده باید آدرس فعلی‌اش را ثبت کند؛ به‌محض ثبت برایتان می‌فرستیم.`;
     const tracking = m[2].replace(/\s+/g, "").slice(0, 60);
     await shipOrder(d, o.id, shop.id, tracking || o.tracking_code);
     return `🚚 سفارش ${n(o.id)} ارسال‌شده ثبت شد${tracking ? ` (کد رهگیری ${tracking})` : ""} و به خریدار و گیرنده خبر دادیم.`;
