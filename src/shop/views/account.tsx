@@ -1338,7 +1338,7 @@ export function FriendsPage(props: {
         <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">دوستان</h1>
         <p class="text-sm text-muted mb-5">دوستانتان را دعوت کنید؛ تولد هم را (روز و ماه) می‌بینید و راحت به لیست آرزوهای هم می‌رسید.</p>
         {props.added && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">🎉 شما و {props.added} حالا دوست هستید.</div>}
-        {props.renewed && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">لینک دعوت عوض شد؛ لینک‌های قبلی دیگر کار نمی‌کنند.</div>}
+        {props.renewed && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">لینک‌های قبلی باطل شدند و لینک تازه ساخته شد؛ دوستان فعلی‌تان سر جایشان هستند.</div>}
 
         <div class="bg-card rounded-3xl p-4 md:p-5 border border-fg/5 mb-6" id="invite">
           <div class="flex items-center gap-3 mb-3">
@@ -1361,8 +1361,9 @@ export function FriendsPage(props: {
             {props.links.bale && linkRow("fa-solid fa-comment-dots", "ربات بله", props.links.bale)}
             {props.links.telegram && linkRow("fa-brands fa-telegram", "ربات تلگرام", props.links.telegram)}
           </div>
-          <form method="post" action="/me/friends/renew" class="mt-3 m-0" onsubmit="return confirm('لینک دعوت عوض شود؟ لینک‌هایی که قبلاً فرستاده‌اید دیگر کار نمی‌کنند.')">
-            <button class="text-[11px] text-muted underline">ساختن لینک تازه</button>
+          <p class="text-[11px] text-muted mt-3 mb-1">این لینک‌ها تاریخ انقضا ندارند و تا وقتی خودتان باطلشان نکنید کار می‌کنند.</p>
+          <form method="post" action="/me/friends/renew" class="m-0" onsubmit="return confirm('لینک‌های دعوت فعلی باطل شوند؟ لینک‌هایی که قبلاً فرستاده‌اید دیگر کار نمی‌کنند و لینک تازه ساخته می‌شود. دوستان فعلی‌تان می‌مانند.')">
+            <button class="text-[11px] text-red-500 font-bold underline">باطل کردن لینک‌ها و ساختن لینک تازه</button>
           </form>
         </div>
 
