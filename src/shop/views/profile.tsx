@@ -42,11 +42,21 @@ export interface ReceivedGift {
 
 const fa = (n: number) => n.toLocaleString("fa-IR");
 
-export function PublicProfilePage(props: { viewer: User | null; person: PublicPerson; lists: PublicList[]; gifts: ReceivedGift[] | null; isMe: boolean; givenTo?: number | null }) {
+export function PublicProfilePage(props: {
+  viewer: User | null;
+  person: PublicPerson;
+  lists: PublicList[];
+  gifts: ReceivedGift[] | null;
+  isMe: boolean;
+  givenTo?: number | null;
+  isFriend?: boolean;
+}) {
   const site = useSite();
   const p = props.person;
   const url = `${site.origin}/u/${p.username}`;
-  const birthday = p.show_birthday ? birthdayLabel(p.birth_date) : "";
+  const birthday = p.show_birthday ? birthdayLabel(p.birth_date) : ""; // public (also in search results)
+  // Friends (and the person) see the birthday even when it isn't public.
+  const shownBirthday = birthday || (props.isFriend || props.isMe ? birthdayLabel(p.birth_date) : "");
   const seo: Seo = {
     description: `${p.name} در ${site.site_name}: ${fa(props.lists.length)} لیست آرزو${birthday ? ` · تولد ${birthday}` : ""}. یکی از آرزوهایش را انتخاب کن و برایش کادو بخر.`,
     image: p.avatar_key ? `/img/${p.avatar_key}` : undefined,
@@ -72,7 +82,14 @@ export function PublicProfilePage(props: { viewer: User | null; person: PublicPe
         </div>
         <h1 class="text-2xl font-bold mb-1">{p.name}</h1>
         <p class="text-sm text-muted ltr">@{p.username}</p>
-        {birthday && <p class="text-sm text-fg mt-2">🎂 تولد: {birthday}</p>}
+        {props.isFriend && (
+          <p class="mt-2">
+            <span class="inline-block px-2.5 py-0.5 rounded-full bg-brand/15 text-brand text-[11px] font-bold">
+              <i class="fa-solid fa-user-group ml-1"></i> دوست شما
+            </span>
+          </p>
+        )}
+        {shownBirthday && <p class="text-sm text-fg mt-2">🎂 تولد: {shownBirthday}</p>}
         <div class="flex justify-center gap-8 mt-5 text-center">
           <div>
             <div class="text-xl font-bold text-fg">{fa(props.lists.length)}</div>

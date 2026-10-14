@@ -10,6 +10,7 @@ import { saveLink } from "./links";
 import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
 import { cardProduct, inlineKeyboard as chatButtons, rememberCard, runShopChat, type ChatReply } from "../shop/commands";
 import type { Shop } from "../shop/db";
+import { befriend, inviterByCode, tellInviter } from "../shop/friends";
 
 // Webhook for the site's Bale/Telegram bots (registered from /admin/settings → "connect").
 //  - "/start <token>": connect the chat to the site account that opened the bot from /connect.
@@ -93,6 +94,34 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
       });
     }
     reply(`✅ شماره ${phone} ثبت شد.`, REMOVE_KEYBOARD);
+    return c.json({ ok: true });
+  }
+
+  // A friend invite: "?start=f_<code>" (friends.ts).
+  const invite = msg?.text?.match(/^\/start(?:@\w+)?\s+f_([a-z0-9]{10})$/);
+  if (invite) {
+    const inviter = await inviterByCode(c.env.DB, invite[1]);
+    if (!inviter) {
+      reply("این لینک دعوت معتبر نیست یا عوض شده است؛ از دوستتان لینک تازه بخواهید.");
+      return c.json({ ok: true });
+    }
+    const col = kind === "bale" ? "bale_chat_id" : "telegram_chat_id";
+    const me = await c.env.DB.prepare(`SELECT id, name, nickname FROM users WHERE ${col} = ? LIMIT 1`).bind(String(chatId)).first<{ id: number; name: string; nickname: string }>();
+    if (me) {
+      const r = await befriend(c.env.DB, me.id, inviter.id);
+      if (r === "ok") c.executionCtx.waitUntil(tellInviter(c.env.DB, s, siteUrl(c), inviter.id, { name: me.nickname || me.name }));
+      const app = openAppMarkup(`${siteUrl(c)}/app?next=${encodeURIComponent("/me/friends")}`, "👫 دوستان من");
+      reply(
+        r === "self"
+          ? "این لینک دعوت خودتان است؛ آن را برای دوستانتان بفرستید 🙂"
+          : `${r === "ok" ? "🎉 حالا" : "✅"} شما و ${inviter.name} ${r === "ok" ? "دوست هستید" : "از قبل دوست بودید"}. تولد و لیست آرزوهای دوستانتان: ${siteUrl(c)}/me/friends`,
+        app,
+      );
+      return c.json({ ok: true });
+    }
+    // Not connected to an account yet: open the site (signs in / up), then accept there.
+    const app = openAppMarkup(`${siteUrl(c)}/app?next=${encodeURIComponent(`/f/${invite[1]}`)}`, "🎁 قبول دعوت");
+    reply(`👋 ${inviter.name} شما را به دوستی در ${s.site_name} دعوت کرده؛ تولد و لیست آرزوهای هم را می‌بینید.\n${app ? "دکمه زیر را بزنید:" : `${siteUrl(c)}/f/${invite[1]}`}`, app);
     return c.json({ ok: true });
   }
 

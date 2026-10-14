@@ -20,9 +20,10 @@ import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/bota
 import { connectToken } from "../../bale/connect";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange, setOrderAddress } from "../orders";
+import { areFriends, befriend, friendCode, friendStart, inviterByCode, listFriends, tellInviter, unfriend } from "../friends";
 
 const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
@@ -702,6 +703,53 @@ account.get("/me/gifts", async (c) => {
   ]);
   const tab = c.req.query("tab") === "given" ? "given" : "received";
   return render(c, <MyGiftsPage user={user} tab={tab} received={received.results as GiftRow[]} given={given.results as GiftRow[]} addressSaved={c.req.query("address") === "1"} />);
+});
+
+// ---------- friends: invite links, birthdays and wishlists (friends.ts) ----------
+
+account.get("/me/friends", async (c) => {
+  const user = currentUser(c);
+  const s = c.get("settings");
+  const [code, friends] = await Promise.all([friendCode(c.env.DB, user.id), listFriends(c.env.DB, user.id)]);
+  const links = {
+    web: `${siteUrl(c)}/f/${code}`,
+    bale: activeBots(s).includes("bale") ? botLink(s, "bale", friendStart(code)) : "",
+    telegram: activeBots(s).includes("telegram") ? botLink(s, "telegram", friendStart(code)) : "",
+  };
+  const added = Number(c.req.query("added")) || 0;
+  return render(c, <FriendsPage user={user} links={links} friends={friends} added={friends.find((f) => f.id === added)?.name} renewed={c.req.query("renewed") === "1"} />);
+});
+
+// A new code: links shared before stop working (friends made so far stay).
+account.post("/me/friends/renew", async (c) => {
+  await friendCode(c.env.DB, currentUser(c).id, true);
+  return c.redirect("/me/friends?renewed=1");
+});
+
+account.post("/me/friends/:id{[0-9]+}/remove", async (c) => {
+  await unfriend(c.env.DB, currentUser(c).id, intParam(c, "id"));
+  return c.redirect("/me/friends");
+});
+
+// An invite link: who invites, and (signed in) a button to accept.
+account.get("/f/:code", async (c) => {
+  const inviter = await inviterByCode(c.env.DB, c.req.param("code"));
+  if (!inviter) return notFoundPage(c, "این لینک دعوت معتبر نیست یا عوض شده است؛ از دوستتان لینک تازه بخواهید.");
+  const user = c.get("user");
+  if (user?.id === inviter.id) return c.redirect("/me/friends");
+  const already = user ? await areFriends(c.env.DB, user.id, inviter.id) : false;
+  return render(c, <FriendInvitePage user={user ?? null} inviter={inviter} code={c.req.param("code")} already={already} />);
+});
+
+account.post("/f/:code", async (c) => {
+  const user = c.get("user");
+  const code = c.req.param("code");
+  if (!user) return c.redirect(`/login?next=${encodeURIComponent(`/f/${code}`)}`);
+  const inviter = await inviterByCode(c.env.DB, code);
+  if (!inviter) return notFoundPage(c, "این لینک دعوت معتبر نیست یا عوض شده است.");
+  const r = await befriend(c.env.DB, user.id, inviter.id);
+  if (r === "ok") c.executionCtx.waitUntil(tellInviter(c.env.DB, c.get("settings"), siteUrl(c), inviter.id, { name: user.nickname || user.name }));
+  return c.redirect(r === "self" ? "/me/friends" : `/me/friends?added=${inviter.id}`);
 });
 
 // ---------- after the shop confirms a gift: the recipient gives (no saved address) or confirms it ----------

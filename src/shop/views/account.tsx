@@ -5,6 +5,7 @@ import type { User } from "../../session";
 import { useSite } from "../../render";
 import { Avatar, Errors, FilePicker, InstagramCta, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
+import type { FriendRow, Inviter } from "../friends";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
 /** Centered dark card for the account flows (login, setup). */
@@ -1305,5 +1306,147 @@ try{if(!localStorage.getItem('igLinkAsked')&&!location.search.match(/added=/)){l
         }}
       />
     </>
+  );
+}
+
+// ---------- friends ----------
+
+const whenLabel = (days: number | null) =>
+  days === null ? "" : days === 0 ? "امروز تولدشه! 🎉" : days === 1 ? "فردا" : `${days.toLocaleString("fa-IR")} روز دیگر`;
+
+/** /me/friends: the invite links, then friends by their next birthday, each with a way to their wishlists. */
+export function FriendsPage(props: {
+  user: User;
+  links: { web: string; bale: string; telegram: string };
+  friends: FriendRow[];
+  added?: string;
+  renewed?: boolean;
+}) {
+  const site = useSite();
+  const message = `بیا تو ${site.site_name} با هم دوست شیم 🎁 تولد و لیست آرزوهای همدیگه رو می‌بینیم:\n${props.links.web}`;
+  const linkRow = (icon: string, label: string, url: string) => (
+    <div class="flex items-center gap-2 bg-ink rounded-xl p-2">
+      <i class={`${icon} text-muted w-5 text-center`}></i>
+      <span class="text-[11px] text-muted shrink-0">{label}</span>
+      <input readonly value={url} onclick="this.select()" class="flex-1 min-w-0 bg-transparent text-[11px] ltr text-fg outline-none" />
+      <button type="button" data-copy={url} data-copied="✓" class="px-2.5 py-1 rounded-lg bg-card text-[11px] font-bold text-fg border border-fg/10">کپی</button>
+    </div>
+  );
+  return (
+    <Layout title="دوستان" user={props.user} nav="wishes" bare wide>
+      <div class="px-4 md:px-10 py-6 md:py-10 max-w-3xl">
+        <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">دوستان</h1>
+        <p class="text-sm text-muted mb-5">دوستانتان را دعوت کنید؛ تولد هم را (روز و ماه) می‌بینید و راحت به لیست آرزوهای هم می‌رسید.</p>
+        {props.added && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">🎉 شما و {props.added} حالا دوست هستید.</div>}
+        {props.renewed && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">لینک دعوت عوض شد؛ لینک‌های قبلی دیگر کار نمی‌کنند.</div>}
+
+        <div class="bg-card rounded-3xl p-4 md:p-5 border border-fg/5 mb-6" id="invite">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-11 h-11 rounded-2xl bg-brand/10 text-brand flex items-center justify-center text-xl shrink-0"><i class="fa-solid fa-user-plus"></i></span>
+            <div>
+              <b class="block text-fg">دعوت دوستان</b>
+              <span class="block text-[11px] text-muted">هر کس لینک را باز کند و بپذیرد، دوستتان می‌شود.</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <button type="button" data-share={props.links.web} class="py-2.5 rounded-xl bg-brand text-white text-xs font-bold shadow-lg shadow-brand/20">
+              <i class="fa-solid fa-share-nodes ml-1"></i> اشتراک لینک
+            </button>
+            <button type="button" data-copy={message} data-copied="✓ پیام کپی شد" class="py-2.5 rounded-xl bg-ink text-fg text-xs font-bold border border-fg/10">
+              <i class="fa-regular fa-copy ml-1"></i> کپی پیام دعوت
+            </button>
+          </div>
+          <div class="space-y-2">
+            {linkRow("fa-solid fa-globe", "سایت", props.links.web)}
+            {props.links.bale && linkRow("fa-solid fa-comment-dots", "ربات بله", props.links.bale)}
+            {props.links.telegram && linkRow("fa-brands fa-telegram", "ربات تلگرام", props.links.telegram)}
+          </div>
+          <form method="post" action="/me/friends/renew" class="mt-3 m-0" onsubmit="return confirm('لینک دعوت عوض شود؟ لینک‌هایی که قبلاً فرستاده‌اید دیگر کار نمی‌کنند.')">
+            <button class="text-[11px] text-muted underline">ساختن لینک تازه</button>
+          </form>
+        </div>
+
+        <h2 class="text-lg font-black text-fg mb-3">
+          دوستان من <span class="text-muted text-sm font-bold">({props.friends.length.toLocaleString("fa-IR")})</span>
+        </h2>
+        {props.friends.length === 0 ? (
+          <div class="bg-card rounded-3xl p-8 text-center text-sm text-muted">هنوز دوستی اضافه نشده. لینک دعوت بالا را برای دوستانتان بفرستید.</div>
+        ) : (
+          <div class="grid gap-3 md:grid-cols-2">
+            {props.friends.map((f) => {
+              const soon = f.days !== null && f.days <= 14;
+              const profile = f.username ? `/u/${f.username}` : "";
+              return (
+                <div class={`bg-card rounded-2xl p-3 flex gap-3 items-center border ${soon ? "border-brand/40" : "border-fg/5"}`}>
+                  <a href={profile || "#"}>
+                    <Avatar user={f} size="w-12 h-12" ring={soon} />
+                  </a>
+                  <div class="flex-1 min-w-0 text-xs leading-6">
+                    <a href={profile || "#"} class="block text-sm font-bold text-fg truncate">{f.name}</a>
+                    {birthdayLabel(f.birth_date) && (
+                      <p class={soon ? "text-brand font-bold" : "text-muted"}>
+                        🎂 {birthdayLabel(f.birth_date)}
+                        {f.days !== null && <span class="mr-1">· {whenLabel(f.days)}</span>}
+                      </p>
+                    )}
+                    <p class="text-muted">{f.wishes ? `${f.wishes.toLocaleString("fa-IR")} آرزو در ${f.lists.toLocaleString("fa-IR")} لیست` : "هنوز آرزویی ثبت نکرده"}</p>
+                  </div>
+                  <div class="flex flex-col gap-1.5 items-stretch shrink-0">
+                    {profile && (
+                      <a href={profile} class="px-3 py-1.5 rounded-xl bg-brand text-white text-[11px] font-bold text-center">
+                        <i class="fa-solid fa-gift ml-1"></i> آرزوها
+                      </a>
+                    )}
+                    <form method="post" action={`/me/friends/${f.id}/remove`} class="m-0" onsubmit="return confirm('از دوستان حذف شود؟')">
+                      <button class="w-full text-[10px] text-muted">حذف</button>
+                    </form>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+/** /f/<code>: someone's invite; signed in, a button to accept it. */
+export function FriendInvitePage(props: { user: User | null; inviter: Inviter; code: string; already: boolean }) {
+  const site = useSite();
+  const i = props.inviter;
+  return (
+    <Layout title={`دعوت دوستی از ${i.name}`} user={props.user} nav="wishes" bare>
+      <div class="px-6 py-12 max-w-md mx-auto text-center">
+        <div class="flex justify-center mb-4">
+          <Avatar user={i} size="w-24 h-24" ring />
+        </div>
+        <h1 class="text-xl font-black text-fg mb-2">{i.name} شما را به دوستی در {site.site_name} دعوت کرده 🎁</h1>
+        <p class="text-sm text-muted leading-7 mb-6">
+          با قبول دعوت، تولد همدیگر (فقط روز و ماه) را می‌بینید و در صفحه‌ی دوستان، راحت به لیست آرزوهای هم می‌رسید تا کادوی درست را بخرید.
+        </p>
+        {props.already ? (
+          <>
+            <p class="text-sm font-bold text-brand mb-4">✅ شما و {i.name} دوست هستید.</p>
+            <a href="/me/friends" class="inline-block px-6 py-3 rounded-2xl bg-brand text-white font-bold">صفحه‌ی دوستان</a>
+          </>
+        ) : props.user ? (
+          <form method="post" action={`/f/${props.code}`}>
+            <button class="w-full py-3 rounded-2xl bg-brand text-white font-bold shadow-lg shadow-brand/20">
+              <i class="fa-solid fa-user-plus ml-1"></i> قبول دعوت
+            </button>
+          </form>
+        ) : (
+          <a href={`/login?next=${encodeURIComponent(`/f/${props.code}`)}`} class="block w-full py-3 rounded-2xl bg-brand text-white font-bold shadow-lg shadow-brand/20">
+            ورود یا ثبت‌نام و قبول دعوت
+          </a>
+        )}
+        {i.username && (
+          <a href={`/u/${i.username}`} class="block mt-4 text-sm text-muted underline">
+            دیدن پروفایل و لیست آرزوهای {i.name}
+          </a>
+        )}
+      </div>
+    </Layout>
   );
 }

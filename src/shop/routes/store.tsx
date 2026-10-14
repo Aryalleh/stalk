@@ -26,6 +26,7 @@ import { PUBLIC_IMAGE } from "../images";
 import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGift } from "../views/profile";
 import { sendReceiptToShop } from "../orders";
 import { inviteText } from "../instagram-shops";
+import { areFriends } from "../friends";
 import { CheckoutPage, HomePage, type ProductShopInfo, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
@@ -278,6 +279,7 @@ store.get("/u/:username", async (c) => {
       gifts={person.show_received || isMe ? (gifts.results as ReceivedGift[]) : null}
       isMe={isMe}
       givenTo={given ? given.n : null}
+      isFriend={!!viewer && !isMe && (await areFriends(db, viewer.id, person.id))}
     />,
   );
 });

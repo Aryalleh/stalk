@@ -35,6 +35,7 @@ import m0031 from "../migrations/0031_login_links.sql";
 import m0032 from "../migrations/0032_ig_wishers.sql";
 import m0033 from "../migrations/0033_ask_address.sql";
 import m0034 from "../migrations/0034_address_confirm.sql";
+import m0035 from "../migrations/0035_friends.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -73,6 +74,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0032_ig_wishers.sql", m0032],
   ["0033_ask_address.sql", m0033],
   ["0034_address_confirm.sql", m0034],
+  ["0035_friends.sql", m0035],
 ];
 
 let done: Promise<void> | null = null;
