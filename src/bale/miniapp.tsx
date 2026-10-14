@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createSession } from "../../lib/auth";
 import { checkInitData, type InitData } from "../../lib/initdata";
 import type { Env } from "../env";
@@ -8,14 +8,15 @@ import { SESSION_COOKIE } from "../session";
 import { randomSlug } from "../shop/db";
 import { cookieOptions, safeNext } from "../shop/routes/helpers";
 import { Layout } from "../shop/views/layout";
-import { BOT_KINDS, botToken, type BotKind } from "./botapi";
+import { BOT_KINDS, botLink, botToken, type BotKind } from "./botapi";
 import { MINIAPP_COOKIE, PENDING_TTL_MS, linkChat, userByChat } from "./chatlink";
 
 // Sign-in from inside Bale / Telegram. Set the bot's mini app (or menu button) URL to <site>/app:
 //  - the page reads the signed initData the messenger gives it and posts it here;
 //  - a chat already linked to an account is signed in at once (auto login);
-//  - otherwise the person signs in once with the usual one-time code, and the chat is linked
-//    to their account automatically (which also completes the mandatory bot connection).
+//  - otherwise the person shares their number with the messenger's contact button (/app/phone; the
+//    bot gets it and makes or finds the account), and is signed in; the one-time SMS code stays as
+//    a fallback.
 
 export const miniapp = new Hono<Env>();
 
@@ -157,7 +158,114 @@ miniapp.post("/app/auth", async (c) => {
   setCookie(c, MINIAPP_COOKIE, token, cookieOptions(PENDING_TTL_MS / 1000, true));
   // A startapp link to a page anyone may see opens it straight away; signing in later still links this chat.
   const target = startTarget(data.startParam);
-  const browse = !!target && !/\/buy$|#wish$/.test(target);
+  const browse = !!target && !/\/buy$|#wish$|^\/f\//.test(target);
   await logAttempt(c, { kind, result: "needs_login", detail: `chat not linked to an account yet${browse ? `; opening ${target}` : ""}`, chatId });
-  return c.json({ next: browse ? target : `/login?next=${encodeURIComponent(next)}` });
+  // No SMS code here: the person just shares their number with the messenger's contact button.
+  return c.json({ next: browse ? target : `/app/phone?next=${encodeURIComponent(next)}` });
+});
+
+// ---------- inside the messenger, a new person signs up by sharing their number ----------
+
+const pendingChat = (c: Parameters<typeof render>[0]) => {
+  const token = getCookie(c, MINIAPP_COOKIE);
+  return token
+    ? c.env.DB.prepare("SELECT token, kind, chat_id FROM miniapp_pending WHERE token = ? AND created_at > ?")
+        .bind(token, Date.now() - PENDING_TTL_MS)
+        .first<{ token: string; kind: BotKind; chat_id: string }>()
+    : Promise.resolve(null);
+};
+
+const PHONE_SCRIPT = (next: string, botUrl: string) => `
+(function () {
+  var next = ${JSON.stringify(next).replace(/</g, "\\u003c")}, botUrl = ${JSON.stringify(botUrl).replace(/</g, "\\u003c")};
+  function sdk() { return (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null) || (window.Bale && Bale.WebApp && Bale.WebApp.initData ? Bale.WebApp : null); }
+  var polls = 0, timer = null;
+  function check() {
+    fetch('/app/phone/check?next=' + encodeURIComponent(next), { method: 'POST', credentials: 'include' })
+      .then(function (r) { return r.json(); })
+      .then(function (r) { if (r.next) return location.replace(r.next); if (r.gone) return location.replace('/login?sms=1&next=' + encodeURIComponent(next)); schedule(); })
+      .catch(schedule);
+  }
+  function schedule() { clearTimeout(timer); if (polls++ < 120) timer = setTimeout(check, 2000); }
+  function waiting() { document.getElementById('share').classList.add('hidden'); document.getElementById('waiting').classList.remove('hidden'); polls = 0; schedule(); }
+  document.getElementById('share-btn').addEventListener('click', function () {
+    var app = sdk();
+    if (app && typeof app.requestContact === 'function') {
+      try { app.requestContact(function (ok) { if (ok) waiting(); else document.getElementById('denied').classList.remove('hidden'); }); return; } catch (e) {}
+    }
+    viaBot();
+  });
+  function viaBot() {
+    var app = sdk();
+    waiting();
+    if (app && typeof app.openTelegramLink === 'function' && botUrl.indexOf('t.me/') > -1) app.openTelegramLink(botUrl);
+    else if (app && typeof app.openLink === 'function') app.openLink(botUrl);
+    else location.href = botUrl;
+  }
+  var alt = document.getElementById('via-bot'); if (alt) alt.addEventListener('click', function (e) { e.preventDefault(); viaBot(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { polls = 0; check(); } });
+  check();
+})();`;
+
+miniapp.get("/app/phone", async (c) => {
+  const next = safeNext(c.req.query("next"));
+  if (c.get("user")) return c.redirect(next);
+  const pending = await pendingChat(c);
+  if (!pending) return c.redirect(`/login?sms=1&next=${encodeURIComponent(next)}`);
+  const s = c.get("settings");
+  const botUrl = botLink(s, pending.kind, "phone");
+  return render(
+    c,
+    <Layout title="ورود با شماره" user={null} nav="none" bare header={<></>}>
+      <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+      <script src="https://tapi.bale.ai/miniapp.js" async></script>
+      <div class="px-6 py-16 max-w-sm mx-auto text-center">
+        <div class="text-6xl mb-5">📱</div>
+        <h1 class="text-xl font-black text-fg mb-2">یک قدم تا {s.site_name}</h1>
+        <div id="share">
+          <p class="text-sm text-muted leading-7 mb-6">
+            فقط شماره‌ی {pending.kind === "bale" ? "بله" : "تلگرام"}تان را به اشتراک بگذارید؛ بدون رمز و کد پیامکی، حسابتان ساخته یا وصل می‌شود.
+          </p>
+          <button id="share-btn" type="button" class="w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-lg shadow-brand/20">
+            <i class="fa-solid fa-mobile-screen-button ml-1"></i> اشتراک شماره من
+          </button>
+          <p id="denied" class="hidden text-xs text-red-500 mt-3">بدون اشتراک شماره نمی‌شود وارد شد؛ دوباره دکمه را بزنید.</p>
+          {botUrl && (
+            <a id="via-bot" href={botUrl} class="block mt-4 text-xs text-muted underline">
+              دکمه کار نکرد؟ شماره را در ربات بفرستید
+            </a>
+          )}
+        </div>
+        <div id="waiting" class="hidden">
+          <p class="text-sm text-muted leading-7 mb-4">
+            <i class="fa-solid fa-spinner fa-spin ml-1"></i> منتظر شماره‌تان هستیم… اگر به ربات رفتید، دکمه «📱 اشتراک شماره من» را بزنید و به اینجا برگردید.
+          </p>
+          {botUrl && (
+            <a href={botUrl} class="inline-block px-5 py-2.5 rounded-xl bg-ink border border-fg/10 text-fg text-sm font-bold">
+              رفتن به ربات
+            </a>
+          )}
+        </div>
+        <a href={`/login?sms=1&next=${encodeURIComponent(next)}`} class="block mt-8 text-[11px] text-muted/70 underline">
+          ورود با کد پیامکی
+        </a>
+      </div>
+      <script dangerouslySetInnerHTML={{ __html: PHONE_SCRIPT(next, botUrl) }} />
+    </Layout>,
+  );
+});
+
+// Polled by /app/phone: once the bot got the number (and made / found the account), sign in here.
+miniapp.post("/app/phone/check", async (c) => {
+  const next = safeNext(c.req.query("next") ?? "/");
+  const pending = await pendingChat(c);
+  if (!pending) return c.json({ gone: true });
+  const owner = await userByChat(c.env.DB, pending.kind, pending.chat_id);
+  if (!owner) return c.json({ wait: true });
+  const { token, maxAge } = await createSession(c.env.DB, owner.id);
+  setCookie(c, SESSION_COOKIE, token, cookieOptions(maxAge, true));
+  deleteCookie(c, MINIAPP_COOKIE, cookieOptions(0, true));
+  await c.env.DB.prepare("DELETE FROM miniapp_pending WHERE token = ?").bind(pending.token).run();
+  await logAttempt(c, { kind: pending.kind, result: "signed_in", detail: `user ${owner.id} (shared phone)`, chatId: pending.chat_id });
+  return c.json({ next });
 });

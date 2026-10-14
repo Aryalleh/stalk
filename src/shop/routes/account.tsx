@@ -18,6 +18,7 @@ import { SafirError, sendSafirOtp } from "../../bale/safir";
 import { loadSettings, safirReady, saveSettings } from "../../settings";
 import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
+import { MINIAPP_COOKIE } from "../../bale/chatlink";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
 import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, type MyOrder } from "../views/account";
@@ -61,6 +62,8 @@ const hasAdmin = async (c: C) => !!(await c.env.DB.prepare("SELECT 1 FROM users 
 
 account.get("/login", async (c) => {
   const next = safeNext(c.req.query("next"));
+  // Inside Bale / Telegram (a mini-app chat waiting in this browser): share the number instead of an SMS code.
+  if (getCookie(c, MINIAPP_COOKIE) && c.req.query("sms") !== "1") return c.redirect(`/app/phone?next=${encodeURIComponent(next)}`);
   if (!safirReady(c.get("settings"))) return render(c, <CodeLoginPage next={next} step="unavailable" setupOpen={!(await hasAdmin(c))} />, 503);
   return render(c, <CodeLoginPage next={next} step="phone" />);
 });

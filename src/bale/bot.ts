@@ -6,6 +6,9 @@ import { confirmOrder, rejectOrder, shopOwnerChats } from "../shop/orders";
 import { siteUrl } from "../shop/routes/helpers";
 import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
 import { useConnectToken } from "./connect";
+import { accountFromContact } from "./chatlink";
+import { assignUsername } from "../session";
+import { upsertCustomer } from "../crm/sync";
 import { saveLink } from "./links";
 import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
 import { cardProduct, inlineKeyboard as chatButtons, rememberCard, runShopChat, type ChatReply } from "../shop/commands";
@@ -93,7 +96,27 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
         linked_at: new Date().toISOString(),
       });
     }
-    reply(`✅ شماره ${phone} ثبت شد.`, REMOVE_KEYBOARD);
+    if (!/^09\d{9}$/.test(phone)) {
+      reply("فعلاً فقط شماره موبایل ایران (۰۹…) پذیرفته می‌شود.", REMOVE_KEYBOARD);
+      return c.json({ ok: true });
+    }
+    // The messenger vouches for the number: sign the chat up (or tie it to the account with it), so the
+    // mini app signs in without an SMS code.
+    const acct = await accountFromContact(c.env.DB, kind, String(chatId), phone, { first: msg?.from?.first_name ?? "", last: msg?.from?.last_name ?? "" });
+    if (acct.created) {
+      await assignUsername(c.env.DB, acct.id);
+      const name = [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(" ");
+      c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: name || phone, phone, source: `ثبت‌نام با ${kind === "bale" ? "بله" : "تلگرام"}` }).catch(() => undefined));
+    }
+    reply(`✅ شماره ${phone} ثبت شد. به ${s.site_name} برگردید؛ ورودتان انجام شده است.`, REMOVE_KEYBOARD);
+    const app = openAppMarkup(`${siteUrl(c)}/app`, `🎁 باز کردن ${s.site_name}`);
+    if (app) reply("👇", app);
+    return c.json({ ok: true });
+  }
+
+  // From the mini app's "share my number" fallback: ask for it with the contact button.
+  if (/^\/start(?:@\w+)?\s+phone$/.test(msg?.text?.trim() ?? "")) {
+    reply(`برای ورود به ${s.site_name}، دکمه «📱 اشتراک شماره من» پایین صفحه را بزنید.`, SHARE_KEYBOARD);
     return c.json({ ok: true });
   }
 

@@ -29,3 +29,30 @@ export async function linkPendingChat(db: D1Database, token: string, userId: num
   await db.prepare("DELETE FROM miniapp_pending WHERE token = ? OR created_at <= ?").bind(token, Date.now() - PENDING_TTL_MS).run();
   if (row) await linkChat(db, row.kind, row.chat_id, userId);
 }
+
+/**
+ * A chat shared its own phone number through the messenger's contact button (the messenger vouches
+ * for it, as an SMS code would): sign that chat up, or tie it to the account with that number.
+ * Returns the account, and whether it was just made (it then completes its profile on the site).
+ */
+export async function accountFromContact(db: D1Database, kind: BotKind, chatId: string, phone: string, name: { first: string; last: string }) {
+  const linked = await userByChat(db, kind, chatId);
+  if (linked) return { id: linked.id, created: false };
+  const existing = await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>();
+  if (existing) {
+    await linkChat(db, kind, chatId, existing.id);
+    return { id: existing.id, created: false };
+  }
+  const first = name.first.trim().slice(0, 40);
+  const last = name.last.trim().slice(0, 40);
+  const row = await db
+    .prepare(
+      `INSERT INTO users (phone, name, first_name, last_name, password_hash, created_at) VALUES (?, ?, ?, ?, '!', ?)
+       ON CONFLICT (phone) DO NOTHING RETURNING id`,
+    )
+    .bind(phone, `${first} ${last}`.trim() || phone, first, last, new Date().toISOString())
+    .first<{ id: number }>();
+  const id = row?.id ?? (await db.prepare("SELECT id FROM users WHERE phone = ?").bind(phone).first<{ id: number }>())!.id;
+  await linkChat(db, kind, chatId, id);
+  return { id, created: !!row };
+}
