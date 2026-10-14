@@ -30,6 +30,13 @@ import { notFoundPage } from "./errorpage";
 // One Worker: the public gift shop at /, the internal CRM at /crm, sharing accounts and the database.
 const app = new Hono<Env>();
 
+// Pages depend on who is signed in, so a CDN or proxy in front (Arvan) must never keep or share them:
+// anything that didn't choose its own caching (static files, images, sitemap…) is private.
+app.use(async (c, next) => {
+  await next();
+  if (!c.res.headers.has("Cache-Control")) c.res.headers.set("Cache-Control", "private, no-cache");
+});
+
 // Plain-http visits get a permanent redirect to https (local development excepted), except those our
 // proxy took on its extra plain-http port (deploy/proxy, e.g. :3030): those stay on http, and their
 // cookies drop the Secure flag so signing in works there.

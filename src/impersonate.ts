@@ -2,7 +2,7 @@
 // them. The admin's own session is kept aside in a cookie and restored by "back to admin" (or by
 // logging out). The stand-in session lasts at most 2 hours, and every one is recorded.
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { createSession, deleteSession } from "../lib/auth";
+import { COOKIE_MAX_AGE, createSession, deleteSession } from "../lib/auth";
 import type { C } from "./env";
 import { SESSION_COOKIE, sessionUser, type User } from "./session";
 import { now } from "./shop/db";
@@ -46,7 +46,7 @@ export async function stopImpersonation(c: C): Promise<boolean> {
   }
   deleteCookie(c, IMPERSONATOR_COOKIE, { path: "/", secure: true });
   const admin = await sessionUser(c.env.DB, adminToken);
-  if (admin?.is_admin) setCookie(c, SESSION_COOKIE, adminToken, cookieOptions(7 * 86400, false));
+  if (admin?.is_admin) setCookie(c, SESSION_COOKIE, adminToken, cookieOptions(COOKIE_MAX_AGE, false));
   else deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
   return true;
 }

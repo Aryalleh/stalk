@@ -1,7 +1,11 @@
 // Password hashing and D1-backed sessions (needs a `sessions (token_hash, user_id, expires_at)` table).
 
 const ITERATIONS = 100_000; // Workers' PBKDF2 maximum
-const SESSION_DAYS = 7;
+// A session ends after this many days without use; every day it's used pushes the end back. The
+// cookie itself lives longer (browsers cap it at 400 days), so only the server decides.
+const SESSION_DAYS = 60;
+export const COOKIE_MAX_AGE = 400 * 86400;
+const DAY = 86400_000;
 
 const enc = new TextEncoder();
 const b64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -32,25 +36,35 @@ async function sha256(text: string) {
   return b64(await crypto.subtle.digest("SHA-256", enc.encode(text)));
 }
 
-/** Create a session and return the raw token for the cookie (only its hash is stored). */
-export async function createSession(db: D1Database, userId: number, maxAgeSeconds = SESSION_DAYS * 86400) {
+/**
+ * Create a session and return the raw token for the cookie (only its hash is stored). Without
+ * `maxAgeSeconds` it renews while used; with it (e.g. an admin acting as a user), it ends then.
+ */
+export async function createSession(db: D1Database, userId: number, maxAgeSeconds?: number) {
   const token = b64(crypto.getRandomValues(new Uint8Array(32)));
-  const expires = Date.now() + maxAgeSeconds * 1000;
+  const renews = maxAgeSeconds === undefined;
+  const expires = Date.now() + (renews ? SESSION_DAYS * DAY : maxAgeSeconds * 1000);
   await db.batch([
     db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(Date.now()),
-    db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(token), userId, expires),
+    db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, renews) VALUES (?, ?, ?, ?)").bind(await sha256(token), userId, expires, renews ? 1 : 0),
   ]);
-  return { token, maxAge: maxAgeSeconds };
+  return { token, maxAge: renews ? COOKIE_MAX_AGE : maxAgeSeconds };
 }
 
-/** The user id behind a session cookie, or null if missing/expired. */
+/** The user id behind a session cookie, or null if missing/expired. A renewing session is extended (once a day). */
 export async function sessionUserId(db: D1Database, token: string | undefined): Promise<number | null> {
   if (!token) return null;
+  const hash = await sha256(token);
+  const now = Date.now();
   const row = await db
-    .prepare("SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?")
-    .bind(await sha256(token), Date.now())
-    .first<{ user_id: number }>();
-  return row?.user_id ?? null;
+    .prepare("SELECT user_id, expires_at, renews FROM sessions WHERE token_hash = ? AND expires_at > ?")
+    .bind(hash, now)
+    .first<{ user_id: number; expires_at: number; renews: number }>();
+  if (!row) return null;
+  if (row.renews && row.expires_at < now + (SESSION_DAYS - 1) * DAY) {
+    await db.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").bind(now + SESSION_DAYS * DAY, hash).run();
+  }
+  return row.user_id;
 }
 
 export async function deleteSession(db: D1Database, token: string | undefined) {
