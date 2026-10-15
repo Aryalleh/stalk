@@ -10,7 +10,7 @@ import { accountFromContact } from "./chatlink";
 import { handleAnonCallback, handleAnonMessage, sendAnonLinks, startAnon, type AnonCtx } from "./anon";
 import { logIncoming } from "../crm/db";
 import { assignUsername } from "../session";
-import { upsertCustomer } from "../crm/sync";
+import { syncMessengerHandle, upsertCustomer } from "../crm/sync";
 import { saveLink } from "./links";
 import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
 import { cardProduct, inlineKeyboard as chatButtons, rememberCard, runShopChat, type ChatReply } from "../shop/commands";
@@ -79,7 +79,12 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
   const msg = update?.message;
   const chatId = msg?.chat?.id;
   if (chatId === undefined) return c.json({ ok: true });
-  if ((msg?.chat?.type ?? "private") === "private") await rememberProfile(c.env.DB, kind, String(chatId), msg?.from);
+  if ((msg?.chat?.type ?? "private") === "private") {
+    await rememberProfile(c.env.DB, kind, String(chatId), msg?.from);
+    // The CRM's Telegram / Bale id follows the person's current @username (crm/sync.ts).
+    const shared = msg?.contact?.user_id !== undefined && msg.contact.user_id === msg?.from?.id ? normalizePhone(msg.contact.phone_number ?? "") : undefined;
+    c.executionCtx.waitUntil(syncMessengerHandle(c.env.DB, kind, String(chatId), msg?.from?.username ?? "", shared).catch((e) => console.error("crm handle", e)));
+  }
   const reply = (text: string, markup?: object) =>
     c.executionCtx.waitUntil(sendBotMessage(s, kind, String(chatId), text, markup).catch((e) => console.error(e)));
   const shareMarkup = kind === "bale" ? SHARE_KEYBOARD : undefined;
@@ -112,7 +117,11 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     if (acct.created) {
       await assignUsername(c.env.DB, acct.id);
       const name = [msg?.from?.first_name, msg?.from?.last_name].filter(Boolean).join(" ");
-      c.executionCtx.waitUntil(upsertCustomer(c.env.DB, { name: name || phone, phone, source: `ثبت‌نام با ${kind === "bale" ? "بله" : "تلگرام"}` }).catch(() => undefined));
+      c.executionCtx.waitUntil(
+        upsertCustomer(c.env.DB, { name: name || phone, phone, source: `ثبت‌نام با ${kind === "bale" ? "بله" : "تلگرام"}` })
+          .then(() => syncMessengerHandle(c.env.DB, kind, String(chatId), msg?.from?.username ?? "", phone)) // the new contact gets the @username too
+          .catch(() => undefined),
+      );
     }
     reply(`✅ شماره ${phone} ثبت شد. به ${s.site_name} برگردید؛ ورودتان انجام شده است.`, REMOVE_KEYBOARD);
     const app = openAppMarkup(`${siteUrl(c)}/app`, `🎁 باز کردن ${s.site_name}`);

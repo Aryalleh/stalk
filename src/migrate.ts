@@ -44,6 +44,7 @@ import m0040 from "../migrations/0040_referral_points.sql";
 import m0041 from "../migrations/0041_anon_cross.sql";
 import m0042 from "../migrations/0042_bot_profiles.sql";
 import m0043 from "../migrations/0043_anon_pairs.sql";
+import m0044 from "../migrations/0044_chat_indexes.sql";
 import { statements } from "./sql-statements";
 
 // Keep in sync with the files in /migrations (a test checks this).
@@ -91,6 +92,7 @@ export const MIGRATIONS: [string, string][] = [
   ["0041_anon_cross.sql", m0041],
   ["0042_bot_profiles.sql", m0042],
   ["0043_anon_pairs.sql", m0043],
+  ["0044_chat_indexes.sql", m0044],
 ];
 
 let done: Promise<void> | null = null;
