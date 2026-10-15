@@ -120,3 +120,12 @@ describe("Digikala's real JSON-LD (as Googlebot gets it)", () => {
     expect(r).toMatchObject({ price: 809900, available: true, method: "JSON-LD" });
   });
 });
+
+describe("Digikala, an in-stock phone (real values, as Googlebot gets the page)", () => {
+  it("dkp-17580036: 871,990,000 rial → 87,199,000 toman", () => {
+    const html =
+      `<script type="application/ld+json">{"@type":"Product","@context":"https://www.schema.org","name":"گوشی موبایل","offers":{"@type":"Offer","priceCurrency":"IRR","price":871990000,"itemCondition":"https://schema.org/NewCondition","availability":"https://schema.org/InStock"}}</script>` +
+      `<div data-theme-animation="price-container"></div>`;
+    expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-17580036/")).toMatchObject({ price: 87199000, available: true, method: "JSON-LD" });
+  });
+});
