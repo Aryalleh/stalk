@@ -194,6 +194,7 @@ export interface CrmMessage {
   error: string;
   username: string;
   sent_at: string;
+  direction?: "in" | "out"; // "in": the customer wrote it to the bot
 }
 
 export async function contactMessages(db: D1Database, contactId: number) {
@@ -212,4 +213,28 @@ export async function logMessage(db: D1Database, m: Omit<CrmMessage, "id" | "sen
     )
     .bind(m.contact_id, m.phone, m.channel, m.text, m.status, m.error, m.user_id, m.username, new Date().toISOString())
     .run();
+}
+
+/**
+ * A customer wrote to the Bale bot: keep it on every contact with that number (it shows in the
+ * contact's chat history). Returns those contacts.
+ */
+export async function logIncoming(db: D1Database, phone: string, text: string) {
+  const { results } = await db
+    .prepare("SELECT id, first_name, last_name FROM contacts WHERE phone = ?1 OR phone2 = ?1 OR father_phone = ?1 LIMIT 10")
+    .bind(phone)
+    .all<{ id: number; first_name: string; last_name: string }>();
+  if (results.length) {
+    const t = new Date().toISOString();
+    await db.batch(
+      results.map((r) =>
+        db
+          .prepare(
+            "INSERT INTO crm_messages (contact_id, phone, channel, text, status, error, user_id, username, sent_at, direction) VALUES (?, ?, 'bot', ?, 'sent', '', NULL, '', ?, 'in')",
+          )
+          .bind(r.id, phone, text.slice(0, 4000), t),
+      ),
+    );
+  }
+  return results;
 }

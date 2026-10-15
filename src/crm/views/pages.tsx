@@ -560,18 +560,29 @@ function MessagingCard(props: { contactId: number; m: Messaging; notice?: { ok: 
         </div>
       )}
       {m.messages.length > 0 && (
-        <div class="rounded-[20px] bg-sky-50/50 border border-sky-100 p-3 space-y-2 max-h-[260px] overflow-y-auto mb-3">
-          {[...m.messages].reverse().map((x) => (
-            <div class="flex flex-col items-end">
-              <div class={`max-w-[90%] px-3 py-2 rounded-2xl rounded-bl-sm text-[11px] leading-6 whitespace-pre-wrap ${x.status === "sent" ? "bg-sky-500 text-white" : "bg-red-50 text-red-700 border border-red-100"}`}>{x.text}</div>
-              <span class="text-[9px] text-slate-400 mt-0.5">
-                <span class="dt">{date(x.sent_at)}</span> · {x.channel === "bot" ? "بات بله" : "سفیر"} · {x.username}
-                {x.status !== "sent" && <> · ناموفق: {x.error}</>}
-              </span>
-            </div>
-          ))}
+        <div class="rounded-[20px] bg-sky-50/50 border border-sky-100 p-3 space-y-2 max-h-[360px] overflow-y-auto mb-3" data-chat>
+          {[...m.messages].reverse().map((x) =>
+            x.direction === "in" ? (
+              // From the customer (written to the Bale bot)
+              <div class="flex flex-col items-start">
+                <div class="max-w-[90%] px-3 py-2 rounded-2xl rounded-br-sm text-[11px] leading-6 whitespace-pre-wrap bg-white text-slate-700 border border-sky-100">{x.text}</div>
+                <span class="text-[9px] text-slate-400 mt-0.5">
+                  <span class="dt">{date(x.sent_at)}</span> · مشتری در بات بله
+                </span>
+              </div>
+            ) : (
+              <div class="flex flex-col items-end">
+                <div class={`max-w-[90%] px-3 py-2 rounded-2xl rounded-bl-sm text-[11px] leading-6 whitespace-pre-wrap ${x.status === "sent" ? "bg-sky-500 text-white" : "bg-red-50 text-red-700 border border-red-100"}`}>{x.text}</div>
+                <span class="text-[9px] text-slate-400 mt-0.5">
+                  <span class="dt">{date(x.sent_at)}</span> · {x.channel === "bot" ? "بات بله" : "سفیر"} · {x.username}
+                  {x.status !== "sent" && <> · ناموفق: {x.error}</>}
+                </span>
+              </div>
+            ),
+          )}
         </div>
       )}
+      {m.messages.length > 0 && <script dangerouslySetInnerHTML={{ __html: "document.querySelectorAll('[data-chat]').forEach(function (e) { e.scrollTop = e.scrollHeight; });" }} />}
       {m.invite && m.phones.some((p) => !p.link) && (
         <p class="text-[10px] text-slate-400 leading-5">برای پیام رایگان، این لینک را برای مشتری بفرستید: <span class="dt">{m.invite}</span></p>
       )}

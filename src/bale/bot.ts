@@ -4,10 +4,11 @@ import { normalizePhone } from "../../lib/normalize";
 import type { C, Env } from "../env";
 import { confirmOrder, rejectOrder, shopOwnerChats } from "../shop/orders";
 import { siteUrl } from "../shop/routes/helpers";
-import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
+import { answerCallback, botLink, botToken, clearButtons, notifyAdmins, openAppMarkup, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
 import { useConnectToken } from "./connect";
 import { accountFromContact } from "./chatlink";
-import { handleAnonCallback, handleAnonMessage, startAnon, type AnonCtx } from "./anon";
+import { handleAnonCallback, handleAnonMessage, sendAnonLinks, startAnon, type AnonCtx } from "./anon";
+import { logIncoming } from "../crm/db";
 import { assignUsername } from "../session";
 import { upsertCustomer } from "../crm/sync";
 import { saveLink } from "./links";
@@ -177,6 +178,12 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
   // An anonymous message being written, or a reply to a received one.
   if (msg && (await handleAnonMessage(anon, msg))) return c.json({ ok: true });
 
+  // "/anon" or "پیام ناشناس": the user's own anonymous-message links (anon.ts).
+  if (/^(\/anon(@\w+)?|\/link(@\w+)?|پیام ناشناس|لینک ناشناس|لینک پیام ناشناس)$/.test(msg?.text?.trim() ?? "")) {
+    c.executionCtx.waitUntil(sendAnonLinks(anon, siteUrl(c), (k, payload) => botLink(s, k, payload)).catch((e) => console.error(e)));
+    return c.json({ ok: true });
+  }
+
   // A shop's admin can run the shop from here with buttons and text commands (src/shop/commands.ts).
   const text = msg?.text?.trim();
   if (text && !/^\/start(@\w+)?$/.test(text)) {
@@ -189,9 +196,23 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     }
   }
 
+  // A CRM customer (their number shared with the Bale bot) writing to us: kept in their chat history.
+  if (kind === "bale" && text && !text.startsWith("/")) {
+    const link = await c.env.DB.prepare("SELECT phone FROM bale_links WHERE chat_id = ?").bind(String(chatId)).first<{ phone: string }>();
+    const contacts = link ? await logIncoming(c.env.DB, link.phone, text) : [];
+    if (contacts.length) {
+      reply("✅ پیامتان رسید؛ به‌زودی پاسخ می‌دهیم.");
+      const who = `${contacts[0].first_name} ${contacts[0].last_name}`.trim() || link!.phone;
+      c.executionCtx.waitUntil(
+        notifyAdmins(c.env.DB, s, `💬 پیام تازه از ${who} در بات بله:\n${text.slice(0, 500)}\n\n${siteUrl(c)}/crm/contacts/${contacts[0].id}#messages`).catch(() => undefined),
+      );
+      return c.json({ ok: true });
+    }
+  }
+
   const app = openAppMarkup(`${siteUrl(c)}/app`, `🎁 باز کردن ${s.site_name}`);
   reply(
-    `سلام! به بات ${s.site_name} خوش آمدید.\n` +
+    `سلام! به بات ${s.site_name} خوش آمدید.\n🤫 لینک پیام ناشناس خودتان: /anon\n` +
       (app ? "با دکمه زیر سایت را همین‌جا باز کنید؛ ورود و اتصال حساب خودکار انجام می‌شود." : "برای اتصال حساب سایت، از صفحه «اتصال به بات» در سایت وارد شوید."),
     app ?? shareMarkup,
   );

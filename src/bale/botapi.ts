@@ -56,9 +56,12 @@ export type InlineKeyboard = { inline_keyboard: { text: string; callback_data?: 
 
 export type SentMessage = { message_id: number };
 
-export async function sendBotMessage(s: Settings, kind: BotKind, chatId: string, text: string, replyMarkup?: object) {
-  return (await callBot(s, kind, "sendMessage", { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) })) as SentMessage;
+export async function sendBotMessage(s: Settings, kind: BotKind, chatId: string, text: string, replyMarkup?: object, replyTo?: number) {
+  return (await callBot(s, kind, "sendMessage", { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}), ...replyFields(replyTo) })) as SentMessage;
 }
+
+/** As a reply to a message in that chat (still sent if that message is gone). */
+const replyFields = (replyTo?: number) => (replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {});
 
 export async function sendBotPhoto(
   s: Settings,
@@ -77,8 +80,14 @@ export async function sendBotPhoto(
 }
 
 /** Re-send a message from one chat to another as the bot's own (no "forwarded from" with the sender's name). */
-export async function copyBotMessage(s: Settings, kind: BotKind, toChat: string, fromChat: string, messageId: number, replyMarkup?: object) {
-  return (await callBot(s, kind, "copyMessage", { chat_id: toChat, from_chat_id: fromChat, message_id: messageId, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) })) as SentMessage;
+export async function copyBotMessage(s: Settings, kind: BotKind, toChat: string, fromChat: string, messageId: number, replyMarkup?: object, replyTo?: number) {
+  return (await callBot(s, kind, "copyMessage", {
+    chat_id: toChat,
+    from_chat_id: fromChat,
+    message_id: messageId,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    ...replyFields(replyTo),
+  })) as SentMessage;
 }
 
 export async function answerCallback(s: Settings, kind: BotKind, callbackId: string, text: string) {

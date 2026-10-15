@@ -53,6 +53,7 @@ interface Row {
   to_chat: string;
   to_user_id: number | null;
   body: string;
+  from_msg_id: string; // the sender's own message (an answer lands as a reply to it)
 }
 
 const CANCEL = { inline_keyboard: [[{ text: "❌ انصراف", callback_data: "anon:x" }]] };
@@ -148,6 +149,11 @@ export async function handleAnonMessage(ctx: AnonCtx, msg: AnonMsg): Promise<boo
 }
 
 async function deliver(ctx: AnonCtx, msg: AnonMsg, to: { kind: BotKind; chat: string; userId: number | null }, replyTo: number | null) {
+  // An answer goes in as a reply to the message it answers, in that chat.
+  const answered = replyTo
+    ? await ctx.db.prepare("SELECT from_msg_id FROM anon_messages WHERE id = ?").bind(replyTo).first<{ from_msg_id: string }>()
+    : null;
+  const threadTo = Number(answered?.from_msg_id) || undefined;
   const me = { kind: ctx.kind, chat: ctx.chatId };
   if (!msg.message_id) return;
   if (await blocked(ctx.db, to, me)) return say(ctx, "امکان ارسال پیام به این کاربر را ندارید.");
@@ -158,22 +164,23 @@ async function deliver(ctx: AnonCtx, msg: AnonMsg, to: { kind: BotKind; chat: st
   if ((recent?.n ?? 0) >= ANON_HOURLY_LIMIT) return say(ctx, "⏳ در این یک ساعت پیام زیادی فرستاده‌اید؛ کمی بعد دوباره امتحان کنید.");
   const body = (msg.text ?? msg.caption ?? "").slice(0, 1000);
   const row = (await ctx.db
-    .prepare("INSERT INTO anon_messages (from_kind, from_chat, to_kind, to_chat, to_user_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id")
-    .bind(ctx.kind, ctx.chatId, to.kind, to.chat, to.userId, body, Date.now())
+    .prepare("INSERT INTO anon_messages (from_kind, from_chat, to_kind, to_chat, to_user_id, body, from_msg_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
+    .bind(ctx.kind, ctx.chatId, to.kind, to.chat, to.userId, body, String(msg.message_id), Date.now())
     .first<{ id: number }>())!;
   try {
-    await sendBotMessage(ctx.s, to.kind, to.chat, replyTo ? "↩️ پاسخ ناشناس به پیامت:" : "📩 یک پیام ناشناس داری:");
+    // A new message gets a heading; an answer shows as a reply to the message it answers.
+    if (!threadTo) await sendBotMessage(ctx.s, to.kind, to.chat, replyTo ? "↩️ پاسخ ناشناس به پیامت:" : "📩 یک پیام ناشناس داری:");
     let sent: { message_id: number };
     if (to.kind === ctx.kind) {
       // As the bot's own message: the sender's name doesn't show (a forward would show it).
-      sent = await copyBotMessage(ctx.s, to.kind, to.chat, ctx.chatId, msg.message_id, received(row.id)).catch(async (e) => {
+      sent = await copyBotMessage(ctx.s, to.kind, to.chat, ctx.chatId, msg.message_id, received(row.id), threadTo).catch(async (e) => {
         if (!msg.text) throw e;
-        return sendBotMessage(ctx.s, to.kind, to.chat, msg.text, received(row.id));
+        return sendBotMessage(ctx.s, to.kind, to.chat, msg.text, received(row.id), threadTo);
       });
     } else {
       // Across messengers only text can travel.
       if (!msg.text) throw new Error("not text");
-      sent = await sendBotMessage(ctx.s, to.kind, to.chat, msg.text, received(row.id));
+      sent = await sendBotMessage(ctx.s, to.kind, to.chat, msg.text, received(row.id), threadTo);
     }
     await ctx.db.prepare("UPDATE anon_messages SET to_msg_id = ? WHERE id = ?").bind(String(sent.message_id), row.id).run();
   } catch (e) {
@@ -242,4 +249,27 @@ export async function handleAnonCallback(ctx: AnonCtx, data: string, answer: (te
     return answer("گزارش شد؛ مدیران سایت بررسی می‌کنند. می‌توانی بلاکش هم بکنی.");
   }
   return answer("؟");
+}
+
+/** "/anon" (or "پیام ناشناس") in the bot: the user's own anonymous links, to share. */
+export async function sendAnonLinks(ctx: AnonCtx, site: string, botLink: (kind: BotKind, payload: string) => string) {
+  const col = ctx.kind === "bale" ? "bale_chat_id" : "telegram_chat_id";
+  const user = await ctx.db.prepare(`SELECT id, anon_enabled FROM users WHERE ${col} = ? LIMIT 1`).bind(ctx.chatId).first<{ id: number; anon_enabled: number }>();
+  if (!user) return say(ctx, `برای گرفتن لینک پیام ناشناس، اول حساب ${ctx.s.site_name} را به این بات وصل کنید: ${site}/connect`);
+  if (!user.anon_enabled) return say(ctx, `دریافت پیام ناشناس برایتان خاموش است؛ از صفحه‌ی «دوستان» روشنش کنید: ${site}/me/friends#anon`);
+  const code = await anonCode(ctx.db, user.id);
+  const links = (["telegram", "bale"] as BotKind[]).map((k) => [k, botLink(k, anonStart(code))] as const).filter(([, l]) => l);
+  const mine = links.find(([k]) => k === ctx.kind)?.[1] ?? links[0]?.[1] ?? "";
+  await say(
+    ctx,
+    [
+      "🤫 لینک پیام ناشناس شما:",
+      ...links.map(([k, l]) => `${k === "bale" ? "بله" : "تلگرام"}: ${l}`),
+      "",
+      "این لینک را در استوری یا بیو بگذارید؛ هر کس بازش کند، بدون نامش برایتان می‌نویسد و شما ناشناس جواب می‌دهید.",
+    ].join("\n"),
+    mine ? { inline_keyboard: [[{ text: "📤 اشتراک‌گذاری", url: ctx.kind === "telegram" ? `https://t.me/share/url?url=${encodeURIComponent(mine)}&text=${encodeURIComponent("بهم پیام ناشناس بده 🤫")}` : mine }]] } : undefined,
+  );
+  // The text alone, easy to forward as is.
+  if (mine) await say(ctx, `بهم پیام ناشناس بده 🤫\n${mine}`);
 }
