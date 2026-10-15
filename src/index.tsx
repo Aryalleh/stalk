@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getCookie } from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
@@ -21,6 +21,9 @@ import { miniapp } from "./bale/miniapp";
 import { igWebhook, refreshIgTokens } from "./shop/crm/webhook";
 import { retryMentions } from "./shop/instagram-shops";
 import { releaseDueAddresses } from "./shop/orders";
+import { attributeReferral, REF_COOKIE, sweepReferrals } from "./shop/points";
+import { inviterByCode } from "./shop/friends";
+import { cookieOptions } from "./shop/routes/helpers";
 import { fonts } from "./fonts";
 import { pwa } from "./pwa";
 import { pageRoute, seo } from "./seo";
@@ -84,6 +87,13 @@ app.use(async (c, next) => {
   c.set("user", user);
   c.set("settings", settings);
   c.set("impersonator", user ? await actingAdmin(c) : null); // an admin signed in as this user
+  // Signed up after opening someone's invite link (points.ts): credit them once.
+  const ref = getCookie(c, REF_COOKIE);
+  if (ref && user && !c.get("impersonator")) {
+    deleteCookie(c, REF_COOKIE, cookieOptions(0, true));
+    const inviter = await inviterByCode(c.env.DB, ref);
+    if (inviter) await attributeReferral(c.env.DB, user.id, inviter.id);
+  }
   // Gifts waiting for this user's address (orders.ts): every page asks until it's given or confirmed.
   c.set("addressAsks", []);
   if (user && c.req.method === "GET" && (c.req.header("accept") ?? "").includes("text/html")) {
@@ -208,6 +218,7 @@ export default {
           if (deps.siteUrl) await retryMentions(deps);
         }
         await releaseDueAddresses(deps);
+        await sweepReferrals(env.DB, settings, deps.siteUrl);
       }),
     );
   },

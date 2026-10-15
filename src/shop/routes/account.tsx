@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { stopImpersonation } from "../../impersonate";
 import { render } from "../../render";
-import { deleteCookie, getCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { deleteSession } from "../../../lib/auth";
 import { normalizeDigits, normalizePhone } from "../../../lib/normalize";
 import { availableByVariant, getPublicProduct, normCity, now, productImages, randomSlug, wishlistItems, type Order, type Shop, type Wishlist } from "../db";
@@ -23,14 +23,15 @@ import { anonCode, anonStart } from "../../bale/anon";
 import { addWebWish, parseWebUrl, siteName } from "../web-shop";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, WebAddPage, type WebAdded, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, PointsPage, WebAddPage, type WebAdded, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange, setOrderAddress } from "../orders";
 import { areFriends, befriend, friendCode, friendStart, inviterByCode, listFriends, tellInviter, unfriend } from "../friends";
 
 const sessionUserById = (db: D1Database, id: number) => db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
 import { SetupPage } from "../views/panel";
-import { currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
+import { cookieOptions, currentUser, form, intParam, safeNext, siteUrl, startSession } from "./helpers";
+import { attributeReferral, awardReferrals, pointsSummary, REF_COOKIE, REF_DAYS, tellAwards } from "../points";
 import { notFoundPage } from "../../errorpage";
 
 export const account = new Hono<Env>();
@@ -841,6 +842,22 @@ account.post("/me/anon/renew", async (c) => {
   return c.redirect("/me/friends?done=anon_renewed#anon");
 });
 
+// Referral points (points.ts): the same invite links, and what they earned.
+account.get("/me/points", async (c) => {
+  const user = currentUser(c);
+  const s = c.get("settings");
+  const awards = await awardReferrals(c.env.DB);
+  if (awards.length) c.executionCtx.waitUntil(tellAwards(c.env.DB, s, siteUrl(c), awards));
+  const [code, summary] = await Promise.all([friendCode(c.env.DB, user.id), pointsSummary(c.env.DB, user.id)]);
+  const bots = activeBots(s);
+  const links = {
+    web: `${siteUrl(c)}/f/${code}`,
+    bale: bots.includes("bale") ? botLink(s, "bale", friendStart(code)) : "",
+    telegram: bots.includes("telegram") ? botLink(s, "telegram", friendStart(code)) : "",
+  };
+  return render(c, <PointsPage user={user} links={links} total={summary.total} people={summary.people} />);
+});
+
 // A new code: links shared before stop working (friends made so far stay).
 account.post("/me/friends/renew", async (c) => {
   await friendCode(c.env.DB, currentUser(c).id, true);
@@ -859,6 +876,8 @@ account.get("/f/:code", async (c) => {
   const user = c.get("user");
   if (user?.id === inviter.id) return c.redirect("/me/friends");
   const already = user ? await areFriends(c.env.DB, user.id, inviter.id) : false;
+  // Signed out: whoever signs up from here counts as invited by them (points.ts).
+  if (!user) setCookie(c, REF_COOKIE, c.req.param("code"), cookieOptions(REF_DAYS * 86400, true));
   return render(c, <FriendInvitePage user={user ?? null} inviter={inviter} code={c.req.param("code")} already={already} />);
 });
 
@@ -869,7 +888,10 @@ account.post("/f/:code", async (c) => {
   const inviter = await inviterByCode(c.env.DB, code);
   if (!inviter) return notFoundPage(c, "این لینک دعوت معتبر نیست یا عوض شده است.");
   const r = await befriend(c.env.DB, user.id, inviter.id);
-  if (r === "ok") c.executionCtx.waitUntil(tellInviter(c.env.DB, c.get("settings"), siteUrl(c), inviter.id, { name: user.nickname || user.name }));
+  if (r === "ok") {
+    await attributeReferral(c.env.DB, user.id, inviter.id);
+    c.executionCtx.waitUntil(tellInviter(c.env.DB, c.get("settings"), siteUrl(c), inviter.id, { name: user.nickname || user.name }));
+  }
   return c.redirect(r === "self" ? "/me/friends" : `/me/friends?added=${inviter.id}`);
 });
 

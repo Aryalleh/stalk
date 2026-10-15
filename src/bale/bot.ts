@@ -16,6 +16,7 @@ import { handleChannelPost, type ChannelPost } from "../shop/telegram/channel";
 import { cardProduct, inlineKeyboard as chatButtons, rememberCard, runShopChat, type ChatReply } from "../shop/commands";
 import type { Shop } from "../shop/db";
 import { befriend, inviterByCode, tellInviter } from "../shop/friends";
+import { attributeReferral } from "../shop/points";
 
 // Webhook for the site's Bale/Telegram bots (registered from /admin/settings → "connect").
 //  - "/start <token>": connect the chat to the site account that opened the bot from /connect.
@@ -144,6 +145,7 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     const me = await c.env.DB.prepare(`SELECT id, name, nickname FROM users WHERE ${col} = ? LIMIT 1`).bind(String(chatId)).first<{ id: number; name: string; nickname: string }>();
     if (me) {
       const r = await befriend(c.env.DB, me.id, inviter.id);
+      if (r === "ok") await attributeReferral(c.env.DB, me.id, inviter.id);
       if (r === "ok") c.executionCtx.waitUntil(tellInviter(c.env.DB, s, siteUrl(c), inviter.id, { name: me.nickname || me.name }));
       const app = openAppMarkup(`${siteUrl(c)}/app?next=${encodeURIComponent("/me/friends")}`, "👫 دوستان من");
       reply(

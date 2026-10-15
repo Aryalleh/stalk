@@ -6,6 +6,7 @@ import { useSite } from "../../render";
 import { Avatar, Errors, FilePicker, InstagramCta, WebShopCta, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import type { FriendRow, Inviter } from "../friends";
+import { POINTS, SHOP_PRODUCTS, type Referred } from "../points";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
 /** Centered dark card for the account flows (login, setup). */
@@ -1362,6 +1363,9 @@ export function FriendsPage(props: {
             {props.links.bale && linkRow("fa-solid fa-comment-dots", "ربات بله", props.links.bale)}
             {props.links.telegram && linkRow("fa-brands fa-telegram", "ربات تلگرام", props.links.telegram)}
           </div>
+          <a href="/me/points" class="flex items-center gap-2 mt-3 p-2.5 rounded-xl bg-brand/10 text-brand text-xs font-bold">
+            <i class="fa-solid fa-star"></i> هر کس با لینک شما عضو شود امتیاز می‌گیرید — امتیازهای من
+          </a>
           <p class="text-[11px] text-muted mt-3 mb-1">این لینک‌ها تاریخ انقضا ندارند و تا وقتی خودتان باطلشان نکنید کار می‌کنند.</p>
           <form method="post" action="/me/friends/renew" class="m-0" onsubmit="return confirm('لینک‌های دعوت فعلی باطل شوند؟ لینک‌هایی که قبلاً فرستاده‌اید دیگر کار نمی‌کنند و لینک تازه ساخته می‌شود. دوستان فعلی‌تان می‌مانند.')">
             <button class="text-[11px] text-red-500 font-bold underline">باطل کردن لینک‌ها و ساختن لینک تازه</button>
@@ -1597,6 +1601,102 @@ export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: R
       </form>
       <script dangerouslySetInnerHTML={{ __html: WEB_ADD_SCRIPT }} />
       <InstagramCta compact />
+    </Layout>
+  );
+}
+
+/** Referral points (points.ts): the invite links, the total and what each invited person earned. */
+export function PointsPage(props: { user: User; links: { web: string; bale: string; telegram: string }; total: number; people: Referred[] }) {
+  const site = useSite();
+  const fa = (n: number) => n.toLocaleString("fa-IR");
+  const message = `بیا تو ${site.site_name} 🎁 لیست آرزوهاتو بساز و کادو بگیر:\n${props.links.web}`;
+  const rules: [string, string, number][] = [
+    ["fa-user-check", "هر کس با لینک شما عضو شود", POINTS.join],
+    ["fa-list-check", "لیست آرزو بسازد و کادو اضافه کند", POINTS.wish],
+    ["fa-store", `فروشگاه بسازد (تأییدشده، با ${fa(SHOP_PRODUCTS)} محصول)`, POINTS.shop],
+  ];
+  const step = (got: number, label: string, pts: number) => (
+    <span class={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${got ? "bg-brand/10 text-brand" : "bg-ink text-muted/70"}`}>
+      {got ? "✓" : "○"} {label} <span dir="ltr">+{fa(pts)}</span>
+    </span>
+  );
+  return (
+    <Layout title="امتیازهای من" user={props.user} nav="wishes" bare wide>
+      <div class="px-4 md:px-10 py-6 md:py-10 max-w-3xl">
+        <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">امتیازهای من</h1>
+        <p class="text-sm text-muted mb-5">دوستانتان را به {site.site_name} دعوت کنید و امتیاز بگیرید.</p>
+
+        <div class="bg-gradient-to-l from-brand to-brand/70 text-white rounded-3xl p-5 mb-6 flex items-center gap-4 shadow-lg shadow-brand/20">
+          <span class="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center text-2xl shrink-0"><i class="fa-solid fa-star"></i></span>
+          <div class="flex-1">
+            <span class="block text-xs opacity-90">جمع امتیازها</span>
+            <b class="block text-3xl font-black" id="points-total">{fa(props.total)}</b>
+          </div>
+          <span class="text-[11px] opacity-90 text-left">{fa(props.people.length)} نفر دعوت شده</span>
+        </div>
+
+        <div class="bg-card rounded-3xl p-4 md:p-5 border border-fg/5 mb-6">
+          <b class="block text-fg mb-3">چطور امتیاز بگیرم؟</b>
+          <div class="space-y-2 mb-4">
+            {rules.map(([icon, label, pts]) => (
+              <div class="flex items-center gap-3 bg-ink rounded-xl p-2.5">
+                <i class={`fa-solid ${icon} text-brand w-5 text-center`}></i>
+                <span class="flex-1 text-xs text-fg">{label}</span>
+                <b class="text-brand text-sm" dir="ltr">+{fa(pts)}</b>
+              </div>
+            ))}
+          </div>
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <button type="button" data-share={props.links.web} class="py-2.5 rounded-xl bg-brand text-white text-xs font-bold shadow-lg shadow-brand/20">
+              <i class="fa-solid fa-share-nodes ml-1"></i> اشتراک لینک دعوت
+            </button>
+            <button type="button" data-copy={message} data-copied="✓ پیام کپی شد" class="py-2.5 rounded-xl bg-ink text-fg text-xs font-bold border border-fg/10">
+              <i class="fa-regular fa-copy ml-1"></i> کپی پیام دعوت
+            </button>
+          </div>
+          <div class="space-y-2">
+            {[["fa-solid fa-globe", "سایت", props.links.web], ["fa-solid fa-comment-dots", "ربات بله", props.links.bale], ["fa-brands fa-telegram", "ربات تلگرام", props.links.telegram]].map(([icon, label, url]) =>
+              url ? (
+                <div class="flex items-center gap-2 bg-ink rounded-xl p-2">
+                  <i class={`${icon} text-muted w-5 text-center`}></i>
+                  <span class="text-[11px] text-muted shrink-0">{label}</span>
+                  <input readonly value={url} onclick="this.select()" class="flex-1 min-w-0 bg-transparent text-[11px] ltr text-fg outline-none" />
+                  <button type="button" data-copy={url} data-copied="✓" class="px-2.5 py-1 rounded-lg bg-card text-[11px] font-bold text-fg border border-fg/10">کپی</button>
+                </div>
+              ) : null,
+            )}
+          </div>
+          <p class="text-[11px] text-muted mt-3">همان لینک دعوت دوستی است؛ هر کس با آن عضو شود هم دوستتان می‌شود و هم برایتان امتیاز می‌آورد.</p>
+        </div>
+
+        <div class="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl p-3 text-xs font-bold mb-6">
+          <i class="fa-solid fa-circle-info ml-1"></i> امتیازها در به‌روزرسانی‌های بعدی قابل نقد شدن هستند.
+        </div>
+
+        <h2 class="text-lg font-black text-fg mb-3">دعوت‌شده‌ها</h2>
+        {props.people.length === 0 ? (
+          <p class="text-sm text-muted bg-card rounded-2xl p-6 text-center border border-fg/5">هنوز کسی با لینک شما عضو نشده؛ لینک را برای دوستانتان بفرستید.</p>
+        ) : (
+          <div class="space-y-2">
+            {props.people.map((p) => (
+              <div class="bg-card rounded-2xl p-3 flex gap-3 items-center border border-fg/5" data-referred={p.id}>
+                <a href={p.username ? `/u/${p.username}` : "#"}>
+                  <Avatar user={p} size="w-11 h-11" />
+                </a>
+                <div class="flex-1 min-w-0">
+                  <b class="block text-sm text-fg truncate">{p.name}</b>
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    {step(p.join, "عضویت", POINTS.join)}
+                    {step(p.wish, "لیست آرزو", POINTS.wish)}
+                    {step(p.shop, "فروشگاه", POINTS.shop)}
+                  </div>
+                </div>
+                <b class="text-brand text-sm shrink-0" dir="ltr">+{fa(p.join + p.wish + p.shop)}</b>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Layout>
   );
 }

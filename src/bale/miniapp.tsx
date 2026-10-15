@@ -7,6 +7,7 @@ import { render } from "../render";
 import { SESSION_COOKIE } from "../session";
 import { randomSlug } from "../shop/db";
 import { cookieOptions, safeNext } from "../shop/routes/helpers";
+import { REF_COOKIE, REF_DAYS } from "../shop/points";
 import { Layout } from "../shop/views/layout";
 import { BOT_KINDS, botLink, botToken, type BotKind } from "./botapi";
 import { MINIAPP_COOKIE, PENDING_TTL_MS, linkChat, userByChat } from "./chatlink";
@@ -211,6 +212,9 @@ miniapp.get("/app/phone", async (c) => {
   const next = safeNext(c.req.query("next"));
   if (c.get("user")) return c.redirect(next);
   const pending = await pendingChat(c);
+  // Came from an invite (/f/<code>): the account made here counts as invited by them (points.ts).
+  const invite = next.match(/^\/f\/([a-z0-9]{10})$/);
+  if (invite) setCookie(c, REF_COOKIE, invite[1], cookieOptions(REF_DAYS * 86400, true));
   if (!pending) return c.redirect(`/login?sms=1&next=${encodeURIComponent(next)}`);
   const s = c.get("settings");
   const botUrl = botLink(s, pending.kind, "phone");
