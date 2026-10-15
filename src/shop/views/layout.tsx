@@ -1,3 +1,4 @@
+import { formatJalali } from "../../../lib/jalali";
 import type { Child } from "hono/jsx";
 import { CSS_URL } from "../../assets";
 import { useSite } from "../../render";
@@ -494,6 +495,57 @@ function Analytics() {
 }
 
 /** Shown on every page while a platform admin is signed in as this user. */
+/**
+ * Gifts waiting for the signed-in user's address (orders.ts): a popup on every page until each is
+ * given or confirmed. A saved address is confirmed with one tap; "change" opens the address page.
+ */
+function AddressAskPopup() {
+  const site = useSite();
+  const asks = site.addressAsks;
+  // (Not over the address page itself.)
+  if (!asks.length || /^\/me\/gifts\/\d+\/address/.test(site.path)) return null;
+  return (
+    <div id="address-ask" class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-3" role="dialog" aria-modal="true" aria-labelledby="address-ask-title">
+      <div class="w-full max-w-md bg-card rounded-3xl shadow-2xl p-5 max-h-[85vh] overflow-y-auto">
+        <div class="text-center mb-4">
+          <div class="text-4xl mb-1">🎁</div>
+          <h2 id="address-ask-title" class="text-lg font-black text-fg">برایت کادو خریده‌اند!</h2>
+          <p class="text-xs text-muted leading-6 mt-1">تا آدرس را تأیید یا ثبت نکنی، فروشگاه ارسال نمی‌کند. آدرس فقط به فروشگاه می‌رسد، نه خریدار.</p>
+        </div>
+        <div class="space-y-3">
+          {asks.map((a) => (
+            <div class="rounded-2xl border border-fg/10 p-3">
+              <b class="block text-sm text-fg mb-1">{a.product_title}</b>
+              {a.ship_address.trim() ? (
+                <>
+                  <p class="text-[11px] text-muted leading-5 mb-2">
+                    📍 {[a.ship_city, a.ship_address].filter(Boolean).join("، ")}
+                    {a.address_due_at && <span class="block">اگر تا <span class="dt">{formatJalali(a.address_due_at)}</span> تأیید نکنی، به همین آدرس فرستاده می‌شود.</span>}
+                  </p>
+                  <div class="flex gap-2">
+                    <form method="post" action={`/me/gifts/${a.id}/address/confirm`} class="flex-1 m-0">
+                      <input type="hidden" name="back" value={site.path} />
+                      <button class="w-full py-2.5 rounded-xl bg-brand text-white text-xs font-bold">✅ همین آدرس درست است</button>
+                    </form>
+                    <a href={`/me/gifts/${a.id}/address`} class="flex-1 py-2.5 rounded-xl bg-ink text-fg text-xs font-bold text-center border border-fg/10">تغییر آدرس</a>
+                  </div>
+                </>
+              ) : (
+                <a href={`/me/gifts/${a.id}/address`} class="block w-full py-2.5 rounded-xl bg-brand text-white text-xs font-bold text-center">
+                  <i class="fa-solid fa-location-dot ml-1"></i> ثبت آدرس فعلی‌ام
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+        <button type="button" onclick="document.getElementById('address-ask').remove()" class="block mx-auto mt-4 text-xs text-muted underline">
+          بعداً
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ActingAsBar() {
   const acting = useSite().actingAs;
   if (!acting) return null;
@@ -568,6 +620,7 @@ export function Layout(props: {
       </head>
       <body class={`min-h-screen ${props.panel ? "theme-panel" : ""} ${props.sidebar || siteNav ? "md:pr-64" : ""} ${showNav ? "" : "pb-10"}`}>
         <ActingAsBar />
+        {!props.panel && <AddressAskPopup />}
         {props.sidebar}
         {siteNav && <SiteNav user={props.user} stats={props.stats} />}
         {props.header ?? (

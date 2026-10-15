@@ -4,7 +4,7 @@ import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { crm } from "./crm/routes";
-import type { Env } from "./env";
+import type { AddressAsk, Env } from "./env";
 import { SESSION_COOKIE, assignUsername, isConnected, needsProfile, sessionUser } from "./session";
 import { activeBots, setBaleApiBase, setTelegramApiBase } from "./bale/botapi";
 import { setInstagramApiBase } from "./shop/crm/instagram";
@@ -84,6 +84,19 @@ app.use(async (c, next) => {
   c.set("user", user);
   c.set("settings", settings);
   c.set("impersonator", user ? await actingAdmin(c) : null); // an admin signed in as this user
+  // Gifts waiting for this user's address (orders.ts): every page asks until it's given or confirmed.
+  c.set("addressAsks", []);
+  if (user && c.req.method === "GET" && (c.req.header("accept") ?? "").includes("text/html")) {
+    const { results } = await c.env.DB.prepare(
+      `SELECT o.id, o.product_title, o.ship_city, o.ship_address, o.address_due_at
+       FROM orders o JOIN wishlists w ON w.id = o.wishlist_id
+       WHERE w.user_id = ? AND w.is_direct = 0 AND o.status = 'paid' AND o.address_asked_at IS NOT NULL AND o.address_at IS NULL
+       ORDER BY o.id LIMIT 5`,
+    )
+      .bind(user.id)
+      .all<AddressAsk>();
+    c.set("addressAsks", results);
+  }
   await next();
 });
 

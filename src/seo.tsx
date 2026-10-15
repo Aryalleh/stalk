@@ -70,7 +70,7 @@ seo.get("/sitemap.xml", async (c) => {
 });
 
 function organization(c: C) {
-  return organizationLd({ ...c.get("settings"), origin: siteOrigin(c), path: "/", signedIn: false, actingAs: null });
+  return organizationLd({ ...c.get("settings"), origin: siteOrigin(c), path: "/", signedIn: false, actingAs: null, addressAsks: [] });
 }
 
 seo.get("/about", (c) => {

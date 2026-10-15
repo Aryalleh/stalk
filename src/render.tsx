@@ -1,7 +1,7 @@
 import { createContext, useContext } from "hono/jsx";
 import type { Child } from "hono/jsx";
 import type { StatusCode } from "hono/utils/http-status";
-import type { C } from "./env";
+import type { AddressAsk, C } from "./env";
 import { DEFAULTS, type Settings } from "./settings";
 
 /** The request's settings plus the site's public origin (for absolute URLs in meta tags). */
@@ -11,9 +11,11 @@ export type Site = Settings & {
   signedIn: boolean;
   /** Set while a platform admin is signed in as this user (shows the "back to admin" bar). */
   actingAs: { admin: string; user: string } | null;
+  /** Gifts waiting for the signed-in user's address: a popup asks on every page (layout.tsx). */
+  addressAsks: AddressAsk[];
 };
 
-const SiteContext = createContext<Site>({ ...DEFAULTS, origin: "", path: "/", signedIn: false, actingAs: null });
+const SiteContext = createContext<Site>({ ...DEFAULTS, origin: "", path: "/", signedIn: false, actingAs: null, addressAsks: [] });
 
 /** Settings for the current request, readable from any component. */
 export const useSite = () => useContext(SiteContext);
@@ -30,6 +32,7 @@ export function render(c: C, node: Child, status: StatusCode = 200) {
     path: new URL(c.req.url).pathname,
     signedIn: !!user,
     actingAs: admin && user ? { admin: admin.name, user: user.name || user.phone } : null,
+    addressAsks: c.get("addressAsks") ?? [],
   };
   return c.html(<SiteContext.Provider value={site}>{node}</SiteContext.Provider>, status as never);
 }

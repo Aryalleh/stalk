@@ -850,6 +850,16 @@ account.get("/me/gifts/:id{[0-9]+}/address", async (c) => {
   return render(c, <GiftAddressPage user={currentUser(c)} order={o} values={values} />);
 });
 
+// The popup's "this address is right": confirm the saved one as it is (orders.ts setOrderAddress).
+account.post("/me/gifts/:id{[0-9]+}/address/confirm", async (c) => {
+  const o = await myGiftToAddress(c);
+  const back = safeNext((await form(c)).back ?? "/me/gifts");
+  if (!o || o.address_at || !o.ship_address.trim()) return c.redirect(back);
+  const deps = { db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) };
+  await setOrderAddress(deps, o.id, { name: o.ship_name, phone: o.ship_phone, city: o.ship_city, address: o.ship_address, postal_code: o.ship_postal_code });
+  return c.redirect(back);
+});
+
 account.post("/me/gifts/:id{[0-9]+}/address", async (c) => {
   const o = await myGiftToAddress(c);
   if (!o) return c.redirect("/me/gifts");

@@ -17,5 +17,13 @@ export type Bindings = {
   PROXY_SECRET?: string;
 };
 
-export type Env = { Bindings: Bindings; Variables: { user: User | null; shop: Shop; settings: Settings; impersonator: User | null } };
+/** A paid gift whose recipient (the signed-in user) still has to give or confirm the address. */
+export interface AddressAsk {
+  id: number;
+  product_title: string;
+  ship_city: string;
+  ship_address: string;
+  address_due_at: string | null;
+}
+export type Env = { Bindings: Bindings; Variables: { user: User | null; shop: Shop; settings: Settings; impersonator: User | null; addressAsks: AddressAsk[] } };
 export type C = Context<Env>;
