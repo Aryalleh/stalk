@@ -19,11 +19,11 @@ import { loadSettings, safirReady, saveSettings } from "../../settings";
 import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import { MINIAPP_COOKIE } from "../../bale/chatlink";
-import { anonCode, anonStart } from "../../bale/anon";
+import { anonCode, anonStart, inbox, webBlock, webReply, webReport } from "../../bale/anon";
 import { addWebWish, parseWebUrl, siteName } from "../web-shop";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, PointsPage, WebAddPage, type WebAdded, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, PointsPage, AnonInboxPage, WebAddPage, type WebAdded, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange, setOrderAddress } from "../orders";
 import { areFriends, befriend, friendCode, friendStart, inviterByCode, listFriends, tellInviter, unfriend } from "../friends";
@@ -828,6 +828,30 @@ account.get("/me/friends", async (c) => {
   const added = Number(c.req.query("added")) || 0;
   const flash = { renewed: "لینک‌های قبلی باطل شدند و لینک تازه ساخته شد؛ دوستان فعلی‌تان سر جایشان هستند.", anon_renewed: "لینک پیام ناشناس عوض شد؛ لینک‌های قبلی دیگر کار نمی‌کنند.", anon_on: "دریافت پیام ناشناس روشن شد.", anon_off: "دریافت پیام ناشناس خاموش شد." }[c.req.query("done") ?? (c.req.query("renewed") === "1" ? "renewed" : "")];
   return render(c, <FriendsPage user={user} links={links} anon={anon} friends={friends} added={friends.find((f) => f.id === added)?.name} flash={flash} />);
+});
+
+// The site's inbox of anonymous conversations (bale/anon.ts): read, answer, block, report.
+account.get("/me/anon", async (c) => {
+  const user = currentUser(c);
+  const threads = await inbox(c.env.DB, user.id);
+  const flash = { sent: "✅ ناشناس فرستاده شد.", blocked: "🚫 بلاک شد؛ دیگر پیامی از او نمی‌گیرید.", unblocked: "رفع بلاک شد.", reported: "گزارش شد؛ مدیران سایت بررسی می‌کنند." }[c.req.query("done") ?? ""];
+  const on = await c.env.DB.prepare("SELECT anon_enabled, username FROM users WHERE id = ?").bind(user.id).first<{ anon_enabled: number; username: string | null }>();
+  return render(c, <AnonInboxPage user={user} threads={threads} flash={flash} error={c.req.query("error")} enabled={!!on?.anon_enabled} open={Number(c.req.query("t")) || 0} />);
+});
+
+account.post("/me/anon/:root{[0-9]+}/:action{reply|block|unblock|report}", async (c) => {
+  const user = currentUser(c);
+  const root = intParam(c, "root");
+  const action = c.req.param("action");
+  const back = (q: string) => c.redirect(`/me/anon?${q}&t=${root}#t${root}`);
+  if (action === "reply") {
+    const text = ((await form(c)).text ?? "").trim();
+    if (!text) return back("error=" + encodeURIComponent("متن پیام را بنویسید."));
+    const r = await webReply(c.env.DB, c.get("settings"), user.id, root, text);
+    return r.ok ? back("done=sent") : back("error=" + encodeURIComponent(r.error));
+  }
+  if (action === "report") return (await webReport(c.env.DB, c.get("settings"), user.id, root, siteUrl(c))) ? back("done=reported") : back("error=" + encodeURIComponent("پیدا نشد."));
+  return (await webBlock(c.env.DB, user.id, root, action === "block")) ? back(`done=${action}ed`) : back("error=" + encodeURIComponent("پیدا نشد."));
 });
 
 // Anonymous messages through the bots (bale/anon.ts): on / off, and a new link that stops the old ones.

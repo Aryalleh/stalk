@@ -217,6 +217,7 @@ function SiteMenu(props: { user: User | null; stats?: { wishes: number; gifts: n
             {item("/me/gifts", "fa-gift", "کادوهای من")}
             {item("/me/friends", "fa-user-group", "دوستان")}
             {item("/me/points", "fa-star", "امتیازهای من")}
+            {item("/me/anon", "fa-user-secret", "پیام‌های ناشناس")}
             {item("/me/orders", "fa-bag-shopping", "سفارشات من", path.startsWith("/me/orders"))}
             {u.shop_id ? item("/panel", "fa-store", "فروشگاه من") : null}
             {u.is_admin ? item("/admin", "fa-shield-halved", "مدیریت سایت") : null}

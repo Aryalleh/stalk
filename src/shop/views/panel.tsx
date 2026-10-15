@@ -1409,6 +1409,124 @@ export function AdminWebShopPage(props: { user: User; settings: Settings; shop: 
   );
 }
 
+export interface AdminAnonParty {
+  user_id: number | null;
+  name: string | null;
+  phone: string | null;
+  username: string | null;
+  kind: string;
+  chat: string;
+}
+
+export interface AdminAnonThread {
+  root: number;
+  from: AdminAnonParty;
+  to: AdminAnonParty;
+  count: number;
+  last: number;
+  body: string;
+  reported?: boolean;
+}
+
+export interface AdminAnonMsg {
+  id: number;
+  from: AdminAnonParty;
+  to: AdminAnonParty;
+  body: string;
+  created_at: number;
+  landed: string; // "bale, telegram"
+  reply_to: number | null;
+}
+
+const KIND_LABEL: Record<string, string> = { bale: "بله", telegram: "تلگرام", web: "سایت" };
+const anonWhen = (ms: number) => formatJalali(new Date(ms).toISOString());
+
+function AnonWho(props: { p: AdminAnonParty }) {
+  const p = props.p;
+  return p.user_id ? (
+    <span>
+      <a href={`/admin/users?q=${encodeURIComponent(p.phone ?? "")}`}>{p.name}</a>
+      <div class="small muted dt">{p.phone}{p.username ? ` · @${p.username}` : ""}</div>
+    </span>
+  ) : (
+    <span>
+      بدون حساب<div class="small muted dt">{KIND_LABEL[p.kind] ?? p.kind} {p.chat}</div>
+    </span>
+  );
+}
+
+/** /admin/anon: every anonymous conversation, with who really wrote what (bale/anon.ts). */
+export function AdminAnonPage(props: { user: User; q: string; threads: AdminAnonThread[] }) {
+  return (
+    <AdminShell title="پیام‌های ناشناس" user={props.user} on="/admin/anon">
+      <h1>پیام‌های ناشناس</h1>
+      <p class="muted small" style="margin-top:-6px;line-height:1.9">
+        گفتگوهای ناشناس بین کاربران (بله، تلگرام و سایت). برای کاربران ناشناس‌اند، اما اینجا فرستنده‌ی واقعی هر پیام دیده می‌شود؛ فقط برای بررسی گزارش‌ها و تخلف‌ها.
+      </p>
+      <form method="get" action="/admin/anon" class="row mb-3">
+        <input name="q" value={props.q} placeholder="جستجو: نام، موبایل، نام کاربری یا متن پیام" class="flex-1" />
+        <button>جستجو</button>
+      </form>
+      <div class="card wrap">
+        {props.threads.length === 0 ? (
+          <p class="muted">گفتگویی پیدا نشد.</p>
+        ) : (
+          <table>
+            <thead><tr><th>#</th><th>شروع‌کننده (ناشناس)</th><th>گیرنده</th><th>پیام‌ها</th><th>آخرین پیام</th><th></th></tr></thead>
+            <tbody>
+              {props.threads.map((t) => (
+                <tr data-admin-thread={t.root}>
+                  <td class="dt">{t.root}</td>
+                  <td><AnonWho p={t.from} /></td>
+                  <td><AnonWho p={t.to} /></td>
+                  <td>{t.count.toLocaleString("fa-IR")}</td>
+                  <td class="muted small" style="max-width:260px">
+                    <span class="dt">{anonWhen(t.last)}</span>
+                    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{t.body || "(غیرمتنی)"}</div>
+                  </td>
+                  <td><a href={`/admin/anon/${t.root}`} class="small">مشاهده گفتگو</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AdminShell>
+  );
+}
+
+export function AdminAnonThreadPage(props: { user: User; root: number; messages: AdminAnonMsg[] }) {
+  const starter = props.messages[0]?.from;
+  const same = (a: AdminAnonParty, b?: AdminAnonParty) => !!b && (a.user_id ? a.user_id === b.user_id : a.kind === b.kind && a.chat === b.chat);
+  return (
+    <AdminShell title={`گفتگوی ناشناس #${props.root}`} user={props.user} on="/admin/anon">
+      <p class="small"><a href="/admin/anon">→ همه گفتگوها</a></p>
+      <h1>گفتگوی ناشناس #{props.root}</h1>
+      <div class="card">
+        <div class="space-y-2" data-chat>
+          {props.messages.map((m) => {
+            const left = same(m.from, starter);
+            return (
+              <div class={`flex ${left ? "justify-start" : "justify-end"}`}>
+                <div class={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${left ? "bg-sky-50 border border-sky-100" : "bg-slate-50 border border-slate-200"}`} data-admin-msg={m.id}>
+                  <div class="small muted" style="margin-bottom:4px">
+                    <b><AnonWho p={m.from} /></b>
+                  </div>
+                  <div style="white-space:pre-wrap;word-break:break-word">{m.body || <i class="muted">(پیام غیرمتنی)</i>}</div>
+                  <div class="small muted dt" style="margin-top:4px">
+                    {anonWhen(m.created_at)} · از {KIND_LABEL[m.from.kind] ?? m.from.kind}
+                    {m.landed ? ` · رسید در ${m.landed.split(",").map((k) => KIND_LABEL[k] ?? k).join("، ")}` : " · فقط در سایت"}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </AdminShell>
+  );
+}
+
 /** Admin area: light theme (like the shop panel) with its own header and tabs. */
 function AdminShell(props: { title: string; user: User; on: string; children?: Child }) {
   const tabs: [string, string, string][] = [
@@ -1418,6 +1536,7 @@ function AdminShell(props: { title: string; user: User; on: string; children?: C
     ["/admin/pages", "fa-file-lines", "صفحه‌ها و فوتر"],
     ["/admin/instagram", "fa-camera-retro", "صفحه‌های اینستاگرام"],
     ["/admin/web-shop", "fa-cart-shopping", "خرید از سایت‌ها"],
+    ["/admin/anon", "fa-user-secret", "پیام‌های ناشناس"],
     ["/admin/settings", "fa-gear", "تنظیمات سایت"],
     ["/crm", "fa-address-book", "CRM"],
   ];

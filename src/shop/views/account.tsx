@@ -7,6 +7,7 @@ import { Avatar, Errors, FilePicker, InstagramCta, WebShopCta, Layout, MenuButto
 import { variantLabel } from "../variants";
 import type { FriendRow, Inviter } from "../friends";
 import { POINTS, SHOP_PRODUCTS, type Referred } from "../points";
+import type { Thread } from "../../bale/anon";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
 
 /** Centered dark card for the account flows (login, setup). */
@@ -1401,6 +1402,9 @@ export function FriendsPage(props: {
                 >
                   <i class="fa-regular fa-copy ml-1"></i> کپی متن برای استوری / بیو
                 </button>
+                <a href="/me/anon" class="flex items-center justify-center gap-2 mt-2 py-2.5 rounded-xl bg-violet-500/10 text-violet-500 text-xs font-bold">
+                  <i class="fa-solid fa-inbox"></i> پیام‌های ناشناس من (سایت)
+                </a>
                 <form method="post" action="/me/anon/renew" class="m-0 mt-3" onsubmit="return confirm('لینک پیام ناشناس عوض شود؟ لینک‌های قبلی دیگر کار نمی‌کنند.')">
                   <button class="text-[11px] text-red-500 font-bold underline">باطل کردن لینک و ساختن لینک تازه</button>
                 </form>
@@ -1697,6 +1701,93 @@ export function PointsPage(props: { user: User; links: { web: string; bale: stri
           </div>
         )}
       </div>
+    </Layout>
+  );
+}
+
+/** /me/anon: anonymous conversations on the site, the same ones the bots carry (bale/anon.ts). */
+export function AnonInboxPage(props: { user: User; threads: Thread[]; enabled: boolean; open: number; flash?: string; error?: string }) {
+  const when = (ms: number) => formatJalali(new Date(ms).toISOString()).slice(0, 16);
+  return (
+    <Layout title="پیام‌های ناشناس" user={props.user} nav="wishes" bare wide>
+      <div class="px-4 md:px-10 py-6 md:py-10 max-w-3xl">
+        <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">پیام‌های ناشناس</h1>
+        <p class="text-sm text-muted mb-5">
+          پیام‌هایی که ناشناس گرفته‌اید یا فرستاده‌اید؛ همین‌ها در بله و تلگرام هم می‌رسند و از هر کدام جواب بدهید، به همه‌جای طرف مقابل می‌رسد.
+        </p>
+        {!props.enabled && (
+          <div class="bg-amber-500/10 text-amber-600 rounded-2xl p-3 text-xs font-bold mb-4">
+            دریافت پیام ناشناس برایتان خاموش است. <a href="/me/friends#anon" class="underline">روشن کردن و لینک‌ها</a>
+          </div>
+        )}
+        {props.flash && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">{props.flash}</div>}
+        {props.error && <div class="bg-red-500/10 text-red-500 rounded-2xl p-3 text-sm font-bold mb-4">{props.error}</div>}
+        {props.threads.length === 0 ? (
+          <p class="text-sm text-muted bg-card rounded-2xl p-6 text-center border border-fg/5">
+            هنوز پیام ناشناسی ندارید. <a href="/me/friends#anon" class="text-brand font-bold">لینک پیام ناشناستان</a> را در استوری یا بیو بگذارید.
+          </p>
+        ) : (
+          <div class="space-y-3">
+            {props.threads.map((t) => {
+              const last = t.messages[t.messages.length - 1];
+              return (
+                <details class="bg-card rounded-2xl border border-fg/5 overflow-hidden" id={`t${t.root}`} data-thread={t.root} open={props.open === t.root || props.threads.length === 1}>
+                  <summary class="flex items-center gap-3 p-3 cursor-pointer list-none">
+                    <span class={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${t.started ? "bg-brand/10 text-brand" : "bg-violet-500/10 text-violet-500"}`}>
+                      <i class={`fa-solid ${t.started ? "fa-paper-plane" : "fa-user-secret"}`}></i>
+                    </span>
+                    <div class="flex-1 min-w-0">
+                      <b class="block text-sm text-fg truncate">{t.started ? `به ${t.with}` : "ناشناس"}</b>
+                      <span class="block text-[11px] text-muted truncate">{(last.mine ? "شما: " : "") + (last.body || "(پیام غیرمتنی)")}</span>
+                    </div>
+                    <span class="text-[10px] text-muted shrink-0 ltr">{when(t.last)}</span>
+                  </summary>
+                  <div class="px-3 pb-3">
+                    <div class="bg-ink rounded-2xl p-3 space-y-2 max-h-96 overflow-y-auto" data-chat>
+                      {t.messages.map((m) => (
+                        <div class={`flex ${m.mine ? "justify-start" : "justify-end"}`}>
+                          <div class={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${m.mine ? "bg-brand text-white" : "bg-card text-fg border border-fg/10"}`}>
+                            {m.body || <i class="opacity-70">(پیام غیرمتنی؛ در بات ببینید)</i>}
+                            <span class="block text-[9px] opacity-70 mt-1 ltr text-left">{when(m.created_at)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {t.blocked ? (
+                      <form method="post" action={`/me/anon/${t.root}/unblock`} class="m-0 mt-2">
+                        <button class="w-full py-2 rounded-xl bg-ink text-muted text-xs font-bold border border-fg/10">🚫 بلاک شده — رفع بلاک</button>
+                      </form>
+                    ) : (
+                      <form method="post" action={`/me/anon/${t.root}/reply`} class="m-0 mt-2 flex gap-2">
+                        <input name="text" required maxlength={1000} placeholder={t.started ? "پیام دیگر…" : "پاسخ ناشناس…"} class="flex-1 min-w-0 bg-ink rounded-xl px-3 text-sm text-fg outline-none border border-fg/10" />
+                        <button class="px-4 py-2 rounded-xl bg-violet-500 text-white text-xs font-bold shrink-0"><i class="fa-solid fa-paper-plane"></i> ارسال</button>
+                      </form>
+                    )}
+                    {!t.started && (
+                      <div class="flex gap-3 mt-2 text-[11px]">
+                        {!t.blocked && (
+                          <form method="post" action={`/me/anon/${t.root}/block`} class="m-0" onsubmit="return confirm('فرستنده بلاک شود؟')">
+                            <button class="text-red-500 font-bold">🚫 بلاک</button>
+                          </form>
+                        )}
+                        <form method="post" action={`/me/anon/${t.root}/report`} class="m-0" onsubmit="return confirm('این گفتگو به مدیران سایت گزارش شود؟')">
+                          <button class="text-amber-600 font-bold">⚠️ گزارش</button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "document.querySelectorAll('details[data-thread]').forEach(function (d) { var f = function () { var c = d.querySelector('[data-chat]'); if (c) c.scrollTop = c.scrollHeight; }; f(); d.addEventListener('toggle', f); });",
+        }}
+      />
     </Layout>
   );
 }

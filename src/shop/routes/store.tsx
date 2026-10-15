@@ -27,6 +27,8 @@ import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGif
 import { sendReceiptToShop } from "../orders";
 import { inviteText } from "../instagram-shops";
 import { areFriends } from "../friends";
+import { anonCode, anonStart, deliver, userParty } from "../../bale/anon";
+import { activeBots, botLink } from "../../bale/botapi";
 import { isStale, livePrice } from "../web-shop";
 import { CheckoutPage, HomePage, type ProductShopInfo, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
@@ -293,8 +295,40 @@ store.get("/u/:username", async (c) => {
       isMe={isMe}
       givenTo={given ? given.n : null}
       isFriend={!!viewer && !isMe && (await areFriends(db, viewer.id, person.id))}
+      anon={await profileAnon(c, person.id, isMe)}
+      sent={c.req.query("anon") === "sent"}
+      anonError={c.req.query("anon_error")}
     />,
   );
+});
+
+/** The profile's anonymous-message box (anon.ts): the bots' links, and writing from the site. */
+async function profileAnon(c: C, userId: number, isMe: boolean) {
+  if (isMe) return null;
+  const s = c.get("settings");
+  const t = await c.env.DB.prepare("SELECT anon_enabled, bale_chat_id <> '' OR telegram_chat_id <> '' AS reachable FROM users WHERE id = ?").bind(userId).first<{ anon_enabled: number; reachable: number }>();
+  if (!t?.anon_enabled || !t.reachable) return null;
+  const code = await anonCode(c.env.DB, userId);
+  const bots = activeBots(s);
+  return {
+    bale: bots.includes("bale") ? botLink(s, "bale", anonStart(code)) : "",
+    telegram: bots.includes("telegram") ? botLink(s, "telegram", anonStart(code)) : "",
+  };
+}
+
+// An anonymous message from the profile, written on the site (signed in, so answers can come back).
+store.post("/u/:username/anon", async (c) => {
+  const username = c.req.param("username").toLowerCase();
+  const viewer = c.get("user");
+  if (!viewer) return c.redirect(`/login?next=${encodeURIComponent(`/u/${username}#anon`)}`);
+  const person = await c.env.DB.prepare("SELECT id, anon_enabled FROM users WHERE username = ?").bind(username).first<{ id: number; anon_enabled: number }>();
+  if (!person) return c.notFound();
+  const back = (q: string) => c.redirect(`/u/${username}?${q}#anon`);
+  const text = ((await form(c)).text ?? "").trim();
+  if (person.id === viewer.id || !person.anon_enabled) return back("anon_error=" + encodeURIComponent("این کاربر پیام ناشناس نمی‌گیرد."));
+  if (!text) return back("anon_error=" + encodeURIComponent("متن پیام را بنویسید."));
+  const r = await deliver(c.env.DB, c.get("settings"), userParty(viewer.id), { text }, userParty(person.id), null);
+  return r.ok ? back("anon=sent") : back("anon_error=" + encodeURIComponent(r.error));
 });
 
 // ---------- gift checkout ----------

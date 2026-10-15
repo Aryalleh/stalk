@@ -14,7 +14,7 @@ import { SafirError, sendSafirOtp, sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, releaseDueAddresses, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, AdminWebShopPage, type WebShopRow, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, AdminWebShopPage, AdminAnonPage, AdminAnonThreadPage, type AdminAnonParty, type AdminAnonThread, type AdminAnonMsg, type WebShopRow, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl, startSession } from "./helpers";
 import { fetchWebItem, parseWebUrl, refreshWebProduct, repriceWebShop, retailPrice, siteName, webShop } from "../web-shop";
 import { startImpersonation } from "../../impersonate";
@@ -1067,6 +1067,52 @@ admin.post("/admin/instagram/:id{[0-9]+}/handover", async (c) => {
 });
 
 // ---------- "buy from other sites" (web-shop.ts): fees, the card buyers pay to, the items ----------
+
+// ---------- anonymous conversations: who really wrote what (bale/anon.ts) ----------
+
+const ANON_COLS = `m.id, m.root_id, m.body, m.created_at, m.reply_to,
+  m.from_user_id, fu.name AS f_name, fu.phone AS f_phone, fu.username AS f_username, m.from_kind, m.from_chat,
+  m.recipient_id, ru.name AS r_name, ru.phone AS r_phone, ru.username AS r_username, m.to_kind, m.to_chat`;
+const ANON_JOIN = "FROM anon_messages m LEFT JOIN users fu ON fu.id = m.from_user_id LEFT JOIN users ru ON ru.id = m.recipient_id";
+type AnonDbRow = {
+  id: number; root_id: number; body: string; created_at: number; reply_to: number | null;
+  from_user_id: number | null; f_name: string | null; f_phone: string | null; f_username: string | null; from_kind: string; from_chat: string;
+  recipient_id: number | null; r_name: string | null; r_phone: string | null; r_username: string | null; to_kind: string; to_chat: string;
+};
+const anonFrom = (r: AnonDbRow): AdminAnonParty => ({ user_id: r.from_user_id, name: r.f_name, phone: r.f_phone, username: r.f_username, kind: r.from_kind, chat: r.from_chat });
+const anonTo = (r: AnonDbRow): AdminAnonParty => ({ user_id: r.recipient_id, name: r.r_name, phone: r.r_phone, username: r.r_username, kind: r.to_kind, chat: r.to_chat });
+
+admin.get("/admin/anon", async (c) => {
+  const q = (c.req.query("q") ?? "").trim();
+  const like = `%${q}%`;
+  const filter = q
+    ? `AND EXISTS (SELECT 1 FROM anon_messages x LEFT JOIN users u ON u.id = x.from_user_id OR u.id = x.recipient_id
+         WHERE x.root_id = m.id AND (x.body LIKE ?1 OR u.phone LIKE ?1 OR u.username LIKE ?1 OR u.name LIKE ?1 OR x.from_chat = ?2 OR x.to_chat = ?2))`
+    : "";
+  const { results } = await c.env.DB.prepare(
+    `SELECT ${ANON_COLS}, (SELECT COUNT(*) FROM anon_messages x WHERE x.root_id = m.id) AS n,
+            (SELECT MAX(created_at) FROM anon_messages x WHERE x.root_id = m.id) AS last,
+            (SELECT body FROM anon_messages x WHERE x.root_id = m.id ORDER BY x.id DESC LIMIT 1) AS last_body
+     ${ANON_JOIN} WHERE m.root_id = m.id ${filter} ORDER BY last DESC LIMIT 200`,
+  )
+    .bind(...(q ? [like, q] : []))
+    .all<AnonDbRow & { n: number; last: number; last_body: string }>();
+  const threads: AdminAnonThread[] = results.map((r) => ({ root: r.id, from: anonFrom(r), to: anonTo(r), count: r.n, last: r.last, body: r.last_body }));
+  return render(c, <AdminAnonPage user={currentUser(c)} q={q} threads={threads} />);
+});
+
+admin.get("/admin/anon/:root{[0-9]+}", async (c) => {
+  const root = intParam(c, "root");
+  const { results } = await c.env.DB.prepare(
+    `SELECT ${ANON_COLS}, (SELECT GROUP_CONCAT(DISTINCT l.kind) FROM anon_landings l WHERE l.message_id = m.id) AS landed
+     ${ANON_JOIN} WHERE m.root_id = ? ORDER BY m.id`,
+  )
+    .bind(root)
+    .all<AnonDbRow & { landed: string | null }>();
+  if (!results.length) return c.notFound();
+  const messages: AdminAnonMsg[] = results.map((r) => ({ id: r.id, from: anonFrom(r), to: anonTo(r), body: r.body, created_at: r.created_at, landed: r.landed ?? "", reply_to: r.reply_to }));
+  return render(c, <AdminAnonThreadPage user={currentUser(c)} root={root} messages={messages} />);
+});
 
 admin.get("/admin/web-shop", async (c) => {
   const s = c.get("settings");

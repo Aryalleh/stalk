@@ -254,7 +254,7 @@ async function handleCallback(c: C, kind: BotKind, q: NonNullable<Update["callba
   const chatId = String(q.message?.chat?.id ?? "");
   const answer = (text: string) => answerCallback(s, kind, q.id, text).catch((e) => console.error(e));
   if (q.data?.startsWith("anon:") && chatId) {
-    await handleAnonCallback({ db: c.env.DB, s, kind, chatId }, q.data, answer);
+    await handleAnonCallback({ db: c.env.DB, s, kind, chatId }, q.data, answer, siteUrl(c));
     return;
   }
   // A shop chat button.

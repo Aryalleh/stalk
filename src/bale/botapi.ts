@@ -145,7 +145,7 @@ export interface Chats {
   telegram_chat_id: string;
 }
 
-const targets = (s: Settings, to: Chats): [BotKind, string][] =>
+export const chatTargets = (s: Settings, to: Chats): [BotKind, string][] =>
   ([
     ["bale", to.bale_chat_id],
     ["telegram", to.telegram_chat_id],
@@ -161,7 +161,7 @@ function summarize(results: PromiseSettledResult<unknown>[], t: [BotKind, string
 
 /** Send to every chat the person connected. Returns an error summary ("" if all succeeded). */
 export async function sendToChats(s: Settings, to: Chats, text: string, markup?: (kind: BotKind) => object | undefined) {
-  const t = targets(s, to);
+  const t = chatTargets(s, to);
   return summarize(await Promise.allSettled(t.map(([k, id]) => sendBotMessage(s, k, id, text, markup?.(k)))), t);
 }
 
@@ -172,7 +172,7 @@ export async function sendPhotoToChats(
   caption: string,
   markup?: (kind: BotKind) => object | undefined,
 ) {
-  const t = targets(s, to);
+  const t = chatTargets(s, to);
   return summarize(await Promise.allSettled(t.map(([k, id]) => sendBotPhoto(s, k, id, photo, caption, markup?.(k)))), t);
 }
 

@@ -50,6 +50,9 @@ export function PublicProfilePage(props: {
   isMe: boolean;
   givenTo?: number | null;
   isFriend?: boolean;
+  anon?: { bale: string; telegram: string } | null; // takes anonymous messages (not on one's own profile)
+  sent?: boolean;
+  anonError?: string;
 }) {
   const site = useSite();
   const p = props.person;
@@ -108,12 +111,51 @@ export function PublicProfilePage(props: {
             </div>
           )}
         </div>
+        {props.anon && (
+          <a href="#anon" class="inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-2xl bg-violet-500/10 text-violet-500 text-xs font-bold">
+            <i class="fa-solid fa-user-secret"></i> پیام ناشناس
+          </a>
+        )}
         {props.isMe && (
           <p class="text-xs text-muted mt-5">
             این پروفایل عمومی شماست. <a href="/me" class="text-brand">تنظیم نمایش کادوها و تولد</a>
           </p>
         )}
       </ProfileHero>
+
+      {props.anon && (
+        <section class="px-4 mb-8" id="anon">
+          <div class="bg-card rounded-3xl p-4 md:p-5 border border-fg/5">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="w-11 h-11 rounded-2xl bg-violet-500/10 text-violet-500 flex items-center justify-center text-xl shrink-0"><i class="fa-solid fa-user-secret"></i></span>
+              <div>
+                <b class="block text-fg">پیام ناشناس به {p.name}</b>
+                <span class="block text-[11px] text-muted">بدون نام تو به دستش می‌رسد؛ جوابش هم ناشناس در بله، تلگرام و سایت به تو می‌رسد.</span>
+              </div>
+            </div>
+            {props.sent && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-3">✅ پیامت ناشناس فرستاده شد. جواب‌ها در <a href="/me/anon" class="underline">پیام‌های ناشناس</a> و بات‌ها می‌رسند.</div>}
+            {props.anonError && <div class="bg-red-500/10 text-red-500 rounded-2xl p-3 text-sm font-bold mb-3">{props.anonError}</div>}
+            {props.viewer ? (
+              <form method="post" action={`/u/${p.username}/anon`} class="m-0">
+                <textarea name="text" required maxlength={1000} rows={3} placeholder="پیامت را بنویس…" class="w-full bg-ink rounded-2xl p-3 text-sm text-fg outline-none border border-fg/10"></textarea>
+                <button class="w-full mt-2 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-bold"><i class="fa-solid fa-paper-plane ml-1"></i> ارسال ناشناس</button>
+              </form>
+            ) : (
+              <a href={`/login?next=${encodeURIComponent(`/u/${p.username}#anon`)}`} class="block text-center py-2.5 rounded-xl bg-violet-500 text-white text-sm font-bold">ورود و نوشتن از سایت</a>
+            )}
+            {(props.anon.bale || props.anon.telegram) && (
+              <div class="grid grid-cols-2 gap-2 mt-2">
+                {props.anon.bale && (
+                  <a href={props.anon.bale} class="py-2.5 rounded-xl bg-ink text-fg text-xs font-bold text-center border border-fg/10"><i class="fa-solid fa-comment-dots ml-1"></i> از بله</a>
+                )}
+                {props.anon.telegram && (
+                  <a href={props.anon.telegram} class="py-2.5 rounded-xl bg-ink text-fg text-xs font-bold text-center border border-fg/10"><i class="fa-brands fa-telegram ml-1"></i> از تلگرام</a>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section class="px-4 mb-10">
         <h2 class="text-lg font-bold mb-4 px-2">لیست‌های آرزو</h2>
