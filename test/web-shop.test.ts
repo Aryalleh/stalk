@@ -129,3 +129,22 @@ describe("Digikala, an in-stock phone (real values, as Googlebot gets the page)"
     expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-17580036/")).toMatchObject({ price: 87199000, available: true, method: "JSON-LD" });
   });
 });
+
+describe("name and photo as Digikala's page shows them", () => {
+  it("from <h1 data-testid=pdp-title> and the product <img>", () => {
+    const html =
+      `<html><head><title>خرید و قیمت کتاب کهکشان نیستی | دیجی‌کالا</title></head><body>` +
+      `<div class="relative mb-2"><h1 class="text-h4 text-neutral-900" data-clamped="false" data-testid="pdp-title">کتاب کهکشان نیستی اثرمحمد هادی اصفهانی انتشارات نشر فیض فرزان </h1></div>` +
+      `<img class="w-full rounded-large" alt="خرید و قیمت کتاب کهکشان نیستی" src="https://dkstatics-public.digikala.com/digikala-products/7e4431a4d290f7fe1d06b0afb6249311b9b0edf5_1618380044.jpg?x-oss-process=image/resize,m_lfit,h_800,w_800/quality,q_90" style="object-fit: contain;">` +
+      `<div data-theme-animation="price-container">۱۸۵,۰۰۰</div></body></html>`;
+    expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-5/")).toMatchObject({
+      title: "کتاب کهکشان نیستی اثرمحمد هادی اصفهانی انتشارات نشر فیض فرزان",
+      image: "https://dkstatics-public.digikala.com/digikala-products/7e4431a4d290f7fe1d06b0afb6249311b9b0edf5_1618380044.jpg?x-oss-process=image/resize,m_lfit,h_800,w_800/quality,q_90",
+      price: 185000,
+    });
+  });
+  it("a page title without the shop's words", () => {
+    const html = `<title>خرید و قیمت ماگ سفالی | دیجی‌کالا</title><meta property="product:price:amount" content="2000000"><meta property="product:price:currency" content="IRR">`;
+    expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-6/")?.title).toBe("ماگ سفالی");
+  });
+});

@@ -214,6 +214,22 @@ function shownPrice(html: string) {
   return digits ? sane(Number(digits)) : null;
 }
 
+const h1Text = (m: RegExpMatchArray | null) => (m ? decode(m[1].replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim() : "");
+/** The product's name as Digikala's page shows it: <h1 data-testid="pdp-title">. */
+const shownTitle = (html: string) => h1Text(html.match(/<h1[^>]*data-testid=["']pdp-title["'][^>]*>([\s\S]{1,600}?)<\/h1>/i));
+/** Any page's first <h1> (after og:title: on some shops it's the shop's own name). */
+const firstH1 = (html: string) => h1Text(html.match(/<h1[^>]*>([\s\S]{1,600}?)<\/h1>/i));
+
+/** The product's photo on the page: Digikala's product image (dkstatics…/digikala-products/…). */
+function shownImage(html: string) {
+  const m = html.match(/<img[^>]+src=["'](https:\/\/dkstatics-public\.digikala\.com\/digikala-products\/[^"']+)["']/i);
+  return m ? decode(m[1]) : "";
+}
+
+/** "خرید و قیمت X | دیجی‌کالا" → "X". */
+const cleanTitle = (t: string) =>
+  t.replace(/^\s*(خرید\s+(?:و\s+)?(?:آنلاین\s+)?(?:قیمت\s+)?|قیمت\s+و\s+خرید\s+)/, "").replace(/\s*[|｜\-–]\s*[^|｜\-–]*(دیجی[‌\s]?کالا|digikala)[^|｜]*$/i, "").trim();
+
 /** schema.org microdata: <… itemprop="price" content="…"> and itemprop="priceCurrency". */
 function microdataPrice(html: string) {
   const attr = (prop: string) =>
@@ -252,14 +268,19 @@ export function parseProductHtml(html: string, url: string): WebItem | null {
   tryPrice(microdataPrice(html), "microdata");
   tryPrice(next?.price ?? null, "__NEXT_DATA__");
   const title =
-    String(ld?.name ?? "").trim() || meta(html, "og:title") || next?.title || decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? "").trim();
+    String(ld?.name ?? "").trim() ||
+    shownTitle(html) ||
+    cleanTitle(meta(html, "og:title")) ||
+    next?.title ||
+    firstH1(html) ||
+    cleanTitle(decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? ""));
   if (!title) return null;
   const availability = String(offer?.availability ?? meta(html, "product:availability") ?? "");
   // An offer priced 0 means nothing to sell right now (Digikala's out-of-stock products).
   const zeroOffer = offer !== undefined && Number(String(pick(offer, ["price", "lowPrice"]) ?? "").replace(/[^\d.]/g, "")) === 0 && price === null;
   return {
     title: title.slice(0, 200),
-    image: imageOf(ld?.image) || meta(html, "og:image") || next?.image || "",
+    image: imageOf(ld?.image) || meta(html, "og:image") || shownImage(html) || next?.image || "",
     price,
     available: !/OutOfStock|SoldOut|out of stock/i.test(availability) && !zeroOffer && (next?.available ?? true),
     site: siteName(url),
