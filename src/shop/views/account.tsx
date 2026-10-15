@@ -1506,7 +1506,7 @@ export interface WebAdded {
 }
 
 /** /me/link: a product link from Digikala or any other shop → a wish the site's team buys and sends. */
-export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: Record<string, string>; postFee: number; added?: WebAdded; errors?: string[] }) {
+export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: Record<string, string>; postFee: number; added?: WebAdded; errors?: string[]; askTitle?: boolean }) {
   const v = props.values;
   const a = props.added;
   return (
@@ -1539,6 +1539,13 @@ export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: R
       <form method="post" action="/me/link" class="card">
         <label>لینک محصول</label>
         <input name="url" value={v.url ?? ""} class="ltr" inputmode="url" placeholder="https://www.digikala.com/product/dkp-…" required />
+        {(props.askTitle || v.title) && (
+          <>
+            <label>نام محصول</label>
+            <input name="title" value={v.title ?? ""} maxlength={120} required placeholder="مثلاً: هدفون بی‌سیم سونی مدل…" />
+            <p class="small muted" style="margin-top:4px">قیمت را تیم ما از همین لینک می‌خواند و ثبت می‌کند؛ تا آن موقع «قیمت به‌زودی» نشان داده می‌شود.</p>
+          </>
+        )}
         <label>به کدام لیست؟</label>
         {props.wishlists.length ? (
           <select name="wishlist_id">

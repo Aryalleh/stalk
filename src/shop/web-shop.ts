@@ -345,18 +345,22 @@ export async function refreshWebProduct(d: Deps, productId: number) {
 export const STALE_MS = 6 * 3600_000;
 export const isStale = (checkedAt: string | null) => !checkedAt || Date.now() - new Date(checkedAt).getTime() > STALE_MS;
 
-export type WebWishResult = { ok: true; productId: number; title: string; priced: boolean; site: string } | { ok: false; error: string };
+export type WebWishResult = { ok: true; productId: number; title: string; priced: boolean; site: string } | { ok: false; error: string; askTitle?: boolean };
 
 /** Put a product from another site on a wishlist (the same link is the same product for everyone). */
-export async function addWebWish(d: Deps, user: { id: number }, url: string, wishlistId: number, note = ""): Promise<WebWishResult> {
+export async function addWebWish(d: Deps, user: { id: number }, url: string, wishlistId: number, note = "", typedTitle = ""): Promise<WebWishResult> {
   const db = d.db;
   const shop = await webShop(db, d.settings);
   let product = await db.prepare("SELECT id, title, awaiting_price, source_checked_at FROM products WHERE shop_id = ? AND source_url = ? AND deleted_at IS NULL").bind(shop.id, url).first<{ id: number; title: string; awaiting_price: number; source_checked_at: string | null }>();
   if (product) {
     if (isStale(product.source_checked_at)) await refreshWebProduct(d, product.id);
   } else {
-    const item = await fetchWebItem(url);
-    if (!item) return { ok: false, error: "صفحه‌ی این محصول خوانده نشد؛ لینک مستقیم صفحه‌ی خود محصول را بفرستید." };
+    // Some shops can't be read from here (Digikala answers only its own visitors): with the name the
+    // wisher types, the item waits for the admins to price it from the link.
+    const item =
+      (await fetchWebItem(url)) ??
+      (typedTitle.trim() ? { title: typedTitle.trim().slice(0, 120), image: "", price: null, available: true, site: siteName(url), method: "نام از کاربر" } : null);
+    if (!item) return { ok: false, error: `اطلاعات این محصول از ${siteName(url) || "این سایت"} خوانده نشد؛ نام محصول را بنویسید تا اضافه شود و قیمتش را تیم ما از همان لینک ثبت کند.`, askTitle: true };
     if (!item.available) return { ok: false, error: `این کالا فعلاً در ${item.site} موجود نیست.` };
     let image = "";
     if (item.image) {

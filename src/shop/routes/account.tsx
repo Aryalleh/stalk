@@ -464,16 +464,16 @@ account.get("/me/link", async (c) => {
 account.post("/me/link", async (c) => {
   const user = currentUser(c);
   const f = await form(c);
-  const values = { url: (f.url ?? "").trim(), wishlist_id: f.wishlist_id ?? "", note: (f.note ?? "").trim() };
+  const values = { url: (f.url ?? "").trim(), wishlist_id: f.wishlist_id ?? "", note: (f.note ?? "").trim(), title: (f.title ?? "").trim() };
   const lists = await myLists(c);
-  const again = (error: string) =>
-    render(c, <WebAddPage user={user} wishlists={lists} values={values} postFee={Number(c.get("settings").web_post_fee) || 0} errors={[error]} />, 400);
+  const again = (error: string, askTitle = false) =>
+    render(c, <WebAddPage user={user} wishlists={lists} values={values} postFee={Number(c.get("settings").web_post_fee) || 0} errors={[error]} askTitle={askTitle} />, 400);
   if (parsePostUrl(values.url)) return c.redirect(`/me/instagram?url=${encodeURIComponent(values.url)}${values.wishlist_id ? `&list=${values.wishlist_id}` : ""}`);
   const url = parseWebUrl(values.url);
   if (!url) return again("لینک صفحه‌ی محصول را کامل وارد کنید (با https://).");
   const list = lists.find((l) => String(l.id) === values.wishlist_id) ?? (lists.length ? lists[0] : await defaultWishlist(c.env.DB, user));
-  const r = await addWebWish({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, user, url, list.id, values.note);
-  if (!r.ok) return again(r.error);
+  const r = await addWebWish({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, user, url, list.id, values.note, values.title);
+  if (!r.ok) return again(r.error, r.askTitle);
   return c.redirect(`/me/link?added=${r.productId}&list=${list.id}`);
 });
 
