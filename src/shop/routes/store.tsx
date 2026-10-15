@@ -27,6 +27,7 @@ import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGif
 import { sendReceiptToShop } from "../orders";
 import { inviteText } from "../instagram-shops";
 import { areFriends } from "../friends";
+import { isStale, refreshWebProduct } from "../web-shop";
 import { CheckoutPage, HomePage, type ProductShopInfo, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
@@ -112,13 +113,18 @@ async function productPage(c: C, id: number) {
     productImages(c.env.DB, id),
     productPackages(c.env.DB, id),
     c.env.DB.prepare(
-      `SELECT s.logo_key, s.city, s.courier_enabled, s.post_enabled,
+      `SELECT s.logo_key, s.city, s.courier_enabled, s.post_enabled, s.is_platform,
               (SELECT COUNT(*) FROM orders o WHERE o.shop_id = s.id AND o.status IN ('paid','shipped','delivered')) AS sales
        FROM shops s WHERE s.id = ?`,
     )
       .bind(product.shop_id)
       .first<ProductShopInfo>(),
   ]);
+  // An item from another site (web-shop.ts): its price there is read again now and then.
+  const source = product as unknown as { source_checked_at: string | null };
+  if ((shop as unknown as { is_platform?: number } | null)?.is_platform && isStale(source.source_checked_at)) {
+    c.executionCtx.waitUntil(refreshWebProduct({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, product.id).catch(() => undefined));
+  }
   const error = c.req.query("err") === "size" ? "لطفاً سایز / رنگ را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز / رنگ را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
   const available = await availableByVariant(c.env.DB, product);
   return render(

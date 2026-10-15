@@ -62,6 +62,11 @@ export const DEFAULTS = {
   // A page that hasn't written to the site's account yet is mentioned in a post on it (Instagram
   // tells the page), once per page; "" turns it off. Placeholders as in ig_invite_text.
   ig_mention_post: "1",
+  // "Buy from other sites" (web-shop.ts): the admins' commission on top of the site's price (a fixed
+  // amount in toman plus a percent), and the post fee charged per order.
+  web_fee_fixed: "0",
+  web_fee_percent: "0",
+  web_post_fee: "300000",
   ig_mention_caption:
     "🎁 «{product}» از {shop} در لیست آرزوی کاربران {site_name} است و دوستانشان می‌خواهند برایشان بخرند!\n{shop} عزیز، برای فعال شدن فروش و دریافت مستقیم پول به کارت خودتان، یک پیام به همین صفحه بدهید 💌\n#کادو #لیست_آرزو #هدیه",
   // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.

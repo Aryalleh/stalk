@@ -192,6 +192,7 @@ function SiteMenu(props: { user: User | null; stats?: { wishes: number; gifts: n
             {item("/me", "fa-user-gear", "حساب من")}
             {item("/me/wishlists", "fa-list-check", "لیست آرزوها", path.startsWith("/me/wishlists"))}
             {item("/me/instagram", "fa-brands fa-instagram", "آرزو از اینستاگرام")}
+            {item("/me/link", "fa-solid fa-link", "آرزو از سایت‌ها")}
             {item("/me/gifts", "fa-gift", "کادوهای من")}
             {item("/me/friends", "fa-user-group", "دوستان")}
             {item("/me/orders", "fa-bag-shopping", "سفارشات من", path.startsWith("/me/orders"))}
@@ -689,6 +690,20 @@ export function InstagramCta(props: { list?: number; compact?: boolean; class?: 
       <span class="relative mt-4 inline-flex items-center gap-2 bg-white text-pink-600 font-black text-sm px-4 py-2.5 rounded-2xl shadow">
         <i class="fa-solid fa-plus"></i> افزودن از اینستاگرام
       </span>
+    </a>
+  );
+}
+
+/** A way to "add from any online shop (Digikala…)" — web-shop.ts. */
+export function WebShopCta(props: { list?: number; class?: string }) {
+  return (
+    <a href={`/me/link${props.list ? `?list=${props.list}` : ""}`} class={`flex items-center gap-3 rounded-2xl p-3 text-white bg-gradient-to-l from-sky-500 to-indigo-500 shadow-lg shadow-sky-500/20 active:scale-[.98] transition-transform ${props.class ?? ""}`}>
+      <span class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-link"></i></span>
+      <span class="flex-1 min-w-0">
+        <b class="block text-sm">افزودن از دیجی‌کالا و سایت‌ها</b>
+        <span class="block text-[11px] text-white/85 truncate">لینک محصول را بده؛ ما می‌خریم و می‌فرستیم</span>
+      </span>
+      <i class="fa-solid fa-chevron-left text-sm"></i>
     </a>
   );
 }

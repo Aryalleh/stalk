@@ -79,6 +79,7 @@ export interface Shop {
   telegram_chat_id: string;
   /** 1 = an Instagram page not on the platform, run by the platform (see instagram-shops.ts). */
   is_external: number;
+  is_platform: number; // run by the site's admins ("buy from other sites", web-shop.ts)
   invite_status: string;
   invited_at: string | null;
   /** The page's id in DMs with the platform's Instagram account, and when it last wrote there. */

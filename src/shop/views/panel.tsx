@@ -1272,6 +1272,131 @@ export function AdminDeleteShopPage(props: {
   );
 }
 
+export interface WebShopRow {
+  id: number;
+  code: string;
+  title: string;
+  image_key: string;
+  price: number;
+  source_price: number;
+  source_url: string;
+  awaiting_price: number;
+  is_active: number;
+  source_checked_at: string | null;
+  wishes: number;
+  open_orders: number;
+}
+
+/** /admin/web-shop: items from other sites the admins buy and send; fees, card, prices. */
+export function AdminWebShopPage(props: { user: User; settings: Settings; shop: Shop; products: WebShopRow[]; openOrders: number; ok?: string; error?: string }) {
+  const s = props.settings;
+  const fa = (n: number) => n.toLocaleString("fa-IR");
+  const site = (u: string) => {
+    try {
+      return new URL(u).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  };
+  return (
+    <AdminShell title="خرید از سایت‌ها" user={props.user} on="/admin/web-shop">
+      <h1>خرید از سایت‌ها</h1>
+      <p class="muted small" style="margin-top:-6px;line-height:1.9">
+        کاربران لینک محصول هر فروشگاه اینترنتی (دیجی‌کالا و…) را به لیست آرزویشان اضافه می‌کنند. قیمت از خود سایت خوانده می‌شود و کارمزد شما رویش می‌آید؛ هزینه‌ی پست جدا در
+        سفارش حساب می‌شود. خریدار به کارت زیر واریز می‌کند، شما واریز را تأیید می‌کنید (در ربات یا پنل این فروشگاه)، کالا را از همان سایت می‌خرید و به آدرس گیرنده می‌فرستید.
+      </p>
+      {props.ok && <div class="okbox">{props.ok}</div>}
+      <Errors errors={[props.error]} />
+      {!props.shop.card_number && (
+        <div class="card" style="border:1px solid #fbbf24">⚠️ شماره کارت ثبت نشده؛ تا ثبت نشود این کالاها قابل خرید نیستند.</div>
+      )}
+
+      <form method="post" action="/admin/web-shop/settings" class="card">
+        <h2>کارمزد، پست و کارت</h2>
+        <div class="two">
+          <div>
+            <label>هزینه‌ی پست هر سفارش (تومان)</label>
+            <input name="web_post_fee" value={s.web_post_fee} class="ltr" inputmode="numeric" />
+            <label>کارمزد ثابت هر کالا (تومان)</label>
+            <input name="web_fee_fixed" value={s.web_fee_fixed} class="ltr" inputmode="numeric" />
+            <label>کارمزد درصدی (روی قیمت سایت، ٪)</label>
+            <input name="web_fee_percent" value={s.web_fee_percent} class="ltr" inputmode="decimal" />
+            <p class="small muted">قیمت نمایش = قیمت سایت + درصد + مبلغ ثابت (گرد به هزار تومان). با ذخیره، قیمت همه‌ی کالاها دوباره حساب می‌شود.</p>
+          </div>
+          <div>
+            <label>شماره کارت برای واریز خریداران</label>
+            <input name="card_number" value={props.shop.card_number} class="ltr" inputmode="numeric" placeholder="۱۶ رقم" />
+            <label>نام صاحب کارت</label>
+            <input name="card_holder" value={props.shop.card_holder} />
+          </div>
+        </div>
+        <p><button>ذخیره</button></p>
+      </form>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0">سفارش‌ها</h2>
+          <form method="post" action={`/admin/users/${props.shop.owner_id}/login-as`} style="margin:0">
+            <input type="hidden" name="next" value="/panel/orders" />
+            <button class="small">
+              <i class="fa-solid fa-box ml-1"></i> سفارش‌ها در پنل این فروشگاه{props.openOrders ? ` (${fa(props.openOrders)} باز)` : ""}
+            </button>
+          </form>
+        </div>
+        <p class="small muted" style="margin-bottom:0">رسید واریزها و آدرس گیرنده‌ها در ربات برای مدیران هم فرستاده می‌شود.</p>
+      </div>
+
+      <div class="card wrap">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0">کالاها ({fa(props.products.length)})</h2>
+          <form method="post" action="/admin/web-shop/refresh" style="margin:0">
+            <button class="small secondary"><i class="fa-solid fa-rotate ml-1"></i> خواندن دوباره‌ی قیمت‌ها</button>
+          </form>
+        </div>
+        {props.products.length === 0 ? (
+          <p class="muted small">هنوز کسی از سایت دیگری کالایی اضافه نکرده است.</p>
+        ) : (
+          <table>
+            <thead><tr><th>کالا</th><th>قیمت سایت</th><th>قیمت ما</th><th>آرزو / سفارش باز</th><th></th></tr></thead>
+            <tbody>
+              {props.products.map((p) => (
+                <tr>
+                  <td>
+                    <div class="row" style="gap:8px;align-items:center">
+                      <Thumb imageKey={p.image_key} alt={p.title} />
+                      <div>
+                        <a href={`/p/${p.code}`} class="font-bold">{p.title}</a>
+                        <div class="small muted">
+                          <a href={p.source_url} target="_blank" rel="noopener nofollow" class="ltr">{site(p.source_url)}</a>
+                          {!p.is_active && " · ناموجود"}
+                          {p.source_checked_at && <> · <span class="dt">{formatJalali(p.source_checked_at)}</span></>}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{p.source_price ? toman(p.source_price) : "—"}</td>
+                  <td>{p.awaiting_price ? <span class="tag">بدون قیمت</span> : toman(p.price)}</td>
+                  <td>{fa(p.wishes)} / {fa(p.open_orders)}</td>
+                  <td>
+                    <form method="post" action="/admin/web-shop/refresh" style="margin:0 0 6px">
+                      <input type="hidden" name="id" value={p.id} />
+                      <button class="small secondary">خواندن قیمت</button>
+                    </form>
+                    <form method="post" action={`/admin/web-shop/${p.id}/price`} class="row" style="gap:6px;margin:0">
+                      <input name="source_price" class="ltr" inputmode="numeric" placeholder="قیمت سایت" style="max-width:120px" />
+                      <button class="small">ثبت</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </AdminShell>
+  );
+}
+
 /** Admin area: light theme (like the shop panel) with its own header and tabs. */
 function AdminShell(props: { title: string; user: User; on: string; children?: Child }) {
   const tabs: [string, string, string][] = [
@@ -1280,6 +1405,7 @@ function AdminShell(props: { title: string; user: User; on: string; children?: C
     ["/admin/content", "fa-pen-to-square", "درباره و سوالات"],
     ["/admin/pages", "fa-file-lines", "صفحه‌ها و فوتر"],
     ["/admin/instagram", "fa-camera-retro", "صفحه‌های اینستاگرام"],
+    ["/admin/web-shop", "fa-cart-shopping", "خرید از سایت‌ها"],
     ["/admin/settings", "fa-gear", "تنظیمات سایت"],
     ["/crm", "fa-address-book", "CRM"],
   ];

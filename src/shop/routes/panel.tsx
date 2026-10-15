@@ -14,8 +14,9 @@ import { SafirError, sendSafirOtp, sendSafirText } from "../../bale/safir";
 import { botToken, botUsername, connectBot, notifyAdmins, sendToChats, type BotKind } from "../../bale/botapi";
 import { answerChange, cancelForStock, confirmOrder, rejectOrder, releaseDueAddresses, requestChange, shipOrder, shopOwnerChats, type Deps } from "../orders";
 import { parseSizeGuide } from "../sizes";
-import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
+import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, AdminWebShopPage, type WebShopRow, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl, startSession } from "./helpers";
+import { refreshWebProduct, repriceWebShop, retailPrice, webShop } from "../web-shop";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
 import { channelOf, postProductToChannel, shareError } from "../telegram/share";
@@ -1063,6 +1064,71 @@ admin.post("/admin/instagram/:id{[0-9]+}/handover", async (c) => {
   if (!user) return igBack(c, "کاربری با این شماره نیست؛ صاحب صفحه اول در سایت ثبت‌نام کند.", false);
   const error = await handOver(c.env.DB, intParam(c, "id"), user.id);
   return error ? igBack(c, error, false) : igBack(c, `فروشگاه به ${user.name} تحویل شد.`);
+});
+
+// ---------- "buy from other sites" (web-shop.ts): fees, the card buyers pay to, the items ----------
+
+admin.get("/admin/web-shop", async (c) => {
+  const s = c.get("settings");
+  const shop = await webShop(c.env.DB, s);
+  const { results } = await c.env.DB.prepare(
+    `SELECT p.id, p.code, p.title, p.image_key, p.price, p.source_price, p.source_url, p.awaiting_price, p.is_active, p.source_checked_at,
+            (SELECT COUNT(*) FROM wishlist_items i WHERE i.product_id = p.id) AS wishes,
+            (SELECT COUNT(*) FROM orders o WHERE o.product_id = p.id AND o.status IN ('awaiting', 'paid')) AS open_orders
+     FROM products p WHERE p.shop_id = ? AND p.deleted_at IS NULL ORDER BY p.awaiting_price DESC, p.id DESC LIMIT 300`,
+  )
+    .bind(shop.id)
+    .all<WebShopRow>();
+  const orders = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE shop_id = ? AND status IN ('awaiting', 'paid')").bind(shop.id).first<{ n: number }>();
+  return render(c, <AdminWebShopPage user={currentUser(c)} settings={s} shop={shop} products={results} openOrders={orders?.n ?? 0} ok={c.req.query("ok")} error={c.req.query("error")} />);
+});
+
+const webBack = (c: C, msg: string, ok = true) => c.redirect(`/admin/web-shop?${ok ? "ok" : "error"}=${encodeURIComponent(msg)}`);
+
+admin.post("/admin/web-shop/settings", async (c) => {
+  const f = await form(c);
+  const num = (v: string | undefined, max: number) => String(Math.min(max, Math.max(0, Math.round(Number(toLatinDigits(v ?? "").replace(/[^\d.]/g, "")) || 0))));
+  const values: Partial<Settings> = {
+    web_post_fee: num(f.web_post_fee, 100_000_000),
+    web_fee_fixed: num(f.web_fee_fixed, 100_000_000),
+    web_fee_percent: num(f.web_fee_percent, 100),
+  };
+  await saveSiteSettings(c.env.DB, values);
+  const s = { ...c.get("settings"), ...values };
+  const shop = await webShop(c.env.DB, s);
+  const card = toLatinDigits(f.card_number ?? "").replace(/\D/g, "");
+  if (card && card.length !== 16) return webBack(c, "شماره کارت باید ۱۶ رقم باشد.", false);
+  await c.env.DB.prepare("UPDATE shops SET card_number = ?, card_holder = ? WHERE id = ?").bind(card, (f.card_holder ?? "").trim().slice(0, 80), shop.id).run();
+  const n = await repriceWebShop(c.env.DB, s);
+  return webBack(c, `ذخیره شد؛ قیمت ${n.toLocaleString("fa-IR")} کالا با کارمزد و هزینه‌ی پست تازه حساب شد.`);
+});
+
+const webDeps = (c: C) => ({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) });
+
+// Read the site's price again (one item, or every one older than 6 hours, a few at a time).
+admin.post("/admin/web-shop/refresh", async (c) => {
+  const id = Number((await form(c)).id) || 0;
+  const shop = await webShop(c.env.DB, c.get("settings"));
+  const ids = id
+    ? [id]
+    : (
+        await c.env.DB.prepare("SELECT id FROM products WHERE shop_id = ? AND deleted_at IS NULL ORDER BY source_checked_at LIMIT 20").bind(shop.id).all<{ id: number }>()
+      ).results.map((r) => r.id);
+  let read = 0;
+  for (const pid of ids) if (await refreshWebProduct(webDeps(c), pid)) read++;
+  return webBack(c, `${read.toLocaleString("fa-IR")} از ${ids.length.toLocaleString("fa-IR")} کالا از سایت خوانده و به‌روز شد.`, read > 0 || !ids.length);
+});
+
+// The site's price typed by hand (when it can't be read): the commission is added as usual.
+admin.post("/admin/web-shop/:id{[0-9]+}/price", async (c) => {
+  const source = Number(toLatinDigits((await form(c)).source_price ?? "").replace(/\D/g, "")) || 0;
+  if (source < 1000) return webBack(c, "قیمت سایت را به تومان وارد کنید.", false);
+  const s = c.get("settings");
+  const shop = await webShop(c.env.DB, s);
+  await c.env.DB.prepare("UPDATE products SET source_price = ?, price = ?, awaiting_price = 0, is_active = 1, source_checked_at = ?, updated_at = ? WHERE id = ? AND shop_id = ?")
+    .bind(source, retailPrice(source, s), now(), now(), intParam(c, "id"), shop.id)
+    .run();
+  return webBack(c, "قیمت ثبت شد.");
 });
 
 admin.get("/admin/content", (c) => contentPage(c));

@@ -3,7 +3,7 @@ import { CITIES } from "../cities";
 import { STATUS_LABEL, orderStatusLabel, priceLabel, toman, type ItemView, type Order, type Wishlist } from "../db";
 import type { User } from "../../session";
 import { useSite } from "../../render";
-import { Avatar, Errors, FilePicker, InstagramCta, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
+import { Avatar, Errors, FilePicker, InstagramCta, WebShopCta, Layout, MenuButton, SiteLogo, Thumb, TitleBar } from "./layout";
 import { variantLabel } from "../variants";
 import type { FriendRow, Inviter } from "../friends";
 import { JALALI_MONTHS, birthdayLabel, currentJalaliYear } from "../../../lib/people";
@@ -1488,6 +1488,70 @@ export function FriendInvitePage(props: { user: User | null; inviter: Inviter; c
           </a>
         )}
       </div>
+    </Layout>
+  );
+}
+
+// ---------- add from any online shop (web-shop.ts) ----------
+
+export interface WebAdded {
+  id: number;
+  code: string;
+  title: string;
+  image_key: string;
+  price: number;
+  awaiting_price: number;
+  site: string;
+  list: { id: number; title: string; slug: string } | null;
+}
+
+/** /me/link: a product link from Digikala or any other shop → a wish the site's team buys and sends. */
+export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: Record<string, string>; postFee: number; added?: WebAdded; errors?: string[] }) {
+  const v = props.values;
+  const a = props.added;
+  return (
+    <Layout title="آرزو از سایت‌ها" user={props.user} nav="wishes">
+      <div class="card" style="text-align:center">
+        <div style="font-size:40px">🛍️</div>
+        <h1 style="margin:6px 0">آرزو از دیجی‌کالا و هر سایت دیگری</h1>
+        <p class="muted small" style="line-height:1.9">
+          لینک صفحه‌ی محصول را بده؛ اسم، عکس و قیمتش خودکار خوانده می‌شود. دوستانت از همین‌جا می‌خرند و تیم {useSite().site_name} آن را از همان سایت می‌خرد و برایت می‌فرستد.
+          {props.postFee > 0 && <> هزینه‌ی ارسال: {toman(props.postFee)}.</>}
+        </p>
+      </div>
+      {a && (
+        <div class="card" style="border:1px solid var(--brand, #ff5c93)">
+          <div class="row" style="gap:12px;align-items:center">
+            <Thumb imageKey={a.image_key} alt={a.title} />
+            <div style="flex:1;min-width:0">
+              <b>✅ به لیست {a.list ? `«${a.list.title}»` : ""} اضافه شد</b>
+              <div class="small">{a.title}</div>
+              <div class="small muted">{a.awaiting_price ? "قیمت به‌زودی (تیم ما بررسی می‌کند)" : `${toman(a.price)} · از ${a.site}`}</div>
+            </div>
+          </div>
+          <p class="row" style="gap:8px;margin-bottom:0">
+            {a.list && <a class="btn small" href={`/w/${a.list.slug}`}>دیدن لیست</a>}
+            <a class="btn small secondary" href={`/p/${a.code}`}>صفحه‌ی محصول</a>
+          </p>
+        </div>
+      )}
+      <Errors errors={props.errors} />
+      <form method="post" action="/me/link" class="card">
+        <label>لینک محصول</label>
+        <input name="url" value={v.url ?? ""} class="ltr" inputmode="url" placeholder="https://www.digikala.com/product/dkp-…" required />
+        <label>به کدام لیست؟</label>
+        {props.wishlists.length ? (
+          <select name="wishlist_id">
+            {props.wishlists.map((w) => <option value={w.id} selected={String(w.id) === v.wishlist_id}>{w.title}</option>)}
+          </select>
+        ) : (
+          <p class="small muted">لیستی ندارید؛ یک «لیست آرزوی من» برایتان ساخته می‌شود.</p>
+        )}
+        <label>یادداشت (اختیاری؛ مثلاً رنگ یا سایز)</label>
+        <input name="note" value={v.note ?? ""} maxlength={200} />
+        <p><button><i class="fa-solid fa-plus ml-1"></i> افزودن به لیست</button></p>
+      </form>
+      <InstagramCta compact />
     </Layout>
   );
 }

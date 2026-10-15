@@ -20,9 +20,10 @@ import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/bota
 import { connectToken } from "../../bale/connect";
 import { MINIAPP_COOKIE } from "../../bale/chatlink";
 import { anonCode, anonStart } from "../../bale/anon";
+import { addWebWish, parseWebUrl, siteName } from "../web-shop";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
-import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, type MyOrder } from "../views/account";
+import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, WebAddPage, type WebAdded, type MyOrder } from "../views/account";
 import { DirectBuyPage } from "../views/store";
 import { answerChange, setOrderAddress } from "../orders";
 import { areFriends, befriend, friendCode, friendStart, inviterByCode, listFriends, tellInviter, unfriend } from "../friends";
@@ -435,11 +436,56 @@ account.post("/me/ig-unlink", async (c) => {
   return c.redirect("/me/instagram");
 });
 
+// ---------- a wish from any online shop (Digikala…): the site's team buys and sends it (web-shop.ts) ----------
+
+account.get("/me/link", async (c) => {
+  const user = currentUser(c);
+  const lists = await myLists(c);
+  const shared = [c.req.query("url"), c.req.query("text")].join(" ");
+  const addedId = Number(c.req.query("added")) || 0;
+  let added: WebAdded | undefined;
+  if (addedId) {
+    const p = await c.env.DB.prepare("SELECT id, code, title, image_key, price, awaiting_price, source_url FROM products WHERE id = ?").bind(addedId).first<WebAdded & { source_url: string }>();
+    const list = lists.find((l) => l.id === Number(c.req.query("list")));
+    if (p) added = { ...p, site: siteName(p.source_url), list: list ? { id: list.id, title: list.title, slug: list.slug } : null };
+  }
+  return render(
+    c,
+    <WebAddPage
+      user={user}
+      wishlists={lists}
+      values={{ url: parseWebUrl(shared) ?? "", wishlist_id: c.req.query("list") ?? "" }}
+      postFee={Number(c.get("settings").web_post_fee) || 0}
+      added={added}
+    />,
+  );
+});
+
+account.post("/me/link", async (c) => {
+  const user = currentUser(c);
+  const f = await form(c);
+  const values = { url: (f.url ?? "").trim(), wishlist_id: f.wishlist_id ?? "", note: (f.note ?? "").trim() };
+  const lists = await myLists(c);
+  const again = (error: string) =>
+    render(c, <WebAddPage user={user} wishlists={lists} values={values} postFee={Number(c.get("settings").web_post_fee) || 0} errors={[error]} />, 400);
+  if (parsePostUrl(values.url)) return c.redirect(`/me/instagram?url=${encodeURIComponent(values.url)}${values.wishlist_id ? `&list=${values.wishlist_id}` : ""}`);
+  const url = parseWebUrl(values.url);
+  if (!url) return again("لینک صفحه‌ی محصول را کامل وارد کنید (با https://).");
+  const list = lists.find((l) => String(l.id) === values.wishlist_id) ?? (lists.length ? lists[0] : await defaultWishlist(c.env.DB, user));
+  const r = await addWebWish({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, user, url, list.id, values.note);
+  if (!r.ok) return again(r.error);
+  return c.redirect(`/me/link?added=${r.productId}&list=${list.id}`);
+});
+
 account.get("/me/instagram", async (c) => {
   const lists = await myLists(c);
   const added = Number(c.req.query("added")) ? await addedItem(c, Number(c.req.query("added"))) : undefined;
   // Shared from the Instagram app (the installed app is a share target): the link is in url or text.
-  const shared = [c.req.query("url"), c.req.query("text"), c.req.query("title")].join(" ").match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i)?.[0] ?? "";
+  const sharedText = [c.req.query("url"), c.req.query("text"), c.req.query("title")].join(" ");
+  const shared = sharedText.match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i)?.[0] ?? "";
+  // A product from another site (shared from Digikala's app…): that has its own page.
+  const other = !shared && parseWebUrl(sharedText);
+  if (other) return c.redirect(`/me/link?url=${encodeURIComponent(other)}${c.req.query("list") ? `&list=${c.req.query("list")}` : ""}`);
   return render(
     c,
     <InstagramAddPage user={currentUser(c)} wishlists={lists} values={{ wishlist_id: c.req.query("list") ?? "", post_url: shared }} added={added} igLink={await igLinkState(c)} linked={c.req.query("linked") === "1"} />,
@@ -472,6 +518,9 @@ account.post("/me/instagram", async (c) => {
   const values = Object.fromEntries(["post_url", "handle", "title", "note", "wishlist_id"].map((k) => [k, String(f[k] ?? "").trim()]));
   const errors: string[] = [];
   const postUrl = parsePostUrl(values.post_url);
+  // A link from another online shop: added there instead.
+  const webUrl = !postUrl && parseWebUrl(values.post_url);
+  if (webUrl) return c.redirect(`/me/link?url=${encodeURIComponent(webUrl)}${values.wishlist_id ? `&list=${values.wishlist_id}` : ""}`);
   if (!postUrl) errors.push("لینک پست یا ریلز اینستاگرام را درست وارد کنید (مثل https://www.instagram.com/p/…).");
   if (!values.title) errors.push("نام محصول را بنویسید.");
   const list = lists.find((w) => String(w.id) === values.wishlist_id) ?? lists[0];

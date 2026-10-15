@@ -28,7 +28,7 @@ import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
 import { STEPS, faqs } from "../../content";
-import { Avatar, Errors, IconButton, InstagramCta, Layout, MenuButton, SiteLogo, ProfileHero, TitleBar } from "./layout";
+import { Avatar, Errors, IconButton, InstagramCta, WebShopCta, Layout, MenuButton, SiteLogo, ProfileHero, TitleBar } from "./layout";
 
 // Storefront screens, following html/{home,product,wishlist,checkout,order}.html:
 // a Pinterest-like masonry feed of image cards with the title and price over a dark gradient.
@@ -1156,6 +1156,7 @@ export function WishlistPublicPage(props: {
         {props.isOwner && (
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
             <InstagramCta compact list={w.id} />
+            <WebShopCta list={w.id} />
             <a href="/" class="flex items-center gap-3 rounded-2xl p-3 bg-card border border-fg/5 active:scale-[.98] transition-transform">
               <span class="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-store"></i></span>
               <span class="flex-1 min-w-0">

@@ -12,6 +12,7 @@ export type Bindings = {
   BALE_API_BASE?: string;
   /** Local tests only: a mock of Instagram's Graph API and web pages. */
   INSTAGRAM_API_BASE?: string;
+  DIGIKALA_API_BASE?: string; // local tests only (web-shop.ts)
   /** Shared secret of a reverse proxy in front of the Worker (wrangler secret put PROXY_SECRET); see src/proxy.ts. */
   PROXY_SECRET?: string;
 };

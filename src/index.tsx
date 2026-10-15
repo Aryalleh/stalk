@@ -8,6 +8,7 @@ import type { Env } from "./env";
 import { SESSION_COOKIE, assignUsername, isConnected, needsProfile, sessionUser } from "./session";
 import { activeBots, setBaleApiBase, setTelegramApiBase } from "./bale/botapi";
 import { setInstagramApiBase } from "./shop/crm/instagram";
+import { setDigikalaApiBase } from "./shop/web-shop";
 import { CONNECT_EXEMPT, connect } from "./bale/connect";
 import { appCss } from "./assets";
 import { ensureMigrated } from "./migrate";
@@ -69,6 +70,7 @@ app.use(async (c, next) => {
   setTelegramApiBase(c.env.TELEGRAM_API_BASE);
   setBaleApiBase(c.env.BALE_API_BASE);
   setInstagramApiBase(c.env.INSTAGRAM_API_BASE);
+  setDigikalaApiBase(c.env.DIGIKALA_API_BASE);
   await ensureMigrated(c.env.DB);
   await next();
 });
@@ -104,8 +106,8 @@ app.use(async (c, next) => {
   await next();
 });
 
-// The stand-in owner of an Instagram page's shop (an admin opens its panel via "sign in as").
-const isPlaceholder = (u: { phone: string }) => u.phone.startsWith("ig:");
+// The stand-in owner of an Instagram page's shop or of the "buy from other sites" shop (an admin opens its panel via "sign in as").
+const isPlaceholder = (u: { phone: string }) => /^(ig|web):/.test(u.phone);
 
 // Every signed-in account must connect the site's Bale/Telegram bot before using the site. Only the
 // admin is let through while no bot is connected yet, so they can set one up in /admin/settings.
