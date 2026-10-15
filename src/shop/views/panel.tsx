@@ -1416,6 +1416,9 @@ export interface AdminAnonParty {
   username: string | null;
   kind: string;
   chat: string;
+  m_name: string; // the messenger account behind the chat: name, @username, numeric user id
+  m_username: string;
+  m_id: string;
 }
 
 export interface AdminAnonThread {
@@ -1441,16 +1444,45 @@ export interface AdminAnonMsg {
 const KIND_LABEL: Record<string, string> = { bale: "بله", telegram: "تلگرام", web: "سایت" };
 const anonWhen = (ms: number) => formatJalali(new Date(ms).toISOString());
 
+/** The Bale / Telegram account behind a chat: name, @username (opens it) and the numeric user id. */
+function Messenger(props: { p: AdminAnonParty }) {
+  const p = props.p;
+  if (p.kind === "web") return <div class="small muted">از سایت</div>;
+  const profile = p.m_username ? (p.kind === "telegram" ? `https://t.me/${p.m_username}` : `https://ble.ir/${p.m_username}`) : "";
+  return (
+    <div class="small muted" data-messenger>
+      {KIND_LABEL[p.kind] ?? p.kind}
+      {p.m_name ? ` · ${p.m_name}` : ""}
+      {p.m_username && (
+        <>
+          {" · "}
+          <a href={profile} target="_blank" rel="noopener" class="dt">@{p.m_username}</a>
+        </>
+      )}
+      {p.m_id && <> · شناسه <span class="dt" style="user-select:all">{p.m_id}</span></>}
+      {p.kind === "telegram" && p.m_id && (
+        <>
+          {" · "}
+          <a href={`tg://user?id=${p.m_id}`}>باز کردن</a>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AnonWho(props: { p: AdminAnonParty }) {
   const p = props.p;
-  return p.user_id ? (
-    <span>
-      <a href={`/admin/users?q=${encodeURIComponent(p.phone ?? "")}`}>{p.name}</a>
-      <div class="small muted dt">{p.phone}{p.username ? ` · @${p.username}` : ""}</div>
-    </span>
-  ) : (
-    <span>
-      بدون حساب<div class="small muted dt">{KIND_LABEL[p.kind] ?? p.kind} {p.chat}</div>
+  return (
+    <span style="display:block">
+      {p.user_id ? (
+        <>
+          <a href={`/admin/users?q=${encodeURIComponent(p.phone ?? "")}`}>{p.name}</a>
+          <div class="small muted dt">{p.phone}{p.username ? ` · @${p.username}` : ""}</div>
+        </>
+      ) : (
+        <b>بدون حساب در سایت</b>
+      )}
+      <Messenger p={p} />
     </span>
   );
 }
@@ -1464,7 +1496,7 @@ export function AdminAnonPage(props: { user: User; q: string; threads: AdminAnon
         گفتگوهای ناشناس بین کاربران (بله، تلگرام و سایت). برای کاربران ناشناس‌اند، اما اینجا فرستنده‌ی واقعی هر پیام دیده می‌شود؛ فقط برای بررسی گزارش‌ها و تخلف‌ها.
       </p>
       <form method="get" action="/admin/anon" class="row mb-3">
-        <input name="q" value={props.q} placeholder="جستجو: نام، موبایل، نام کاربری یا متن پیام" class="flex-1" />
+        <input name="q" value={props.q} placeholder="جستجو: نام، موبایل، نام کاربری، @یوزرنیم یا شناسه تلگرام/بله، یا متن پیام" class="flex-1" />
         <button>جستجو</button>
       </form>
       <div class="card wrap">
@@ -1509,8 +1541,8 @@ export function AdminAnonThreadPage(props: { user: User; root: number; messages:
             return (
               <div class={`flex ${left ? "justify-start" : "justify-end"}`}>
                 <div class={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${left ? "bg-sky-50 border border-sky-100" : "bg-slate-50 border border-slate-200"}`} data-admin-msg={m.id}>
-                  <div class="small muted" style="margin-bottom:4px">
-                    <b><AnonWho p={m.from} /></b>
+                  <div class="small" style="margin-bottom:4px">
+                    <AnonWho p={m.from} />
                   </div>
                   <div style="white-space:pre-wrap;word-break:break-word">{m.body || <i class="muted">(پیام غیرمتنی)</i>}</div>
                   <div class="small muted dt" style="margin-top:4px">

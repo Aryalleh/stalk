@@ -245,10 +245,13 @@ export async function deliver(
   if (!chats.length && !to.userId) return { ok: false, error: "این کاربر هنوز پیام دریافت نمی‌کند." };
 
   const body = text || (out.caption ?? "").slice(0, ANON_MAX);
+  // Who is behind the sender's chat, as it is now (for the admins; never shown to the recipient).
+  const prof = from.kind === "web" ? null : await chatProfile(db, from.kind, from.chat);
   const row = (await db
     .prepare(
-      `INSERT INTO anon_messages (from_kind, from_chat, from_user_id, to_kind, to_chat, to_user_id, recipient_id, reply_to, root_id, body, from_msg_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO anon_messages (from_kind, from_chat, from_user_id, to_kind, to_chat, to_user_id, recipient_id, reply_to, root_id, body, from_msg_id, created_at,
+                                  from_name, from_username, from_uid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     )
     .bind(
       from.kind,
@@ -263,6 +266,9 @@ export async function deliver(
       body,
       out.copy ? String(out.copy.messageId) : "",
       Date.now(),
+      prof ? [prof.first_name, prof.last_name].filter(Boolean).join(" ") : "",
+      prof?.username ?? "",
+      prof?.user_id || (from.kind === "web" ? "" : from.chat),
     )
     .first<{ id: number }>())!;
   const root = answered?.root_id ?? rootId ?? row.id;
@@ -301,11 +307,30 @@ export async function deliver(
   return { ok: true, id: row.id, root };
 }
 
+export interface ChatProfile {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  username: string;
+}
+
+export const chatProfile = (db: D1Database, kind: string, chat: string) =>
+  db.prepare("SELECT user_id, first_name, last_name, username FROM bot_profiles WHERE kind = ? AND chat = ?").bind(kind, chat).first<ChatProfile>();
+
+/** "Telegram: Ali Rezaei @ali (id 12345)" — who is behind a chat, for the admins. */
+export async function describeChat(db: D1Database, kind: string, chat: string) {
+  if (kind === "web") return "سایت";
+  const p = await chatProfile(db, kind, chat);
+  const name = [p?.first_name, p?.last_name].filter(Boolean).join(" ");
+  return [KIND_FA[kind as BotKind] ?? kind, name, p?.username ? `@${p.username}` : "", `(شناسه ${p?.user_id || chat})`].filter(Boolean).join(" ");
+}
+
 /** Tell the site's admins about a reported message. */
 export async function reportAnon(db: D1Database, s: Settings, row: AnonRow, by: string, site: string) {
   const who = async (userId: number | null, kind: string, chat: string) => {
     const u = userId ? await db.prepare("SELECT name, phone FROM users WHERE id = ?").bind(userId).first<{ name: string; phone: string }>() : null;
-    return u ? `${u.name} (${u.phone}, کاربر ${userId})` : `${kind} ${chat}`;
+    const via = await describeChat(db, kind, chat);
+    return u ? `${u.name} (${u.phone}, کاربر ${userId}) — از ${via}` : `بدون حساب — ${via}`;
   };
   await notifyAdmins(
     db,

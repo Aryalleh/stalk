@@ -4,7 +4,7 @@ import { normalizePhone } from "../../lib/normalize";
 import type { C, Env } from "../env";
 import { confirmOrder, rejectOrder, shopOwnerChats } from "../shop/orders";
 import { siteUrl } from "../shop/routes/helpers";
-import { answerCallback, botLink, botToken, clearButtons, notifyAdmins, openAppMarkup, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
+import { answerCallback, botLink, botToken, clearButtons, notifyAdmins, openAppMarkup, rememberProfile, type BotFrom, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
 import { useConnectToken } from "./connect";
 import { accountFromContact } from "./chatlink";
 import { handleAnonCallback, handleAnonMessage, sendAnonLinks, startAnon, type AnonCtx } from "./anon";
@@ -42,7 +42,7 @@ interface Update {
   };
   callback_query?: {
     id: string;
-    from?: { id?: number };
+    from?: BotFrom;
     data?: string;
     message?: { message_id?: number; chat?: { id?: number } };
   };
@@ -79,6 +79,7 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
   const msg = update?.message;
   const chatId = msg?.chat?.id;
   if (chatId === undefined) return c.json({ ok: true });
+  if ((msg?.chat?.type ?? "private") === "private") await rememberProfile(c.env.DB, kind, String(chatId), msg?.from);
   const reply = (text: string, markup?: object) =>
     c.executionCtx.waitUntil(sendBotMessage(s, kind, String(chatId), text, markup).catch((e) => console.error(e)));
   const shareMarkup = kind === "bale" ? SHARE_KEYBOARD : undefined;
@@ -254,6 +255,7 @@ async function handleCallback(c: C, kind: BotKind, q: NonNullable<Update["callba
   const chatId = String(q.message?.chat?.id ?? "");
   const answer = (text: string) => answerCallback(s, kind, q.id, text).catch((e) => console.error(e));
   if (q.data?.startsWith("anon:") && chatId) {
+    await rememberProfile(c.env.DB, kind, chatId, q.from);
     await handleAnonCallback({ db: c.env.DB, s, kind, chatId }, q.data, answer, siteUrl(c));
     return;
   }

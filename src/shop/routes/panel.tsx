@@ -1072,22 +1072,36 @@ admin.post("/admin/instagram/:id{[0-9]+}/handover", async (c) => {
 
 const ANON_COLS = `m.id, m.root_id, m.body, m.created_at, m.reply_to,
   m.from_user_id, fu.name AS f_name, fu.phone AS f_phone, fu.username AS f_username, m.from_kind, m.from_chat,
-  m.recipient_id, ru.name AS r_name, ru.phone AS r_phone, ru.username AS r_username, m.to_kind, m.to_chat`;
-const ANON_JOIN = "FROM anon_messages m LEFT JOIN users fu ON fu.id = m.from_user_id LEFT JOIN users ru ON ru.id = m.recipient_id";
+  m.recipient_id, ru.name AS r_name, ru.phone AS r_phone, ru.username AS r_username, m.to_kind, m.to_chat,
+  COALESCE(NULLIF(m.from_name, ''), TRIM(fp.first_name || ' ' || fp.last_name), '') AS f_mname, COALESCE(NULLIF(m.from_username, ''), fp.username, '') AS f_muser,
+  COALESCE(NULLIF(m.from_uid, ''), fp.user_id, '') AS f_muid,
+  COALESCE(TRIM(tp.first_name || ' ' || tp.last_name), '') AS t_mname, COALESCE(tp.username, '') AS t_muser, COALESCE(tp.user_id, '') AS t_muid`;
+const ANON_JOIN = `FROM anon_messages m LEFT JOIN users fu ON fu.id = m.from_user_id LEFT JOIN users ru ON ru.id = m.recipient_id
+  LEFT JOIN bot_profiles fp ON fp.kind = m.from_kind AND fp.chat = m.from_chat LEFT JOIN bot_profiles tp ON tp.kind = m.to_kind AND tp.chat = m.to_chat`;
 type AnonDbRow = {
   id: number; root_id: number; body: string; created_at: number; reply_to: number | null;
   from_user_id: number | null; f_name: string | null; f_phone: string | null; f_username: string | null; from_kind: string; from_chat: string;
   recipient_id: number | null; r_name: string | null; r_phone: string | null; r_username: string | null; to_kind: string; to_chat: string;
+  f_mname: string; f_muser: string; f_muid: string; t_mname: string; t_muser: string; t_muid: string;
 };
-const anonFrom = (r: AnonDbRow): AdminAnonParty => ({ user_id: r.from_user_id, name: r.f_name, phone: r.f_phone, username: r.f_username, kind: r.from_kind, chat: r.from_chat });
-const anonTo = (r: AnonDbRow): AdminAnonParty => ({ user_id: r.recipient_id, name: r.r_name, phone: r.r_phone, username: r.r_username, kind: r.to_kind, chat: r.to_chat });
+const anonFrom = (r: AnonDbRow): AdminAnonParty => ({
+  user_id: r.from_user_id, name: r.f_name, phone: r.f_phone, username: r.f_username, kind: r.from_kind, chat: r.from_chat,
+  m_name: r.f_mname, m_username: r.f_muser, m_id: r.f_muid || (r.from_kind === "web" ? "" : r.from_chat),
+});
+const anonTo = (r: AnonDbRow): AdminAnonParty => ({
+  user_id: r.recipient_id, name: r.r_name, phone: r.r_phone, username: r.r_username, kind: r.to_kind, chat: r.to_chat,
+  m_name: r.t_mname, m_username: r.t_muser, m_id: r.t_muid || (r.to_kind === "web" ? "" : r.to_chat),
+});
 
 admin.get("/admin/anon", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   const like = `%${q}%`;
   const filter = q
     ? `AND EXISTS (SELECT 1 FROM anon_messages x LEFT JOIN users u ON u.id = x.from_user_id OR u.id = x.recipient_id
-         WHERE x.root_id = m.id AND (x.body LIKE ?1 OR u.phone LIKE ?1 OR u.username LIKE ?1 OR u.name LIKE ?1 OR x.from_chat = ?2 OR x.to_chat = ?2))`
+         WHERE x.root_id = m.id AND (x.body LIKE ?1 OR u.phone LIKE ?1 OR u.username LIKE ?1 OR u.name LIKE ?1 OR x.from_chat = ?2 OR x.to_chat = ?2
+           OR x.from_name LIKE ?1 OR x.from_username LIKE ?3 OR x.from_uid = ?2
+           OR EXISTS (SELECT 1 FROM bot_profiles b WHERE ((b.kind = x.from_kind AND b.chat = x.from_chat) OR (b.kind = x.to_kind AND b.chat = x.to_chat))
+                      AND (b.user_id = ?2 OR b.username LIKE ?3 OR (b.first_name || ' ' || b.last_name) LIKE ?1))))`
     : "";
   const { results } = await c.env.DB.prepare(
     `SELECT ${ANON_COLS}, (SELECT COUNT(*) FROM anon_messages x WHERE x.root_id = m.id) AS n,
@@ -1095,7 +1109,7 @@ admin.get("/admin/anon", async (c) => {
             (SELECT body FROM anon_messages x WHERE x.root_id = m.id ORDER BY x.id DESC LIMIT 1) AS last_body
      ${ANON_JOIN} WHERE m.root_id = m.id ${filter} ORDER BY last DESC LIMIT 200`,
   )
-    .bind(...(q ? [like, q] : []))
+    .bind(...(q ? [like, q, q.replace(/^@/, "")] : []))
     .all<AnonDbRow & { n: number; last: number; last_body: string }>();
   const threads: AdminAnonThread[] = results.map((r) => ({ root: r.id, from: anonFrom(r), to: anonTo(r), count: r.n, last: r.last, body: r.last_body }));
   return render(c, <AdminAnonPage user={currentUser(c)} q={q} threads={threads} />);

@@ -181,3 +181,26 @@ export async function notifyAdmins(db: D1Database, s: Settings, text: string) {
   const { results } = await db.prepare("SELECT bale_chat_id, telegram_chat_id FROM users WHERE is_admin = 1").all<Chats>();
   await Promise.allSettled(results.map((a) => sendToChats(s, a, text)));
 }
+
+export interface BotFrom {
+  id?: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
+
+/** Remember who is behind a private chat (name, @username, user id); see migrations/0042. */
+export async function rememberProfile(db: D1Database, kind: BotKind, chat: string, from: BotFrom | undefined) {
+  if (!from?.id) return;
+  await db
+    .prepare(
+      `INSERT INTO bot_profiles (kind, chat, user_id, first_name, last_name, username, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (kind, chat) DO UPDATE SET user_id = excluded.user_id, first_name = excluded.first_name, last_name = excluded.last_name,
+         username = excluded.username, updated_at = excluded.updated_at
+       WHERE bot_profiles.user_id <> excluded.user_id OR bot_profiles.first_name <> excluded.first_name OR bot_profiles.last_name <> excluded.last_name
+         OR bot_profiles.username <> excluded.username`,
+    )
+    .bind(kind, chat, String(from.id), (from.first_name ?? "").slice(0, 100), (from.last_name ?? "").slice(0, 100), (from.username ?? "").slice(0, 64), Date.now())
+    .run()
+    .catch((e) => console.error("profile", e));
+}
