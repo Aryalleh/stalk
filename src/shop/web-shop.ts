@@ -252,14 +252,32 @@ export function parseProductHtml(html: string, url: string): WebItem | null {
   };
 }
 
+// Who to ask as. A browser first; when that gets an empty app shell (or no price), the crawlers that
+// shops render full pages for: search engines and messenger link previews (title, photo, price tags).
+const AGENTS: [string, string][] = [
+  [UA, ""],
+  ["Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "Googlebot"],
+  ["Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", "Bingbot"],
+  ["TelegramBot (like TwitterBot)", "TelegramBot"],
+  ["facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "facebookexternalhit"],
+];
+
 async function fetchPage(url: string): Promise<WebItem | null> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml", "Accept-Language": "fa-IR,fa;q=0.9,en;q=0.5" },
-    redirect: "follow",
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!res.ok) return null;
-  return parseProductHtml((await res.text()).slice(0, 2_000_000), url);
+  let best: WebItem | null = null;
+  for (const [agent, label] of AGENTS) {
+    const res = await fetch(url, {
+      headers: { "User-Agent": agent, Accept: "text/html,application/xhtml+xml", "Accept-Language": "fa-IR,fa;q=0.9,en;q=0.5" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => null);
+    if (!res?.ok) continue;
+    const item = parseProductHtml((await res.text()).slice(0, 2_000_000), url);
+    if (!item) continue; // an app shell: try as the next crawler
+    if (label) item.method = `${item.method} (صفحه برای ${label})`;
+    if (item.price) return item;
+    best ??= item; // a name and photo, still no price: maybe a crawler gets one
+  }
+  return best;
 }
 
 /** Read a product page: Digikala / Digistyle through their product API, any other shop from the page's data. */
