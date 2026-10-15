@@ -242,11 +242,13 @@ export function parseProductHtml(html: string, url: string): WebItem | null {
     String(ld?.name ?? "").trim() || meta(html, "og:title") || next?.title || decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? "").trim();
   if (!title) return null;
   const availability = String(offer?.availability ?? meta(html, "product:availability") ?? "");
+  // An offer priced 0 means nothing to sell right now (Digikala's out-of-stock products).
+  const zeroOffer = offer !== undefined && Number(String(pick(offer, ["price", "lowPrice"]) ?? "").replace(/[^\d.]/g, "")) === 0 && price === null;
   return {
     title: title.slice(0, 200),
     image: imageOf(ld?.image) || meta(html, "og:image") || next?.image || "",
     price,
-    available: !/OutOfStock|SoldOut|out of stock/i.test(availability) && (next?.available ?? true),
+    available: !/OutOfStock|SoldOut|out of stock/i.test(availability) && !zeroOffer && (next?.available ?? true),
     site: siteName(url),
     method: method || "بدون قیمت (فقط نام و عکس)",
   };
@@ -290,7 +292,8 @@ export async function fetchWebItem(url: string): Promise<WebItem | null> {
       const viaApi = await fetchDigikala(dk).catch(() => null);
       if (viaApi?.price || viaApi?.available === false) return viaApi;
       const page = await fetchPage(url).catch(() => null);
-      return page?.price ? page : viaApi;
+      // (A page that says it's out of stock — Digikala shows "price": 0 then — is an answer too.)
+      return page?.price || page?.available === false ? page : (viaApi ?? page);
     }
     return await fetchPage(url);
   } catch (e) {

@@ -71,3 +71,10 @@ describe("app-shell pages", () => {
     expect(parseProductHtml(shell, "https://www.digikala.com/product/dkp-1/")).toBeNull();
   });
 });
+
+describe("Digikala's page for search engines", () => {
+  it("an offer priced 0 is out of stock", () => {
+    const html = `<script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"هدفون","offers":{"@type":"Offer","priceCurrency":"IRR","price":0}}</script>`;
+    expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-1/")).toMatchObject({ title: "هدفون", price: null, available: false });
+  });
+});
