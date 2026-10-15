@@ -27,7 +27,7 @@ import { PublicProfilePage, type PublicList, type PublicPerson, type ReceivedGif
 import { sendReceiptToShop } from "../orders";
 import { inviteText } from "../instagram-shops";
 import { areFriends } from "../friends";
-import { isStale, refreshWebProduct } from "../web-shop";
+import { isStale, livePrice } from "../web-shop";
 import { CheckoutPage, HomePage, type ProductShopInfo, OrderPage, ProductPage, ShopPage, ShopsPage, WishlistPublicPage, categoryPath, type FeaturedShop, type OrderView, type ShopCard } from "../views/store";
 import { PAGE, form, intParam, pageParam, siteUrl } from "./helpers";
 
@@ -84,6 +84,13 @@ store.get("/search", (c) => {
   return c.redirect(`/${qs}`, 301);
 });
 
+// The live price of an item from another site (web-shop.ts), asked for by its page after loading.
+store.get("/p/:id{[0-9]+}/live", async (c) => {
+  const r = await livePrice({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, intParam(c, "id"));
+  if (!r) return c.json({ error: "not found" }, 404);
+  return c.json({ ...r, label: r.awaiting ? "قیمت به‌زودی" : r.price.toLocaleString("fa-IR") }, 200, { "Cache-Control": "no-store" });
+});
+
 // The product page lives at /p/<code>; old /p/<id> links move there.
 store.get("/p/:id{[0-9]+}", async (c) => {
   const row = await c.env.DB.prepare("SELECT code FROM products WHERE id = ?").bind(intParam(c, "id")).first<{ code: string }>();
@@ -120,17 +127,17 @@ async function productPage(c: C, id: number) {
       .bind(product.shop_id)
       .first<ProductShopInfo>(),
   ]);
-  // An item from another site (web-shop.ts): its price there is read again now and then.
+  // An item from another site (web-shop.ts): the page shows the saved price at once and, when that's
+  // old, asks for the site's current one right after loading (/p/<id>/live).
   const source = product as unknown as { source_checked_at: string | null };
-  if ((shop as unknown as { is_platform?: number } | null)?.is_platform && isStale(source.source_checked_at)) {
-    c.executionCtx.waitUntil(refreshWebProduct({ db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) }, product.id).catch(() => undefined));
-  }
+  const live = !!(shop as unknown as { is_platform?: number } | null)?.is_platform && isStale(source.source_checked_at);
   const error = c.req.query("err") === "size" ? "لطفاً سایز / رنگ را انتخاب کنید." : c.req.query("pick") ? "لیست ساخته شد؛ حالا سایز / رنگ را انتخاب کنید و به آرزوها اضافه کنید." : undefined;
   const available = await availableByVariant(c.env.DB, product);
   return render(
     c,
     <ProductPage
       user={user}
+      live={live}
       product={product}
       shop={shop ?? { logo_key: "", sales: 0, city: "", courier_enabled: 0, post_enabled: 0 }}
       wishlists={wishlists}

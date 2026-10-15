@@ -374,25 +374,46 @@ export async function repriceWebShop(db: D1Database, s: Settings) {
 }
 
 /** Read the site again: price (with the commission) and whether it's still sold there. */
+/** Keep a copy of a shop's product photo (R2 key, or "" if it can't be fetched). */
+async function keepImage(d: Deps, url: string) {
+  if (!url) return "";
+  const img = await downloadImage(url);
+  if (!img) return "";
+  const key = `p/${randomSlug(16)}.${img.type === "image/png" ? "png" : img.type === "image/webp" ? "webp" : "jpg"}`;
+  await d.images.put(key, img.data, { httpMetadata: { contentType: img.type } });
+  return key;
+}
+
+/**
+ * Read the site again: price (with the commission) and whether it's still sold there. An item added
+ * without the page's data (the wisher typed its name) also gets the page's name and photo then.
+ */
 export async function refreshWebProduct(d: Deps, productId: number) {
   const p = await d.db
-    .prepare("SELECT p.id, p.source_url FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ? AND s.is_platform = 1 AND p.deleted_at IS NULL")
+    .prepare("SELECT p.id, p.source_url, p.image_key FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ? AND s.is_platform = 1 AND p.deleted_at IS NULL")
     .bind(productId)
-    .first<{ id: number; source_url: string }>();
+    .first<{ id: number; source_url: string; image_key: string }>();
   if (!p?.source_url) return null;
   const item = await fetchWebItem(p.source_url);
   if (!item) {
     await d.db.prepare("UPDATE products SET source_checked_at = ? WHERE id = ?").bind(now(), p.id).run();
     return null;
   }
-  if (item.price) {
-    await d.db
-      .prepare("UPDATE products SET source_price = ?, price = ?, awaiting_price = 0, is_active = ?, source_checked_at = ?, updated_at = ? WHERE id = ?")
-      .bind(item.price, retailPrice(item.price, d.settings), item.available ? 1 : 0, now(), now(), p.id)
-      .run();
-  } else {
-    await d.db.prepare("UPDATE products SET is_active = ?, source_checked_at = ? WHERE id = ?").bind(item.available ? 1 : 0, now(), p.id).run();
+  const t = now();
+  const updates: D1PreparedStatement[] = [
+    item.price
+      ? d.db
+          .prepare("UPDATE products SET source_price = ?, price = ?, awaiting_price = 0, is_active = ?, source_checked_at = ?, updated_at = ? WHERE id = ?")
+          .bind(item.price, retailPrice(item.price, d.settings), item.available ? 1 : 0, t, t, p.id)
+      : d.db.prepare("UPDATE products SET is_active = ?, source_checked_at = ? WHERE id = ?").bind(item.available ? 1 : 0, t, p.id),
+  ];
+  if (!p.image_key) {
+    // Added from a typed name: now the page's own name and photo.
+    const image = await keepImage(d, item.image);
+    updates.push(d.db.prepare("UPDATE products SET title = ?, image_key = ? WHERE id = ?").bind(item.title.slice(0, 120), image, p.id));
+    if (image) updates.push(d.db.prepare("INSERT INTO product_images (product_id, image_key, sort) VALUES (?, ?, 0)").bind(p.id, image));
   }
+  await d.db.batch(updates);
   return item;
 }
 
@@ -417,14 +438,7 @@ export async function addWebWish(d: Deps, user: { id: number }, url: string, wis
       (typedTitle.trim() ? { title: typedTitle.trim().slice(0, 120), image: "", price: null, available: true, site: siteName(url), method: "نام از کاربر" } : null);
     if (!item) return { ok: false, error: `اطلاعات این محصول از ${siteName(url) || "این سایت"} خوانده نشد؛ نام محصول را بنویسید تا اضافه شود و قیمتش را تیم ما از همان لینک ثبت کند.`, askTitle: true };
     if (!item.available) return { ok: false, error: `این کالا فعلاً در ${item.site} موجود نیست.` };
-    let image = "";
-    if (item.image) {
-      const img = await downloadImage(item.image);
-      if (img) {
-        image = `p/${randomSlug(16)}.${img.type === "image/png" ? "png" : img.type === "image/webp" ? "webp" : "jpg"}`;
-        await d.images.put(image, img.data, { httpMetadata: { contentType: img.type } });
-      }
-    }
+    const image = await keepImage(d, item.image);
     const t = now();
     product = (await db
       .prepare(
@@ -457,4 +471,25 @@ export async function addWebWish(d: Deps, user: { id: number }, url: string, wis
   if (!fresh.is_active) return { ok: false, error: `این کالا فعلاً در ${siteName(url)} موجود نیست.` };
   await addItem(db, wishlistId, product.id, 1, note.slice(0, 200));
   return { ok: true, productId: product.id, title: fresh.title, priced: !fresh.awaiting_price, site: siteName(url) };
+}
+
+/**
+ * The product page's live price (it loads with the saved one): when that's older than STALE_MS, the
+ * site is read again now. One reader at a time: the check time is claimed first.
+ */
+export async function livePrice(d: Deps, productId: number) {
+  const row = await d.db
+    .prepare("SELECT p.price, p.awaiting_price, p.is_active, p.source_checked_at FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = ? AND s.is_platform = 1 AND p.deleted_at IS NULL")
+    .bind(productId)
+    .first<{ price: number; awaiting_price: number; is_active: number; source_checked_at: string | null }>();
+  if (!row) return null;
+  if (isStale(row.source_checked_at)) {
+    const claim = await d.db
+      .prepare("UPDATE products SET source_checked_at = ? WHERE id = ? AND (source_checked_at IS NULL OR source_checked_at = ?)")
+      .bind(now(), productId, row.source_checked_at)
+      .run();
+    if (claim.meta.changes) await refreshWebProduct(d, productId);
+  }
+  const fresh = (await d.db.prepare("SELECT price, awaiting_price, is_active FROM products WHERE id = ?").bind(productId).first<{ price: number; awaiting_price: number; is_active: number }>())!;
+  return { price: fresh.price, awaiting: !!fresh.awaiting_price, available: !!fresh.is_active, changed: fresh.price !== row.price || fresh.is_active !== row.is_active || fresh.awaiting_price !== row.awaiting_price };
 }

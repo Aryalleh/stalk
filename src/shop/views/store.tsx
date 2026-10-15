@@ -495,6 +495,19 @@ function DesktopGallery(props: { images: string[]; title: string }) {
   );
 }
 
+// The page loads with the saved price; the site's current one comes right after (web-shop.ts livePrice).
+// A new price replaces the shown ones; a change in stock reloads the page (its buttons follow).
+const livePriceScript = (id: number) => `
+(function () {
+  fetch('/p/${id}/live', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (r) {
+    if (!r || !r.changed) return;
+    var shown = document.querySelectorAll('[data-live-price]');
+    if (r.available && !r.awaiting && shown.length && shown[0].textContent.indexOf('به‌زودی') < 0) {
+      shown.forEach(function (el) { el.textContent = r.label; el.classList.add('animate-pulse'); setTimeout(function () { el.classList.remove('animate-pulse'); }, 1500); });
+    } else location.reload();
+  }).catch(function () {});
+})();`;
+
 export function ProductPage(props: {
   user: User | null;
   product: ProductWithShop;
@@ -506,6 +519,8 @@ export function ProductPage(props: {
   available?: Record<string, number> | null;
   added?: string;
   error?: string;
+  /** An item from another site whose saved price is old: ask for the current one after loading. */
+  live?: boolean;
 }) {
   const p = props.product;
   const guide = readSizeGuide(p.size_guide);
@@ -589,7 +604,8 @@ export function ProductPage(props: {
       </div>
       <h1 class="text-2xl font-black text-fg mb-2 leading-tight">{p.title}</h1>
       <div class="flex items-baseline gap-2 flex-wrap">
-        <span class="text-2xl font-black text-brand">{p.awaiting_price ? "قیمت به‌زودی" : fa(p.price)}</span>
+        <span class="text-2xl font-black text-brand" data-live-price>{p.awaiting_price ? "قیمت به‌زودی" : fa(p.price)}</span>
+        {props.live && <script dangerouslySetInnerHTML={{ __html: livePriceScript(p.id) }} />}
         {!p.awaiting_price && <span class="text-xs text-fg/60">تومان</span>}
         {soldOut ? (
           <span class="text-[11px] font-bold text-white bg-red-500/80 px-2 py-0.5 rounded-lg mr-2">ناموجود</span>
@@ -614,7 +630,7 @@ export function ProductPage(props: {
           </div>
           <h1 class="text-3xl lg:text-4xl font-black text-fg mb-5 leading-tight">{p.title}</h1>
           <div class="flex items-baseline gap-3 flex-wrap mb-8">
-            <span class="text-4xl font-black text-brand">{p.awaiting_price ? "قیمت به‌زودی" : fa(p.price)}</span>
+            <span class="text-4xl font-black text-brand" data-live-price>{p.awaiting_price ? "قیمت به‌زودی" : fa(p.price)}</span>
             {!p.awaiting_price && <span class="text-lg text-muted font-bold">تومان</span>}
             {soldOut ? (
               <span class="text-xs font-bold text-white bg-red-500 px-3 py-1 rounded-xl">ناموجود</span>
