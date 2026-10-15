@@ -1328,6 +1328,12 @@ export function AdminWebShopPage(props: { user: User; settings: Settings; shop: 
             <input name="card_number" value={props.shop.card_number} class="ltr" inputmode="numeric" placeholder="۱۶ رقم" />
             <label>نام صاحب کارت</label>
             <input name="card_holder" value={props.shop.card_holder} />
+            <label>آدرس رله برای دیجی‌کالا (اختیاری)</label>
+            <input name="web_relay_url" value={s.web_relay_url} class="ltr" placeholder="https://kadochie.ir/_relay" />
+            <p class="small muted">
+              API دیجی‌کالا به سرورهای خارج (Cloudflare) جواب نمی‌دهد. با نصب دوباره‌ی اسکریپت پروکسی روی سرورتان، مسیر <span class="ltr">/_relay</span> اضافه می‌شود؛ آدرسش
+              را اینجا بگذارید تا قیمت‌ها از طریق همان سرور خوانده شوند (فقط با رمز PROXY_SECRET سایت جواب می‌دهد).
+            </p>
           </div>
         </div>
         <p><button>ذخیره</button></p>

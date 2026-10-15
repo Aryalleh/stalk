@@ -8,7 +8,7 @@ import type { Env } from "./env";
 import { SESSION_COOKIE, assignUsername, isConnected, needsProfile, sessionUser } from "./session";
 import { activeBots, setBaleApiBase, setTelegramApiBase } from "./bale/botapi";
 import { setInstagramApiBase } from "./shop/crm/instagram";
-import { setDigikalaApiBase } from "./shop/web-shop";
+import { setDigikalaApiBase, setRelaySecret } from "./shop/web-shop";
 import { CONNECT_EXEMPT, connect } from "./bale/connect";
 import { appCss } from "./assets";
 import { ensureMigrated } from "./migrate";
@@ -71,6 +71,7 @@ app.use(async (c, next) => {
   setBaleApiBase(c.env.BALE_API_BASE);
   setInstagramApiBase(c.env.INSTAGRAM_API_BASE);
   setDigikalaApiBase(c.env.DIGIKALA_API_BASE);
+  setRelaySecret(c.env.PROXY_SECRET);
   await ensureMigrated(c.env.DB);
   await next();
 });

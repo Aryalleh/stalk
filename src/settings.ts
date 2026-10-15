@@ -67,6 +67,9 @@ export const DEFAULTS = {
   web_fee_fixed: "0",
   web_fee_percent: "0",
   web_post_fee: "300000",
+  // Digikala's product API doesn't answer Cloudflare's servers: read it through the site's own proxy
+  // server (deploy/proxy: <this>/digikala/…, checked with PROXY_SECRET), e.g. https://kadochie.ir/_relay.
+  web_relay_url: "",
   ig_mention_caption:
     "🎁 «{product}» از {shop} در لیست آرزوی کاربران {site_name} است و دوستانشان می‌خواهند برایشان بخرند!\n{shop} عزیز، برای فعال شدن فروش و دریافت مستقیم پول به کارت خودتان، یک پیام به همین صفحه بدهید 💌\n#کادو #لیست_آرزو #هدیه",
   // Analytics (optional): Google Analytics 4 measurement id (G-…) and/or Cloudflare Web Analytics token.
