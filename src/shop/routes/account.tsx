@@ -461,6 +461,50 @@ account.get("/me/link", async (c) => {
   );
 });
 
+// The same over a WebSocket: the page stays put, shows each step, then goes to the result. The page
+// falls back to the plain form post when a WebSocket can't be opened.
+account.get("/me/link/ws", async (c) => {
+  if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.text("WebSocket only", 426);
+  // Only this site's pages (a WebSocket isn't covered by the form CSRF check).
+  if (c.req.header("origin") !== new URL(c.req.url).origin) return c.text("forbidden", 403);
+  const user = currentUser(c);
+  const deps = { db: c.env.DB, images: c.env.IMAGES, settings: c.get("settings"), siteUrl: siteUrl(c) };
+  const lists = await myLists(c);
+  const pair = new WebSocketPair();
+  const [client, server] = Object.values(pair);
+  server.accept();
+  const send = (msg: object) => {
+    try {
+      server.send(JSON.stringify(msg));
+    } catch {
+      // the page went away
+    }
+  };
+  server.addEventListener("message", async (ev) => {
+    let f: Record<string, string> = {};
+    try {
+      f = JSON.parse(String(ev.data));
+    } catch {
+      return send({ error: "درخواست نامعتبر" });
+    }
+    try {
+      const raw = String(f.url ?? "").trim();
+      if (parsePostUrl(raw)) return send({ redirect: `/me/instagram?url=${encodeURIComponent(raw)}${f.wishlist_id ? `&list=${f.wishlist_id}` : ""}` });
+      const url = parseWebUrl(raw);
+      if (!url) return send({ error: "لینک صفحه‌ی محصول را کامل وارد کنید (با https://)." });
+      const list = lists.find((l) => String(l.id) === String(f.wishlist_id)) ?? (lists.length ? lists[0] : await defaultWishlist(c.env.DB, user));
+      const r = await addWebWish(deps, user, url, list.id, String(f.note ?? "").trim(), String(f.title ?? "").trim(), (text) => send({ step: text }));
+      send(r.ok ? { redirect: `/me/link?added=${r.productId}&list=${list.id}` } : { error: r.error, askTitle: !!r.askTitle });
+    } catch (e) {
+      console.error("link ws", e);
+      send({ error: "خطایی پیش آمد؛ دوباره امتحان کنید." });
+    } finally {
+      server.close(1000, "done");
+    }
+  });
+  return new Response(null, { status: 101, webSocket: client });
+});
+
 account.post("/me/link", async (c) => {
   const user = currentUser(c);
   const f = await form(c);

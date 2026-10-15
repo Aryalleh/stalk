@@ -18,6 +18,26 @@ const HEAD_LINKS = <link rel="preload" href="/static/fonts/vazirmatn.woff2" as="
 
 /** Small client helpers used by several pages: copy-to-clipboard, native share, back, PWA install. */
 const HELPERS = `
+// Buttons that send a form show a spinner at once and can't be pressed twice (the page answers
+// next). Not disabled (that would drop the button's own name / value from the form); a form whose
+// onsubmit said no (e.g. confirm() cancelled) is left alone. Back to normal when the page comes back.
+document.addEventListener('submit', function (e) {
+  if (e.defaultPrevented) return;
+  var f = e.target;
+  if (!f || f.hasAttribute('data-no-loading')) return;
+  var b = e.submitter || f.querySelector('button:not([type=button]),input[type=submit]');
+  if (!b) return;
+  if (b.getAttribute('data-loading')) { e.preventDefault(); return; }
+  b.setAttribute('data-loading', '1'); b.setAttribute('aria-busy', 'true');
+  b.style.pointerEvents = 'none'; b.style.opacity = '.75';
+  if (b.tagName === 'BUTTON') b.insertAdjacentHTML('afterbegin', '<i class="fa-solid fa-spinner fa-spin ml-1" data-spin></i>');
+});
+window.addEventListener('pageshow', function () {
+  document.querySelectorAll('[data-loading]').forEach(function (b) {
+    b.removeAttribute('data-loading'); b.removeAttribute('aria-busy'); b.style.pointerEvents = ''; b.style.opacity = '';
+    var s = b.querySelector('[data-spin]'); if (s) s.remove();
+  });
+});
 if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
 // File pickers: show the chosen file name (or how many) next to the button.
 window.updateFilePick = function (input) {

@@ -1505,6 +1505,41 @@ export interface WebAdded {
   list: { id: number; title: string; slug: string } | null;
 }
 
+// Add over a WebSocket (/me/link/ws): the page stays, each step shows, then the result opens. If a
+// WebSocket can't be opened (old browser, a network that blocks it), the form is posted as usual.
+const WEB_ADD_SCRIPT = `(function () {
+  var form = document.getElementById('web-add'); if (!form || !window.WebSocket) return;
+  var box = document.getElementById('web-add-progress'), stepEl = box.querySelector('[data-step]'), err = document.getElementById('web-add-error');
+  var plain = false;
+  form.addEventListener('submit', function (e) {
+    if (plain) return;
+    e.preventDefault();
+    var btn = form.querySelector('button:not([type=button])');
+    var data = {}; new FormData(form).forEach(function (v, k) { data[k] = String(v); });
+    err.style.display = 'none'; box.style.display = ''; stepEl.textContent = 'در حال اتصال…';
+    if (btn) { btn.style.pointerEvents = 'none'; btn.style.opacity = '.6'; }
+    var opened = false, finished = false;
+    var back = function () { box.style.display = 'none'; if (btn) { btn.style.pointerEvents = ''; btn.style.opacity = ''; } };
+    var fallback = function () { if (finished) return; finished = true; plain = true; form.submit(); };
+    var ws;
+    try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/me/link/ws'); } catch (x) { return fallback(); }
+    var timer = setTimeout(function () { if (!opened) { try { ws.close(); } catch (x) {} fallback(); } }, 5000);
+    ws.onopen = function () { opened = true; clearTimeout(timer); ws.send(JSON.stringify(data)); };
+    ws.onmessage = function (m) {
+      var r = {}; try { r = JSON.parse(m.data); } catch (x) {}
+      if (r.step) stepEl.textContent = r.step;
+      if (r.redirect) { finished = true; stepEl.textContent = '✓'; location.href = r.redirect; }
+      if (r.error) {
+        finished = true; back();
+        err.textContent = r.error; err.style.display = '';
+        if (r.askTitle) { var row = form.querySelector('[data-title-row]'); row.style.display = ''; var t = row.querySelector('input'); t.required = true; t.focus(); }
+      }
+    };
+    ws.onerror = function () { if (!opened) fallback(); };
+    ws.onclose = function () { if (!finished) { if (opened) { finished = true; back(); err.textContent = 'ارتباط قطع شد؛ دوباره امتحان کنید.'; err.style.display = ''; } else fallback(); } };
+  });
+})();`;
+
 /** /me/link: a product link from Digikala or any other shop → a wish the site's team buys and sends. */
 export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: Record<string, string>; postFee: number; added?: WebAdded; errors?: string[]; askTitle?: boolean }) {
   const v = props.values;
@@ -1536,16 +1571,15 @@ export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: R
         </div>
       )}
       <Errors errors={props.errors} />
-      <form method="post" action="/me/link" class="card">
+      <div id="web-add-error" class="errbox" style="display:none"></div>
+      <form method="post" action="/me/link" class="card" id="web-add">
         <label>لینک محصول</label>
         <input name="url" value={v.url ?? ""} class="ltr" inputmode="url" placeholder="https://www.digikala.com/product/dkp-…" required />
-        {(props.askTitle || v.title) && (
-          <>
-            <label>نام محصول</label>
-            <input name="title" value={v.title ?? ""} maxlength={120} required placeholder="مثلاً: هدفون بی‌سیم سونی مدل…" />
-            <p class="small muted" style="margin-top:4px">قیمت را تیم ما از همین لینک می‌خواند و ثبت می‌کند؛ تا آن موقع «قیمت به‌زودی» نشان داده می‌شود.</p>
-          </>
-        )}
+        <div data-title-row style={props.askTitle || v.title ? "" : "display:none"}>
+          <label>نام محصول</label>
+          <input name="title" value={v.title ?? ""} maxlength={120} required={!!(props.askTitle || v.title)} placeholder="مثلاً: هدفون بی‌سیم سونی مدل…" />
+          <p class="small muted" style="margin-top:4px">قیمت را تیم ما از همین لینک می‌خواند و ثبت می‌کند؛ تا آن موقع «قیمت به‌زودی» نشان داده می‌شود.</p>
+        </div>
         <label>به کدام لیست؟</label>
         {props.wishlists.length ? (
           <select name="wishlist_id">
@@ -1557,7 +1591,11 @@ export function WebAddPage(props: { user: User; wishlists: Wishlist[]; values: R
         <label>یادداشت (اختیاری؛ مثلاً رنگ یا سایز)</label>
         <input name="note" value={v.note ?? ""} maxlength={200} />
         <p><button><i class="fa-solid fa-plus ml-1"></i> افزودن به لیست</button></p>
+        <div id="web-add-progress" class="small" style="display:none;padding:10px 12px;border-radius:12px;background:rgb(var(--c-brand) / .08)">
+          <i class="fa-solid fa-spinner fa-spin ml-1"></i> <span data-step>در حال اتصال…</span>
+        </div>
       </form>
+      <script dangerouslySetInnerHTML={{ __html: WEB_ADD_SCRIPT }} />
       <InstagramCta compact />
     </Layout>
   );

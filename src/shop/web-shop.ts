@@ -427,20 +427,33 @@ export const isStale = (checkedAt: string | null) => !checkedAt || Date.now() - 
 export type WebWishResult = { ok: true; productId: number; title: string; priced: boolean; site: string } | { ok: false; error: string; askTitle?: boolean };
 
 /** Put a product from another site on a wishlist (the same link is the same product for everyone). */
-export async function addWebWish(d: Deps, user: { id: number }, url: string, wishlistId: number, note = "", typedTitle = ""): Promise<WebWishResult> {
+export async function addWebWish(
+  d: Deps,
+  user: { id: number },
+  url: string,
+  wishlistId: number,
+  note = "",
+  typedTitle = "",
+  step: (text: string) => void = () => {}, // progress, for a page following along (WebSocket)
+): Promise<WebWishResult> {
   const db = d.db;
   const shop = await webShop(db, d.settings);
   let product = await db.prepare("SELECT id, title, awaiting_price, source_checked_at FROM products WHERE shop_id = ? AND source_url = ? AND deleted_at IS NULL").bind(shop.id, url).first<{ id: number; title: string; awaiting_price: number; source_checked_at: string | null }>();
   if (product) {
-    if (isStale(product.source_checked_at)) await refreshWebProduct(d, product.id);
+    if (isStale(product.source_checked_at)) {
+      step(`به‌روزرسانی قیمت از ${siteName(url)}…`);
+      await refreshWebProduct(d, product.id);
+    }
   } else {
     // Some shops can't be read from here (Digikala answers only its own visitors): with the name the
     // wisher types, the item waits for the admins to price it from the link.
+    step(`در حال خواندن صفحه‌ی محصول از ${siteName(url)}…`);
     const item =
       (await fetchWebItem(url)) ??
       (typedTitle.trim() ? { title: typedTitle.trim().slice(0, 120), image: "", price: null, available: true, site: siteName(url), method: "نام از کاربر" } : null);
     if (!item) return { ok: false, error: `اطلاعات این محصول از ${siteName(url) || "این سایت"} خوانده نشد؛ نام محصول را بنویسید تا اضافه شود و قیمتش را تیم ما از همان لینک ثبت کند.`, askTitle: true };
     if (!item.available) return { ok: false, error: `این کالا فعلاً در ${item.site} موجود نیست.` };
+    step(item.price ? `قیمت خوانده شد؛ ذخیره‌ی عکس محصول…` : "ذخیره‌ی عکس محصول…");
     const image = await keepImage(d, item.image);
     const t = now();
     product = (await db
@@ -470,6 +483,7 @@ export async function addWebWish(d: Deps, user: { id: number }, url: string, wis
       await notifyAdmins(db, d.settings, `🛒 کالای تازه از ${item.site} بدون قیمت خوانده‌شده: «${item.title}»\n${url}\nقیمت را در پنل «خرید از سایت‌ها» بگذارید: ${d.siteUrl}/admin/web-shop`).catch(() => undefined);
     }
   }
+  step("افزودن به لیست آرزو…");
   const fresh = (await db.prepare("SELECT title, awaiting_price, is_active FROM products WHERE id = ?").bind(product.id).first<{ title: string; awaiting_price: number; is_active: number }>())!;
   if (!fresh.is_active) return { ok: false, error: `این کالا فعلاً در ${siteName(url)} موجود نیست.` };
   await addItem(db, wishlistId, product.id, 1, note.slice(0, 200));
