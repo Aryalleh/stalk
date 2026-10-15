@@ -78,3 +78,16 @@ describe("Digikala's page for search engines", () => {
     expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-1/")).toMatchObject({ title: "هدفون", price: null, available: false });
   });
 });
+
+describe("the price shown on Digikala's page", () => {
+  it("is read from price-container (toman, Persian digits) when JSON-LD says 0", () => {
+    const html =
+      `<script type="application/ld+json">{"@type":"Product","name":"ماوس بی‌سیم","offers":{"@type":"Offer","priceCurrency":"IRR","price":0}}</script>` +
+      `<div class="x"><span>۱,۲۰۰,۰۰۰</span><div data-theme-animation="price-container">۸۰۹,۹۰۰</div><div data-theme-animation="price-container">۹۹۹,۰۰۰</div></div>`;
+    expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-2/")).toMatchObject({ title: "ماوس بی‌سیم", price: 809900, available: true, method: "تگ قیمت صفحه (price-container)" });
+  });
+  it("Latin digits and nested tags too", () => {
+    const html = `<title>کیف</title><div data-theme-animation="price-container"><span>1,250,000</span></div>`;
+    expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-3/")?.price).toBe(1250000);
+  });
+});

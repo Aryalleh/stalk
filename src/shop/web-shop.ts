@@ -4,6 +4,7 @@
 // web_fee_fixed / web_fee_percent), and the post fee (web_post_fee) is charged as the shop's post.
 // Buyers pay to the admins' card (this shop's card); the admins buy it there and send it.
 import { notifyAdmins } from "../bale/botapi";
+import { toLatinDigits } from "../../lib/normalize";
 import type { Settings } from "../settings";
 import { now, productCode, type Shop } from "./db";
 import { addItem } from "./ig-wish";
@@ -202,6 +203,17 @@ function nextDataProduct(html: string): { title: string; price: number | null; i
   return null;
 }
 
+/**
+ * The price as the shop shows it on the page (toman, often in Persian digits): Digikala's
+ * <div data-theme-animation="price-container">۸۰۹,۹۰۰</div>. The first one is the product's own price.
+ */
+function shownPrice(html: string) {
+  const m = html.match(/data-theme-animation=["']price-container["'][^>]*>([\s\S]{0,200}?)<\/(?:div|span)>/i);
+  if (!m) return null;
+  const digits = toLatinDigits(m[1].replace(/<[^>]+>/g, "")).replace(/[^\d]/g, "");
+  return digits ? sane(Number(digits)) : null;
+}
+
 /** schema.org microdata: <… itemprop="price" content="…"> and itemprop="priceCurrency". */
 function microdataPrice(html: string) {
   const attr = (prop: string) =>
@@ -235,6 +247,7 @@ export function parseProductHtml(html: string, url: string): WebItem | null {
     }
   };
   tryPrice(sane(toToman(pick(offer, ["price", "lowPrice", "highPrice"]), offer?.priceCurrency)), "JSON-LD");
+  tryPrice(shownPrice(html), "تگ قیمت صفحه (price-container)");
   tryPrice(sane(toToman(meta(html, "product:price:amount") || meta(html, "og:price:amount"), meta(html, "product:price:currency") || meta(html, "og:price:currency"))), "meta product:price");
   tryPrice(microdataPrice(html), "microdata");
   tryPrice(next?.price ?? null, "__NEXT_DATA__");
