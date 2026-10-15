@@ -1422,9 +1422,10 @@ export interface AdminAnonParty {
 }
 
 export interface AdminAnonThread {
-  root: number;
-  from: AdminAnonParty;
-  to: AdminAnonParty;
+  pair: string;
+  url: string;
+  a: AdminAnonParty;
+  b: AdminAnonParty;
   count: number;
   last: number;
   body: string;
@@ -1433,6 +1434,7 @@ export interface AdminAnonThread {
 
 export interface AdminAnonMsg {
   id: number;
+  root: number; // its anonymous conversation (who started it is the anonymous one there)
   from: AdminAnonParty;
   to: AdminAnonParty;
   body: string;
@@ -1493,7 +1495,7 @@ export function AdminAnonPage(props: { user: User; q: string; threads: AdminAnon
     <AdminShell title="پیام‌های ناشناس" user={props.user} on="/admin/anon">
       <h1>پیام‌های ناشناس</h1>
       <p class="muted small" style="margin-top:-6px;line-height:1.9">
-        گفتگوهای ناشناس بین کاربران (بله، تلگرام و سایت). برای کاربران ناشناس‌اند، اما اینجا فرستنده‌ی واقعی هر پیام دیده می‌شود؛ فقط برای بررسی گزارش‌ها و تخلف‌ها.
+        پیام‌های ناشناس بین هر دو نفر (بله، تلگرام و سایت)، همه‌ی پیام‌های رد و بدل شده‌ی آن دو در یک گفتگو. برای کاربران ناشناس‌اند، اما اینجا فرستنده‌ی واقعی هر پیام دیده می‌شود؛ فقط برای بررسی گزارش‌ها و تخلف‌ها.
       </p>
       <form method="get" action="/admin/anon" class="row mb-3">
         <input name="q" value={props.q} placeholder="جستجو: نام، موبایل، نام کاربری، @یوزرنیم یا شناسه تلگرام/بله، یا متن پیام" class="flex-1" />
@@ -1504,19 +1506,18 @@ export function AdminAnonPage(props: { user: User; q: string; threads: AdminAnon
           <p class="muted">گفتگویی پیدا نشد.</p>
         ) : (
           <table>
-            <thead><tr><th>#</th><th>شروع‌کننده (ناشناس)</th><th>گیرنده</th><th>پیام‌ها</th><th>آخرین پیام</th><th></th></tr></thead>
+            <thead><tr><th>طرف اول</th><th>طرف دوم</th><th>پیام‌ها</th><th>آخرین پیام</th><th></th></tr></thead>
             <tbody>
               {props.threads.map((t) => (
-                <tr data-admin-thread={t.root}>
-                  <td class="dt">{t.root}</td>
-                  <td><AnonWho p={t.from} /></td>
-                  <td><AnonWho p={t.to} /></td>
+                <tr data-admin-pair={t.pair}>
+                  <td><AnonWho p={t.a} /></td>
+                  <td><AnonWho p={t.b} /></td>
                   <td>{t.count.toLocaleString("fa-IR")}</td>
                   <td class="muted small" style="max-width:260px">
                     <span class="dt">{anonWhen(t.last)}</span>
                     <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{t.body || "(غیرمتنی)"}</div>
                   </td>
-                  <td><a href={`/admin/anon/${t.root}`} class="small">مشاهده گفتگو</a></td>
+                  <td><a href={t.url} class="small">مشاهده گفتگو</a></td>
                 </tr>
               ))}
             </tbody>
@@ -1527,30 +1528,65 @@ export function AdminAnonPage(props: { user: User; q: string; threads: AdminAnon
   );
 }
 
-export function AdminAnonThreadPage(props: { user: User; root: number; messages: AdminAnonMsg[] }) {
-  const starter = props.messages[0]?.from;
-  const same = (a: AdminAnonParty, b?: AdminAnonParty) => !!b && (a.user_id ? a.user_id === b.user_id : a.kind === b.kind && a.chat === b.chat);
+export function AdminAnonThreadPage(props: {
+  user: User;
+  a: AdminAnonParty;
+  b: AdminAnonParty;
+  aChats: AdminAnonParty[];
+  bChats: AdminAnonParty[];
+  aKey: string;
+  messages: AdminAnonMsg[];
+}) {
+  const side = (p: AdminAnonParty, chats: AdminAnonParty[]) => (
+    <span style="display:block" data-admin-side>
+      {p.user_id ? (
+        <>
+          <a href={`/admin/users?q=${encodeURIComponent(p.phone ?? "")}`}>{p.name}</a>
+          <div class="small muted dt">{p.phone}{p.username ? ` · @${p.username}` : ""}</div>
+        </>
+      ) : (
+        <b>بدون حساب در سایت</b>
+      )}
+      {chats.length ? chats.map((ch) => <Messenger p={ch} />) : <div class="small muted">بات وصل نیست</div>}
+    </span>
+  );
+  const isA = (p: AdminAnonParty) => (p.user_id ? `u${p.user_id}` : `${p.kind}:${p.chat}`) === props.aKey;
+  const label = (p: AdminAnonParty) => p.name || p.m_name || (p.m_username ? `@${p.m_username}` : p.m_id || p.chat);
   return (
-    <AdminShell title={`گفتگوی ناشناس #${props.root}`} user={props.user} on="/admin/anon">
+    <AdminShell title="گفتگوی ناشناس" user={props.user} on="/admin/anon">
       <p class="small"><a href="/admin/anon">→ همه گفتگوها</a></p>
-      <h1>گفتگوی ناشناس #{props.root}</h1>
+      <h1>گفتگوی ناشناس</h1>
+      <div class="two" style="margin-bottom:12px">
+        <div class="card" style="background:#f0f9ff"><div class="small muted">طرف اول (راست)</div>{side(props.a, props.aChats)}</div>
+        <div class="card" style="background:#f8fafc"><div class="small muted">طرف دوم (چپ)</div>{side(props.b, props.bChats)}</div>
+      </div>
       <div class="card">
+        <p class="small muted" style="margin-top:0">{props.messages.length.toLocaleString("fa-IR")} پیام، به ترتیب زمان</p>
         <div class="space-y-2" data-chat>
           {props.messages.map((m) => {
-            const left = same(m.from, starter);
+            const right = isA(m.from);
             return (
-              <div class={`flex ${left ? "justify-start" : "justify-end"}`}>
-                <div class={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${left ? "bg-sky-50 border border-sky-100" : "bg-slate-50 border border-slate-200"}`} data-admin-msg={m.id}>
-                  <div class="small" style="margin-bottom:4px">
-                    <AnonWho p={m.from} />
+              <>
+                {m.id === m.root && (
+                  <div class="small muted" style="text-align:center;margin:10px 0 4px" data-admin-start={m.root}>
+                    — پیام ناشناس تازه از {label(m.from)} به {label(m.to)} —
                   </div>
-                  <div style="white-space:pre-wrap;word-break:break-word">{m.body || <i class="muted">(پیام غیرمتنی)</i>}</div>
-                  <div class="small muted dt" style="margin-top:4px">
-                    {anonWhen(m.created_at)} · از {KIND_LABEL[m.from.kind] ?? m.from.kind}
-                    {m.landed ? ` · رسید در ${m.landed.split(",").map((k) => KIND_LABEL[k] ?? k).join("، ")}` : " · فقط در سایت"}
+                )}
+                <div class={`flex ${right ? "justify-start" : "justify-end"}`}>
+                  <div class={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${right ? "bg-sky-50 border border-sky-100" : "bg-slate-50 border border-slate-200"}`} data-admin-msg={m.id}>
+                    <div class="small" style="margin-bottom:4px">
+                      <b>{label(m.from)}</b>
+                      <Messenger p={m.from} />
+                    </div>
+                    <div style="white-space:pre-wrap;word-break:break-word">{m.body || <i class="muted">(پیام غیرمتنی)</i>}</div>
+                    <div class="small muted dt" style="margin-top:4px">
+                      {anonWhen(m.created_at)}
+                      {m.reply_to ? " · پاسخ" : ""}
+                      {m.landed ? ` · رسید در ${m.landed.split(",").map((k) => KIND_LABEL[k] ?? k).join("، ")}` : " · فقط در سایت"}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </>
             );
           })}
         </div>

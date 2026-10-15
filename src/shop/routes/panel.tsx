@@ -1093,39 +1093,90 @@ const anonTo = (r: AnonDbRow): AdminAnonParty => ({
   m_name: r.t_mname, m_username: r.t_muser, m_id: r.t_muid || (r.to_kind === "web" ? "" : r.to_chat),
 });
 
+/** A side of a pair (migrations/0043): its account, or its chat when it has none. */
+const sideKey = (p: AdminAnonParty) => (p.user_id ? `u${p.user_id}` : `${p.kind}:${p.chat}`);
+const pairUrl = (pair: string) => `/admin/anon/c?p=${encodeURIComponent(pair)}`;
+
+// Every pair of people who exchanged anonymous messages, the latest first.
 admin.get("/admin/anon", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   const like = `%${q}%`;
   const filter = q
-    ? `AND EXISTS (SELECT 1 FROM anon_messages x LEFT JOIN users u ON u.id = x.from_user_id OR u.id = x.recipient_id
-         WHERE x.root_id = m.id AND (x.body LIKE ?1 OR u.phone LIKE ?1 OR u.username LIKE ?1 OR u.name LIKE ?1 OR x.from_chat = ?2 OR x.to_chat = ?2
+    ? `WHERE pair IN (SELECT x.pair FROM anon_messages x LEFT JOIN users u ON u.id = x.from_user_id OR u.id = x.recipient_id
+         WHERE x.body LIKE ?1 OR u.phone LIKE ?1 OR u.username LIKE ?1 OR u.name LIKE ?1 OR x.from_chat = ?2 OR x.to_chat = ?2
            OR x.from_name LIKE ?1 OR x.from_username LIKE ?3 OR x.from_uid = ?2
            OR EXISTS (SELECT 1 FROM bot_profiles b WHERE ((b.kind = x.from_kind AND b.chat = x.from_chat) OR (b.kind = x.to_kind AND b.chat = x.to_chat))
-                      AND (b.user_id = ?2 OR b.username LIKE ?3 OR (b.first_name || ' ' || b.last_name) LIKE ?1))))`
+                      AND (b.user_id = ?2 OR b.username LIKE ?3 OR (b.first_name || ' ' || b.last_name) LIKE ?1)))`
     : "";
-  const { results } = await c.env.DB.prepare(
-    `SELECT ${ANON_COLS}, (SELECT COUNT(*) FROM anon_messages x WHERE x.root_id = m.id) AS n,
-            (SELECT MAX(created_at) FROM anon_messages x WHERE x.root_id = m.id) AS last,
-            (SELECT body FROM anon_messages x WHERE x.root_id = m.id ORDER BY x.id DESC LIMIT 1) AS last_body
-     ${ANON_JOIN} WHERE m.root_id = m.id ${filter} ORDER BY last DESC LIMIT 200`,
+  const { results: pairs } = await c.env.DB.prepare(
+    `SELECT pair, COUNT(*) AS n, MAX(created_at) AS last, MAX(id) AS last_id FROM anon_messages ${filter} GROUP BY pair ORDER BY last DESC LIMIT 200`,
   )
     .bind(...(q ? [like, q, q.replace(/^@/, "")] : []))
-    .all<AnonDbRow & { n: number; last: number; last_body: string }>();
-  const threads: AdminAnonThread[] = results.map((r) => ({ root: r.id, from: anonFrom(r), to: anonTo(r), count: r.n, last: r.last, body: r.last_body }));
+    .all<{ pair: string; n: number; last: number; last_id: number }>();
+  const rows = pairs.length
+    ? (
+        await c.env.DB.prepare(`SELECT ${ANON_COLS} ${ANON_JOIN} WHERE m.id IN (${pairs.map(() => "?").join(",")})`)
+          .bind(...pairs.map((p) => p.last_id))
+          .all<AnonDbRow>()
+      ).results
+    : [];
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const threads: AdminAnonThread[] = pairs.flatMap((p) => {
+    const r = byId.get(p.last_id);
+    if (!r) return [];
+    const [x, y] = [anonFrom(r), anonTo(r)];
+    const first = p.pair.split("|")[0];
+    const [a, b] = sideKey(x) === first ? [x, y] : [y, x];
+    return [{ pair: p.pair, url: pairUrl(p.pair), a, b, count: p.n, last: p.last, body: r.body }];
+  });
   return render(c, <AdminAnonPage user={currentUser(c)} q={q} threads={threads} />);
 });
 
-admin.get("/admin/anon/:root{[0-9]+}", async (c) => {
-  const root = intParam(c, "root");
+// Everything two people sent each other anonymously, in both directions, in time order.
+admin.get("/admin/anon/c", async (c) => {
+  const pair = c.req.query("p") ?? "";
   const { results } = await c.env.DB.prepare(
     `SELECT ${ANON_COLS}, (SELECT GROUP_CONCAT(DISTINCT l.kind) FROM anon_landings l WHERE l.message_id = m.id) AS landed
-     ${ANON_JOIN} WHERE m.root_id = ? ORDER BY m.id`,
+     ${ANON_JOIN} WHERE m.pair = ? ORDER BY m.created_at, m.id LIMIT 2000`,
   )
-    .bind(root)
+    .bind(pair)
     .all<AnonDbRow & { landed: string | null }>();
   if (!results.length) return c.notFound();
-  const messages: AdminAnonMsg[] = results.map((r) => ({ id: r.id, from: anonFrom(r), to: anonTo(r), body: r.body, created_at: r.created_at, landed: r.landed ?? "", reply_to: r.reply_to }));
-  return render(c, <AdminAnonThreadPage user={currentUser(c)} root={root} messages={messages} />);
+  const messages: AdminAnonMsg[] = results.map((r) => ({
+    id: r.id, root: r.root_id, from: anonFrom(r), to: anonTo(r), body: r.body, created_at: r.created_at, landed: r.landed ?? "", reply_to: r.reply_to,
+  }));
+  // Each side as seen in its latest message (its current names).
+  const first = pair.split("|")[0];
+  const latest = (key: string) => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (sideKey(m.from) === key) return m.from;
+      if (sideKey(m.to) === key) return m.to;
+    }
+    return messages[0].from;
+  };
+  const a = latest(first);
+  const b = latest(pair.split("|")[1] ?? "");
+  // An account's every messenger (name, @username, id), not only the one in its latest message.
+  const chatsOf = async (p: AdminAnonParty): Promise<AdminAnonParty[]> => {
+    if (!p.user_id) return [p];
+    const u = await c.env.DB.prepare("SELECT bale_chat_id, telegram_chat_id FROM users WHERE id = ?").bind(p.user_id).first<{ bale_chat_id: string; telegram_chat_id: string }>();
+    const out: AdminAnonParty[] = [];
+    for (const [kind, chat] of [["bale", u?.bale_chat_id], ["telegram", u?.telegram_chat_id]] as const) {
+      if (!chat) continue;
+      const bp = await c.env.DB.prepare("SELECT user_id, first_name, last_name, username FROM bot_profiles WHERE kind = ? AND chat = ?").bind(kind, chat).first<{ user_id: string; first_name: string; last_name: string; username: string }>();
+      out.push({ ...p, kind, chat, m_name: bp ? [bp.first_name, bp.last_name].filter(Boolean).join(" ") : "", m_username: bp?.username ?? "", m_id: bp?.user_id || chat });
+    }
+    return out;
+  };
+  const [aChats, bChats] = await Promise.all([chatsOf(a), chatsOf(b)]);
+  return render(c, <AdminAnonThreadPage user={currentUser(c)} a={a} b={b} aChats={aChats} bChats={bChats} aKey={first} messages={messages} />);
+});
+
+// Older links (reports name a conversation's first message): the pair it belongs to.
+admin.get("/admin/anon/:root{[0-9]+}", async (c) => {
+  const row = await c.env.DB.prepare("SELECT pair FROM anon_messages WHERE id = ? OR root_id = ? ORDER BY id LIMIT 1").bind(intParam(c, "root"), intParam(c, "root")).first<{ pair: string }>();
+  return row ? c.redirect(pairUrl(row.pair)) : c.notFound();
 });
 
 admin.get("/admin/web-shop", async (c) => {
