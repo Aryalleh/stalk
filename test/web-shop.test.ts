@@ -91,3 +91,32 @@ describe("the price shown on Digikala's page", () => {
     expect(parseProductHtml(html, "https://www.digikala.com/product/dkp-3/")?.price).toBe(1250000);
   });
 });
+
+describe("Digikala's real JSON-LD (as Googlebot gets it)", () => {
+  // dkp-4580513, out of stock at the time.
+  const ld = (offers: object) =>
+    `<script type="application/ld+json">${JSON.stringify({
+      "@type": "Product",
+      "@context": "https://www.schema.org",
+      name: "تاپ زنانه مدل ha178",
+      alternateName: "",
+      image: [
+        "https://dkstatics-public.digikala.com/digikala-products/e715387a7a8033faa2cadd709d6d7856d5e2eca1_1614534422.jpg?x-oss-process=image/resize,h_1600/quality,q_80",
+        "https://dkstatics-public.digikala.com/digikala-products/3752b50540a826b75cf442a581efdcf84f752d8a_1614534432.jpg?x-oss-process=image/resize,h_1600/quality,q_80",
+      ],
+      mpn: 4580513,
+      sku: 4580513,
+      brand: { "@type": "Brand", name: "متفرقه" },
+      aggregateRating: { "@type": "AggregateRating", ratingValue: 3, reviewCount: 2 },
+      offers,
+    })}</script>`;
+  it("out of stock: name and photo, not available", () => {
+    const r = parseProductHtml(ld({ "@type": "Offer", priceCurrency: "IRR", price: 0, itemCondition: "https://schema.org/NewCondition", availability: "https://schema.org/OutOfStock" }), "https://www.digikala.com/product/dkp-4580513/");
+    expect(r).toMatchObject({ title: "تاپ زنانه مدل ha178", price: null, available: false, site: "دیجی‌کالا" });
+    expect(r?.image).toContain("e715387a7a8033faa2cadd709d6d7856d5e2eca1");
+  });
+  it("in stock: the price in rial becomes toman", () => {
+    const r = parseProductHtml(ld({ "@type": "Offer", priceCurrency: "IRR", price: 8099000, availability: "https://schema.org/InStock" }), "https://www.digikala.com/product/dkp-4580513/");
+    expect(r).toMatchObject({ price: 809900, available: true, method: "JSON-LD" });
+  });
+});
