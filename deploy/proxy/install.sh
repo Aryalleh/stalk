@@ -54,25 +54,6 @@ if command -v nginx >/dev/null; then
     set \$worker_host $WORKER;
     client_max_body_size 40m;
     client_body_timeout 300s;
-    # Relay for the site's server-side reads of Digikala's product API (it doesn't answer Cloudflare's
-    # servers): only with the site's secret, and without anything that says who's really asking.
-    location /_relay/digikala/ {
-        if (\$http_x_proxy_secret != \"$SECRET\") { return 403; }
-        set \$dk_host api.digikala.com;
-        rewrite ^/_relay/digikala/(.*)\$ /\$1 break;
-        proxy_pass https://\$dk_host;
-        proxy_ssl_server_name on;
-        proxy_set_header Host api.digikala.com;
-        proxy_set_header X-Proxy-Secret \"\";
-        proxy_set_header X-Forwarded-For \"\";
-        proxy_set_header X-Real-IP \"\";
-        proxy_set_header Cf-Worker \"\";
-        proxy_set_header Cf-Connecting-Ip \"\";
-        proxy_set_header Cdn-Loop \"\";
-        proxy_set_header Ar-Real-Ip \"\";
-        proxy_hide_header Set-Cookie;
-        add_header Cache-Control "no-store" always;
-    }
     location / {
         proxy_pass https://\$worker_host;
         proxy_http_version 1.1;
@@ -157,37 +138,8 @@ NGINX
 else
   echo "==> Caddy"
   command -v caddy >/dev/null || apt_install caddy
-  # Relay for the site's server-side reads of Digikala's product API (it doesn't answer Cloudflare's
-  # servers): only with the site's secret, and without anything that says who's really asking.
-  RELAY="	handle_path /_relay/digikala/* {
-		@site header X-Proxy-Secret $SECRET
-		handle @site {
-			reverse_proxy https://api.digikala.com {
-				header_up Host api.digikala.com
-				header_up -X-Proxy-Secret
-				header_up -X-Forwarded-For
-				header_up -X-Forwarded-Proto
-				header_up -X-Forwarded-Host
-				header_up -X-Real-Ip
-				header_up -Cf-Worker
-				header_up -Cf-Connecting-Ip
-				header_up -Cdn-Loop
-				header_up -Ar-Real-Ip
-				header_down -Set-Cookie
-				header_down Cache-Control no-store
-				transport http {
-					tls_server_name api.digikala.com
-					dial_timeout 15s
-				}
-			}
-		}
-		handle {
-			respond 403
-		}
-	}"
   cat >/etc/caddy/Caddyfile <<CADDY
 $DOMAIN {
-$RELAY
 	reverse_proxy https://$WORKER {
 		header_up Host $WORKER
 		header_up X-Forwarded-Host {host}
@@ -212,7 +164,6 @@ http://:$HTTP_PORT {
 		https https
 		default http
 	}
-$RELAY
 	reverse_proxy https://$WORKER {
 		header_up Host $WORKER
 		header_up X-Forwarded-Host {hostport}

@@ -1092,7 +1092,6 @@ admin.post("/admin/web-shop/settings", async (c) => {
     web_post_fee: num(f.web_post_fee, 100_000_000),
     web_fee_fixed: num(f.web_fee_fixed, 100_000_000),
     web_fee_percent: num(f.web_fee_percent, 100),
-    web_relay_url: /^https?:\/\/[^\s]+$/i.test((f.web_relay_url ?? "").trim()) ? (f.web_relay_url ?? "").trim().replace(/\/+$/, "") : "",
   };
   await saveSiteSettings(c.env.DB, values);
   const s = { ...c.get("settings"), ...values };
@@ -1124,12 +1123,8 @@ admin.post("/admin/web-shop/refresh", async (c) => {
 admin.post("/admin/web-shop/test", async (c) => {
   const url = parseWebUrl((await form(c)).url ?? "");
   if (!url) return webBack(c, "لینک صفحه‌ی محصول را کامل وارد کنید.", false);
-  const relay = c.get("settings").web_relay_url;
-  const item = await fetchWebItem(url, relay);
-  if (!item) {
-    const hint = /digikala|digistyle/.test(url) && !relay ? " دیجی‌کالا به سرورهای Cloudflare جواب نمی‌دهد؛ «آدرس رله» را تنظیم کنید." : "";
-    return webBack(c, `از ${siteName(url)} چیزی خوانده نشد (سایت جواب نداد یا صفحه‌ی محصول نبود).${hint}`, false);
-  }
+  const item = await fetchWebItem(url);
+  if (!item) return webBack(c, `از ${siteName(url)} چیزی خوانده نشد (سایت جواب نداد یا صفحه‌ی محصول نبود).`, false);
   const s = c.get("settings");
   return webBack(
     c,

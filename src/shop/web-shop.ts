@@ -17,12 +17,6 @@ export function setDigikalaApiBase(base: string | undefined) {
   if (base) digikalaBase = base.replace(/\/$/, "");
 }
 
-// The proxy server's secret (env PROXY_SECRET): its relay (setting web_relay_url) only answers with it.
-let relaySecret = "";
-export function setRelaySecret(secret: string | undefined) {
-  relaySecret = secret ?? "";
-}
-
 export interface WebItem {
   title: string;
   image: string;
@@ -97,12 +91,8 @@ export function retailPrice(source: number, s: Settings) {
 
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36";
 
-async function fetchDigikala(id: string, relay = ""): Promise<WebItem | null> {
-  const base = relay ? `${relay.replace(/\/$/, "")}/digikala` : digikalaBase;
-  const res = await fetch(`${base}/v2/product/${id}/`, {
-    headers: { "User-Agent": UA, Accept: "application/json", ...(relay && relaySecret ? { "X-Proxy-Secret": relaySecret } : {}) },
-    signal: AbortSignal.timeout(12000),
-  });
+async function fetchDigikala(id: string): Promise<WebItem | null> {
+  const res = await fetch(`${digikalaBase}/v2/product/${id}/`, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(12000) });
   if (!res.ok) return null;
   const d = (await res.json().catch(() => null)) as {
     data?: { product?: { title_fa?: string; title_en?: string; status?: string; images?: { main?: { url?: string[] } }; default_variant?: { price?: { selling_price?: number } } | unknown[] } };
@@ -117,7 +107,7 @@ async function fetchDigikala(id: string, relay = ""): Promise<WebItem | null> {
     price: rial ? Math.round(rial / 10) : null, // Digikala prices are in rial
     available: p.status === "marketable" && !!rial,
     site: SITES["digikala.com"],
-    method: relay ? "API دیجی‌کالا (از طریق رله)" : "API دیجی‌کالا",
+    method: "API دیجی‌کالا",
   };
 }
 
@@ -273,13 +263,13 @@ async function fetchPage(url: string): Promise<WebItem | null> {
 }
 
 /** Read a product page: Digikala / Digistyle through their product API, any other shop from the page's data. */
-export async function fetchWebItem(url: string, relay = ""): Promise<WebItem | null> {
+export async function fetchWebItem(url: string): Promise<WebItem | null> {
   try {
     // Digikala / Digistyle: their product API; if that's out of reach, the page itself.
     const dk = digikalaId(url);
     if (dk) {
       // The API is where the product is (its pages are an empty app shell); the page only if it has a price.
-      const viaApi = await fetchDigikala(dk, relay).catch(() => null);
+      const viaApi = await fetchDigikala(dk).catch(() => null);
       if (viaApi?.price || viaApi?.available === false) return viaApi;
       const page = await fetchPage(url).catch(() => null);
       return page?.price ? page : viaApi;
@@ -335,7 +325,7 @@ export async function refreshWebProduct(d: Deps, productId: number) {
     .bind(productId)
     .first<{ id: number; source_url: string }>();
   if (!p?.source_url) return null;
-  const item = await fetchWebItem(p.source_url, d.settings.web_relay_url);
+  const item = await fetchWebItem(p.source_url);
   if (!item) {
     await d.db.prepare("UPDATE products SET source_checked_at = ? WHERE id = ?").bind(now(), p.id).run();
     return null;
@@ -365,7 +355,7 @@ export async function addWebWish(d: Deps, user: { id: number }, url: string, wis
   if (product) {
     if (isStale(product.source_checked_at)) await refreshWebProduct(d, product.id);
   } else {
-    const item = await fetchWebItem(url, d.settings.web_relay_url);
+    const item = await fetchWebItem(url);
     if (!item) return { ok: false, error: "صفحه‌ی این محصول خوانده نشد؛ لینک مستقیم صفحه‌ی خود محصول را بفرستید." };
     if (!item.available) return { ok: false, error: `این کالا فعلاً در ${item.site} موجود نیست.` };
     let image = "";
