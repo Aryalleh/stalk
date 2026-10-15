@@ -63,3 +63,11 @@ describe("parseProductHtml (what shops publish on product pages)", () => {
     expect(r).toMatchObject({ title: "شمع", price: null });
   });
 });
+
+describe("app-shell pages", () => {
+  // What www.digikala.com/product/dkp-…/ returns now: the app loads the product itself (from its API).
+  const shell = `<html><head><title data-next-head="">فروشگاه اینترنتی دیجی‌کالا</title><link rel="canonical" href="https://www.digikala.com/routing/" data-next-head=""/></head><body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{}},"page":"/routing","query":{},"buildId":"x","nextExport":true}</script></body></html>`;
+  it("are not taken for a product (no item named after the shop)", () => {
+    expect(parseProductHtml(shell, "https://www.digikala.com/product/dkp-1/")).toBeNull();
+  });
+});

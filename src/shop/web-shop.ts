@@ -211,8 +211,17 @@ function microdataPrice(html: string) {
   return amount ? sane(toToman(amount, attr("priceCurrency"))) : null;
 }
 
+/**
+ * A page that's only an app shell (the product is fetched by the browser later), like Digikala's
+ * product pages now: no product in it, just the shop's own name.
+ */
+export function isAppShell(html: string) {
+  return /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*\/routing\/?["']/i.test(html) || /"page"\s*:\s*"\/routing"/.test(html);
+}
+
 /** What a product page says about itself, in this order: JSON-LD, product meta tags, microdata, Next.js data. */
 export function parseProductHtml(html: string, url: string): WebItem | null {
+  if (isAppShell(html)) return null;
   const ld = jsonLdProduct(html);
   const offersRaw = ld?.offers;
   const offer = (Array.isArray(offersRaw) ? offersRaw[0] : offersRaw) as Json | undefined;
@@ -259,9 +268,11 @@ export async function fetchWebItem(url: string): Promise<WebItem | null> {
     // Digikala / Digistyle: their product API; if that's out of reach, the page itself.
     const dk = digikalaId(url);
     if (dk) {
+      // The API is where the product is (its pages are an empty app shell); the page only if it has a price.
       const viaApi = await fetchDigikala(dk).catch(() => null);
-      if (viaApi?.price) return viaApi;
-      return (await fetchPage(url).catch(() => null)) ?? viaApi;
+      if (viaApi?.price || viaApi?.available === false) return viaApi;
+      const page = await fetchPage(url).catch(() => null);
+      return page?.price ? page : viaApi;
     }
     return await fetchPage(url);
   } catch (e) {
