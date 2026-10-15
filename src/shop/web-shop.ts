@@ -23,6 +23,7 @@ export interface WebItem {
   price: number | null; // toman; null = couldn't read it
   available: boolean;
   site: string; // the site's name, for people
+  method: string; // how it was read (shown in the admin's link test)
 }
 
 const SITES: Record<string, string> = {
@@ -35,6 +36,17 @@ const SITES: Record<string, string> = {
   "timcheh.com": "تیمچه",
   "banimode.com": "بانی‌مد",
   "modiseh.com": "مدیسه",
+  "technolife.ir": "تکنولایف",
+  "technolife.com": "تکنولایف",
+  "meghdadit.com": "مقداد آی‌تی",
+  "emalls.ir": "ایمالز",
+  "shixon.com": "شیکسون",
+  "lioncomputer.com": "لیون کامپیوتر",
+  "zanbil.ir": "زنبیل",
+  "khanoumi.com": "خانومی",
+  "ketabrah.ir": "کتابراه",
+  "30book.com": "سی‌بوک",
+  "iranketab.ir": "ایران‌کتاب",
 };
 
 export const siteName = (url: string) => {
@@ -47,7 +59,8 @@ export const siteName = (url: string) => {
   }
 };
 
-const digikalaId = (url: string) => url.match(/digikala\.com\/product\/dkp-(\d+)/i)?.[1] ?? null;
+// Digikala and Digistyle (same company) share product ids: dkp-<id>.
+const digikalaId = (url: string) => url.match(/(?:digikala|digistyle)\.com\/product\/dkp-(\d+)/i)?.[1] ?? null;
 
 /** The first web link in a text (not Instagram: that has its own flow), cleaned: no tracking, no anchor. */
 export function parseWebUrl(text: string): string | null {
@@ -94,6 +107,7 @@ async function fetchDigikala(id: string): Promise<WebItem | null> {
     price: rial ? Math.round(rial / 10) : null, // Digikala prices are in rial
     available: p.status === "marketable" && !!rial,
     site: SITES["digikala.com"],
+    method: "API دیجی‌کالا",
   };
 }
 
@@ -139,34 +153,117 @@ function toToman(amount: unknown, currency: unknown) {
   return String(currency ?? "IRR").toUpperCase() === "IRT" || /تومان|toman/i.test(String(currency)) ? Math.round(n) : Math.round(n / 10);
 }
 
-async function fetchPage(url: string): Promise<WebItem | null> {
-  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html" }, redirect: "follow", signal: AbortSignal.timeout(12000) });
-  if (!res.ok) return null;
-  const html = (await res.text()).slice(0, 1_500_000);
+// ---------- reading a product page (any shop): what the big Iranian shops publish for search engines ----------
+
+/** The value of the first key found in an object (keys tried in order). */
+const pick = (o: Json | undefined, keys: string[]) => {
+  for (const k of keys) if (o && o[k] !== undefined && o[k] !== null && o[k] !== "") return o[k];
+  return undefined;
+};
+const imageOf = (x: unknown): string =>
+  typeof x === "string" ? x : Array.isArray(x) ? imageOf(x[0]) : x && typeof x === "object" ? imageOf(pick(x as Json, ["url", "contentUrl", "src", "MEDIUM", "LARGE", "original"])) : "";
+const sane = (toman: number | null) => (toman && toman >= 1000 && toman < 10_000_000_000 ? toman : null);
+
+/** Next.js pages (many shops) carry the product as JSON: find an object that has a name and a price. */
+function nextDataProduct(html: string): { title: string; price: number | null; image: string; available: boolean } | null {
+  const raw = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
+  if (!raw) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const NAME = ["title_fa", "title", "name", "productName"];
+  const PRICE = ["selling_price", "sellingPrice", "final_price", "finalPrice", "sale_price", "salePrice", "price"];
+  const queue: unknown[] = [data];
+  let seen = 0;
+  while (queue.length && seen++ < 20000) {
+    const x = queue.shift();
+    if (Array.isArray(x)) queue.push(...x);
+    else if (x && typeof x === "object") {
+      const o = x as Json;
+      const name = pick(o, NAME);
+      let price = pick(o, PRICE);
+      if (price && typeof price === "object") price = pick(price as Json, PRICE);
+      if (typeof name === "string" && name.length > 2 && (typeof price === "number" || /^\d+$/.test(String(price ?? "")))) {
+        // Shops' JSON is in rial unless it says toman.
+        const currency = String(pick(o, ["currency", "priceCurrency"]) ?? "IRR");
+        return {
+          title: name,
+          price: sane(toToman(price, currency)),
+          image: imageOf(pick(o, ["image", "images", "photo", "thumbnail", "main_image"])),
+          available: !/out_?of_?stock|unavailable|ناموجود/i.test(String(pick(o, ["status", "availability", "stock_status"]) ?? "")),
+        };
+      }
+      for (const v of Object.values(o)) if (v && typeof v === "object") queue.push(v);
+    }
+  }
+  return null;
+}
+
+/** schema.org microdata: <… itemprop="price" content="…"> and itemprop="priceCurrency". */
+function microdataPrice(html: string) {
+  const attr = (prop: string) =>
+    html.match(new RegExp(`itemprop=["']${prop}["'][^>]*content=["']([^"']+)["']`, "i"))?.[1] ??
+    html.match(new RegExp(`content=["']([^"']+)["'][^>]*itemprop=["']${prop}["']`, "i"))?.[1];
+  const amount = attr("price");
+  return amount ? sane(toToman(amount, attr("priceCurrency"))) : null;
+}
+
+/** What a product page says about itself, in this order: JSON-LD, product meta tags, microdata, Next.js data. */
+export function parseProductHtml(html: string, url: string): WebItem | null {
   const ld = jsonLdProduct(html);
   const offersRaw = ld?.offers;
   const offer = (Array.isArray(offersRaw) ? offersRaw[0] : offersRaw) as Json | undefined;
-  const imageRaw = ld?.image;
-  const image = typeof imageRaw === "string" ? imageRaw : Array.isArray(imageRaw) ? String(imageRaw[0] ?? "") : imageRaw && typeof imageRaw === "object" ? String((imageRaw as Json).url ?? "") : "";
-  const price =
-    toToman(offer?.price ?? offer?.lowPrice, offer?.priceCurrency) ??
-    toToman(meta(html, "product:price:amount"), meta(html, "product:price:currency"));
-  const title = String(ld?.name ?? "").trim() || meta(html, "og:title") || decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? "").trim();
+  const next = nextDataProduct(html);
+  let method = "";
+  let price: number | null = null;
+  const tryPrice = (p: number | null, how: string) => {
+    if (price === null && p !== null) {
+      price = p;
+      method = how;
+    }
+  };
+  tryPrice(sane(toToman(pick(offer, ["price", "lowPrice", "highPrice"]), offer?.priceCurrency)), "JSON-LD");
+  tryPrice(sane(toToman(meta(html, "product:price:amount") || meta(html, "og:price:amount"), meta(html, "product:price:currency") || meta(html, "og:price:currency"))), "meta product:price");
+  tryPrice(microdataPrice(html), "microdata");
+  tryPrice(next?.price ?? null, "__NEXT_DATA__");
+  const title =
+    String(ld?.name ?? "").trim() || meta(html, "og:title") || next?.title || decode(html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? "").trim();
   if (!title) return null;
+  const availability = String(offer?.availability ?? meta(html, "product:availability") ?? "");
   return {
     title: title.slice(0, 200),
-    image: image || meta(html, "og:image"),
+    image: imageOf(ld?.image) || meta(html, "og:image") || next?.image || "",
     price,
-    available: !/OutOfStock|SoldOut/i.test(String(offer?.availability ?? "")),
+    available: !/OutOfStock|SoldOut|out of stock/i.test(availability) && (next?.available ?? true),
     site: siteName(url),
+    method: method || "بدون قیمت (فقط نام و عکس)",
   };
 }
 
-/** Read a product page: Digikala through its product API, any other site from the page's data. */
+async function fetchPage(url: string): Promise<WebItem | null> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml", "Accept-Language": "fa-IR,fa;q=0.9,en;q=0.5" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!res.ok) return null;
+  return parseProductHtml((await res.text()).slice(0, 2_000_000), url);
+}
+
+/** Read a product page: Digikala / Digistyle through their product API, any other shop from the page's data. */
 export async function fetchWebItem(url: string): Promise<WebItem | null> {
   try {
+    // Digikala / Digistyle: their product API; if that's out of reach, the page itself.
     const dk = digikalaId(url);
-    return dk ? await fetchDigikala(dk) : await fetchPage(url);
+    if (dk) {
+      const viaApi = await fetchDigikala(dk).catch(() => null);
+      if (viaApi?.price) return viaApi;
+      return (await fetchPage(url).catch(() => null)) ?? viaApi;
+    }
+    return await fetchPage(url);
   } catch (e) {
     console.error("web item", url, e);
     return null;

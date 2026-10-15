@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { render } from "../../render";
 import { cardNumberError, normalizeDigits, normalizePhone, toLatinDigits } from "../../../lib/normalize";
-import { adjustStock, availableByVariant, deleteProduct, normCity, now, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
+import { adjustStock, availableByVariant, deleteProduct, normCity, now, toman, productCode, productImages, productStock, randomSlug, shopPackages, type Order, type Product, type Shop } from "../db";
 import { sizeNames } from "../sizes";
 import { developerHref, faqs } from "../../content";
 import { colorList, pickVariant, variantKey, variants, type Variant } from "../variants";
@@ -16,7 +16,7 @@ import { answerChange, cancelForStock, confirmOrder, rejectOrder, releaseDueAddr
 import { parseSizeGuide } from "../sizes";
 import { AdminContentPage, AdminDeleteShopPage, JoinPhonePage, AdminInstagramPage, AdminWebShopPage, type WebShopRow, type IgLogRow, type ExternalOrderRow, type ExternalShopRow, type MiniappLogRow, AdminPageForm, AdminPagesPage, AdminPage, AdminSettingsPage, AdminUsersPage, type AdminUserRow, DashboardPage, ORDER_FILTERS, OrderDetailPage, OrdersPage, type PanelOrder, ProductFormPage, PackagesSettings, ProductsPage, SettingsPage, ShopRegisterPage, type VariantInfo } from "../views/panel";
 import { currentUser, form, intParam, siteUrl, startSession } from "./helpers";
-import { refreshWebProduct, repriceWebShop, retailPrice, webShop } from "../web-shop";
+import { fetchWebItem, parseWebUrl, refreshWebProduct, repriceWebShop, retailPrice, siteName, webShop } from "../web-shop";
 import { startImpersonation } from "../../impersonate";
 import { deleteShop, shopFootprint } from "../delete";
 import { channelOf, postProductToChannel, shareError } from "../telegram/share";
@@ -1117,6 +1117,26 @@ admin.post("/admin/web-shop/refresh", async (c) => {
   let read = 0;
   for (const pid of ids) if (await refreshWebProduct(webDeps(c), pid)) read++;
   return webBack(c, `${read.toLocaleString("fa-IR")} از ${ids.length.toLocaleString("fa-IR")} کالا از سایت خوانده و به‌روز شد.`, read > 0 || !ids.length);
+});
+
+// Try a link without adding it anywhere: what's read from that site, and how (for checking a shop).
+admin.post("/admin/web-shop/test", async (c) => {
+  const url = parseWebUrl((await form(c)).url ?? "");
+  if (!url) return webBack(c, "لینک صفحه‌ی محصول را کامل وارد کنید.", false);
+  const item = await fetchWebItem(url);
+  if (!item) return webBack(c, `از ${siteName(url)} چیزی خوانده نشد (سایت جواب نداد یا صفحه‌ی محصول نبود).`, false);
+  const s = c.get("settings");
+  return webBack(
+    c,
+    [
+      `«${item.title}» — ${item.site}`,
+      item.price ? `قیمت سایت: ${toman(item.price)} → قیمت ما: ${toman(retailPrice(item.price, s))}` : "قیمت خوانده نشد",
+      item.available ? "موجود" : "ناموجود",
+      `روش: ${item.method}`,
+      item.image ? "عکس ✓" : "بدون عکس",
+    ].join(" · "),
+    !!item.price,
+  );
 });
 
 // The site's price typed by hand (when it can't be read): the commission is added as usual.

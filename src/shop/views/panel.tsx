@@ -1346,6 +1346,18 @@ export function AdminWebShopPage(props: { user: User; settings: Settings; shop: 
         <p class="small muted" style="margin-bottom:0">رسید واریزها و آدرس گیرنده‌ها در ربات برای مدیران هم فرستاده می‌شود.</p>
       </div>
 
+      <form method="post" action="/admin/web-shop/test" class="card">
+        <h2>امتحان یک لینک</h2>
+        <p class="small muted" style="margin-top:0">
+          ببینید از یک سایت چه خوانده می‌شود (بدون افزودن به جایی). دیجی‌کالا و دیجی‌استایل از API خودشان؛ باقی فروشگاه‌ها (باسلام، ترب، تکنولایف، مدیسه، بانی‌مد،
+          اسنپ‌شاپ…) از اطلاعاتی که صفحه‌ی محصول برای موتورهای جستجو منتشر می‌کند.
+        </p>
+        <div class="row" style="gap:8px">
+          <input name="url" class="ltr" placeholder="https://…" style="flex:1" />
+          <button class="small">امتحان</button>
+        </div>
+      </form>
+
       <div class="card wrap">
         <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
           <h2 style="margin:0">کالاها ({fa(props.products.length)})</h2>
