@@ -19,6 +19,7 @@ import { loadSettings, safirReady, saveSettings } from "../../settings";
 import { activeBots, botLink, notifyAdmins, type BotKind } from "../../bale/botapi";
 import { connectToken } from "../../bale/connect";
 import { MINIAPP_COOKIE } from "../../bale/chatlink";
+import { anonCode, anonStart } from "../../bale/anon";
 import type { User } from "../../session";
 import { fileField, imageError, storeImage } from "../images";
 import { ChangeRequestPage, CodeLoginPage, CompleteProfilePage, MyGiftsPage, type GiftRow, profileValues, MyOrdersPage, MyWishlistsPage, AccountPage, WishlistFormPage, InstagramAddPage, ClaimShopPage, GiftAddressPage, FriendsPage, FriendInvitePage, type MyOrder } from "../views/account";
@@ -713,14 +714,38 @@ account.get("/me/gifts", async (c) => {
 account.get("/me/friends", async (c) => {
   const user = currentUser(c);
   const s = c.get("settings");
-  const [code, friends] = await Promise.all([friendCode(c.env.DB, user.id), listFriends(c.env.DB, user.id)]);
+  const [code, friends, acode, anonOn] = await Promise.all([
+    friendCode(c.env.DB, user.id),
+    listFriends(c.env.DB, user.id),
+    anonCode(c.env.DB, user.id),
+    c.env.DB.prepare("SELECT anon_enabled FROM users WHERE id = ?").bind(user.id).first<{ anon_enabled: number }>(),
+  ]);
+  const bots = activeBots(s);
   const links = {
     web: `${siteUrl(c)}/f/${code}`,
-    bale: activeBots(s).includes("bale") ? botLink(s, "bale", friendStart(code)) : "",
-    telegram: activeBots(s).includes("telegram") ? botLink(s, "telegram", friendStart(code)) : "",
+    bale: bots.includes("bale") ? botLink(s, "bale", friendStart(code)) : "",
+    telegram: bots.includes("telegram") ? botLink(s, "telegram", friendStart(code)) : "",
+  };
+  const anon = {
+    enabled: !!anonOn?.anon_enabled,
+    bale: bots.includes("bale") ? botLink(s, "bale", anonStart(acode)) : "",
+    telegram: bots.includes("telegram") ? botLink(s, "telegram", anonStart(acode)) : "",
   };
   const added = Number(c.req.query("added")) || 0;
-  return render(c, <FriendsPage user={user} links={links} friends={friends} added={friends.find((f) => f.id === added)?.name} renewed={c.req.query("renewed") === "1"} />);
+  const flash = { renewed: "لینک‌های قبلی باطل شدند و لینک تازه ساخته شد؛ دوستان فعلی‌تان سر جایشان هستند.", anon_renewed: "لینک پیام ناشناس عوض شد؛ لینک‌های قبلی دیگر کار نمی‌کنند.", anon_on: "دریافت پیام ناشناس روشن شد.", anon_off: "دریافت پیام ناشناس خاموش شد." }[c.req.query("done") ?? (c.req.query("renewed") === "1" ? "renewed" : "")];
+  return render(c, <FriendsPage user={user} links={links} anon={anon} friends={friends} added={friends.find((f) => f.id === added)?.name} flash={flash} />);
+});
+
+// Anonymous messages through the bots (bale/anon.ts): on / off, and a new link that stops the old ones.
+account.post("/me/anon/toggle", async (c) => {
+  const on = (await form(c)).on === "1";
+  await c.env.DB.prepare("UPDATE users SET anon_enabled = ? WHERE id = ?").bind(on ? 1 : 0, currentUser(c).id).run();
+  return c.redirect(`/me/friends?done=${on ? "anon_on" : "anon_off"}#anon`);
+});
+
+account.post("/me/anon/renew", async (c) => {
+  await anonCode(c.env.DB, currentUser(c).id, true);
+  return c.redirect("/me/friends?done=anon_renewed#anon");
 });
 
 // A new code: links shared before stop working (friends made so far stay).

@@ -1318,9 +1318,10 @@ const whenLabel = (days: number | null) =>
 export function FriendsPage(props: {
   user: User;
   links: { web: string; bale: string; telegram: string };
+  anon: { enabled: boolean; bale: string; telegram: string };
   friends: FriendRow[];
   added?: string;
-  renewed?: boolean;
+  flash?: string;
 }) {
   const site = useSite();
   const message = `بیا تو ${site.site_name} با هم دوست شیم 🎁 تولد و لیست آرزوهای همدیگه رو می‌بینیم:\n${props.links.web}`;
@@ -1338,7 +1339,7 @@ export function FriendsPage(props: {
         <h1 class="text-2xl md:text-3xl font-black text-fg mb-1">دوستان</h1>
         <p class="text-sm text-muted mb-5">دوستانتان را دعوت کنید؛ تولد هم را (روز و ماه) می‌بینید و راحت به لیست آرزوهای هم می‌رسید.</p>
         {props.added && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">🎉 شما و {props.added} حالا دوست هستید.</div>}
-        {props.renewed && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">لینک‌های قبلی باطل شدند و لینک تازه ساخته شد؛ دوستان فعلی‌تان سر جایشان هستند.</div>}
+        {props.flash && <div class="bg-brand/10 text-brand rounded-2xl p-3 text-sm font-bold mb-4">{props.flash}</div>}
 
         <div class="bg-card rounded-3xl p-4 md:p-5 border border-fg/5 mb-6" id="invite">
           <div class="flex items-center gap-3 mb-3">
@@ -1366,6 +1367,45 @@ export function FriendsPage(props: {
             <button class="text-[11px] text-red-500 font-bold underline">باطل کردن لینک‌ها و ساختن لینک تازه</button>
           </form>
         </div>
+
+        {(props.anon.bale || props.anon.telegram) && (
+          <div class="bg-card rounded-3xl p-4 md:p-5 border border-fg/5 mb-6" id="anon">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="w-11 h-11 rounded-2xl bg-violet-500/10 text-violet-500 flex items-center justify-center text-xl shrink-0"><i class="fa-solid fa-user-secret"></i></span>
+              <div class="flex-1 min-w-0">
+                <b class="block text-fg">پیام ناشناس</b>
+                <span class="block text-[11px] text-muted">هر کس این لینک را باز کند، در ربات بدون نامش برایتان پیام می‌فرستد؛ می‌توانید ناشناس جواب بدهید یا بلاکش کنید.</span>
+              </div>
+              <form method="post" action="/me/anon/toggle" class="m-0 shrink-0">
+                <input type="hidden" name="on" value={props.anon.enabled ? "0" : "1"} />
+                <button class={`px-3 py-1.5 rounded-xl text-[11px] font-bold ${props.anon.enabled ? "bg-brand/10 text-brand" : "bg-ink text-muted border border-fg/10"}`}>
+                  {props.anon.enabled ? "روشن ✓" : "خاموش"}
+                </button>
+              </form>
+            </div>
+            {props.anon.enabled ? (
+              <>
+                <div class="space-y-2">
+                  {props.anon.telegram && linkRow("fa-brands fa-telegram", "تلگرام", props.anon.telegram)}
+                  {props.anon.bale && linkRow("fa-solid fa-comment-dots", "بله", props.anon.bale)}
+                </div>
+                <button
+                  type="button"
+                  data-copy={`بهم پیام ناشناس بده 🤫\n${props.anon.telegram || props.anon.bale}`}
+                  data-copied="✓ کپی شد"
+                  class="w-full mt-3 py-2.5 rounded-xl bg-ink text-fg text-xs font-bold border border-fg/10"
+                >
+                  <i class="fa-regular fa-copy ml-1"></i> کپی متن برای استوری / بیو
+                </button>
+                <form method="post" action="/me/anon/renew" class="m-0 mt-3" onsubmit="return confirm('لینک پیام ناشناس عوض شود؟ لینک‌های قبلی دیگر کار نمی‌کنند.')">
+                  <button class="text-[11px] text-red-500 font-bold underline">باطل کردن لینک و ساختن لینک تازه</button>
+                </form>
+              </>
+            ) : (
+              <p class="text-xs text-muted">خاموش است؛ لینک‌ها کار نمی‌کنند و پیامی نمی‌گیرید.</p>
+            )}
+          </div>
+        )}
 
         <h2 class="text-lg font-black text-fg mb-3">
           دوستان من <span class="text-muted text-sm font-bold">({props.friends.length.toLocaleString("fa-IR")})</span>

@@ -76,6 +76,11 @@ export async function sendBotPhoto(
   return (await callBot(s, kind, "sendPhoto", form)) as SentMessage;
 }
 
+/** Re-send a message from one chat to another as the bot's own (no "forwarded from" with the sender's name). */
+export async function copyBotMessage(s: Settings, kind: BotKind, toChat: string, fromChat: string, messageId: number, replyMarkup?: object) {
+  return (await callBot(s, kind, "copyMessage", { chat_id: toChat, from_chat_id: fromChat, message_id: messageId, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) })) as SentMessage;
+}
+
 export async function answerCallback(s: Settings, kind: BotKind, callbackId: string, text: string) {
   await callBot(s, kind, "answerCallbackQuery", { callback_query_id: callbackId, text });
 }

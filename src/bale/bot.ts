@@ -7,6 +7,7 @@ import { siteUrl } from "../shop/routes/helpers";
 import { answerCallback, botToken, clearButtons, openAppMarkup, sendBotMessage, sendBotPhoto, type BotKind } from "./botapi";
 import { useConnectToken } from "./connect";
 import { accountFromContact } from "./chatlink";
+import { handleAnonCallback, handleAnonMessage, startAnon, type AnonCtx } from "./anon";
 import { assignUsername } from "../session";
 import { upsertCustomer } from "../crm/sync";
 import { saveLink } from "./links";
@@ -29,6 +30,8 @@ interface Update {
   edited_channel_post?: ChannelPost;
   edited_message?: ChannelPost;
   message?: {
+    message_id?: number;
+    caption?: string;
     chat?: { id?: number; type?: string };
     from?: { id?: number; first_name?: string; last_name?: string; username?: string };
     text?: string;
@@ -120,6 +123,14 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     return c.json({ ok: true });
   }
 
+  const anon: AnonCtx = { db: c.env.DB, s, kind, chatId: String(chatId) };
+  // Someone's anonymous-message link: "?start=a_<code>" (anon.ts).
+  const anonLink = msg?.text?.match(/^\/start(?:@\w+)?\s+a_([a-z0-9]{10})$/);
+  if (anonLink) {
+    c.executionCtx.waitUntil(startAnon(anon, anonLink[1]));
+    return c.json({ ok: true });
+  }
+
   // A friend invite: "?start=f_<code>" (friends.ts).
   const invite = msg?.text?.match(/^\/start(?:@\w+)?\s+f_([a-z0-9]{10})$/);
   if (invite) {
@@ -162,6 +173,9 @@ bot.post("/bot/:kind{bale|telegram}/:secret", async (c) => {
     reply("این لینک اتصال منقضی شده؛ از صفحه سایت دوباره «اتصال» را بزنید.");
     return c.json({ ok: true });
   }
+
+  // An anonymous message being written, or a reply to a received one.
+  if (msg && (await handleAnonMessage(anon, msg))) return c.json({ ok: true });
 
   // A shop's admin can run the shop from here with buttons and text commands (src/shop/commands.ts).
   const text = msg?.text?.trim();
@@ -216,6 +230,10 @@ async function handleCallback(c: C, kind: BotKind, q: NonNullable<Update["callba
   const s = c.get("settings");
   const chatId = String(q.message?.chat?.id ?? "");
   const answer = (text: string) => answerCallback(s, kind, q.id, text).catch((e) => console.error(e));
+  if (q.data?.startsWith("anon:") && chatId) {
+    await handleAnonCallback({ db: c.env.DB, s, kind, chatId }, q.data, answer);
+    return;
+  }
   // A shop chat button.
   const btn = q.data?.match(/^c:(.{1,62})$/);
   if (btn && chatId) {
