@@ -63,6 +63,9 @@ export const siteName = (url: string) => {
 // Digikala and Digistyle (same company) share product ids: dkp-<id>.
 const digikalaId = (url: string) => url.match(/(?:digikala|digistyle)\.com\/product\/dkp-(\d+)/i)?.[1] ?? null;
 
+/** An Instagram post (its own flow: the page's stand-in shop) rather than another online shop. */
+export const isInstagramUrl = (url: string) => /^https?:\/\/([a-z0-9-]+\.)*(instagram\.com|instagr\.am)\//i.test(url);
+
 /** The first web link in a text (not Instagram: that has its own flow), cleaned: no tracking, no anchor. */
 export function parseWebUrl(text: string): string | null {
   const m = text.match(/https?:\/\/[^\s<>"']+/i);

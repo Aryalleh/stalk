@@ -24,6 +24,7 @@ import { readSizeGuide, type SizeGuide } from "../sizes";
 import { sizesAndColors, variantLabel, variants } from "../variants";
 import type { User } from "../../session";
 import { useSite } from "../../render";
+import { isInstagramUrl, siteName } from "../web-shop";
 import { siteDescription } from "../../settings";
 import { breadcrumbLd, itemListLd, organizationLd, summary, websiteLd } from "../../schema";
 import type { Seo } from "./layout";
@@ -51,8 +52,8 @@ function ProductCard(props: { p: ProductWithShop }) {
       <ImageOrGift imageKey={p.image_key} alt={p.title} class="w-full h-auto block min-h-[140px] object-cover group-hover:scale-105 transition-transform duration-500" />
       <div class="absolute inset-0 photo-scrim"></div>
       {p.source_url && (
-        <span class="absolute top-3 left-3 w-7 h-7 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center text-sm" title="از اینستاگرام">
-          <i class="fa-brands fa-instagram"></i>
+        <span class="absolute top-3 left-3 w-7 h-7 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center text-sm" title={isInstagramUrl(p.source_url) ? "از اینستاگرام" : `از ${siteName(p.source_url)}`}>
+          <i class={isInstagramUrl(p.source_url) ? "fa-brands fa-instagram" : "fa-solid fa-link"}></i>
         </span>
       )}
       <div class="absolute inset-x-0 bottom-0 p-4 on-photo">
@@ -741,7 +742,17 @@ export function ProductPage(props: {
             </button>
           </div>
         )}
-        {p.source_url && (
+        {p.source_url && !isInstagramUrl(p.source_url) && (
+          <a href={p.source_url} target="_blank" rel="noopener nofollow" class="flex items-start gap-3 p-4 bg-card rounded-2xl text-xs text-muted leading-6">
+            <i class="fa-solid fa-cart-shopping text-brand text-xl mt-0.5"></i>
+            <span>
+              این کالا از <b class="text-fg">{siteName(p.source_url)}</b> است. تیم {site.site_name} آن را از همان سایت می‌خرد و به آدرس گیرنده می‌فرستد؛ پول به کارت {site.site_name} واریز می‌شود و وضعیت سفارش را همین‌جا دنبال می‌کنید.
+              {p.awaiting_price ? <span class="block mt-1">قیمتش به‌زودی ثبت می‌شود؛ بعد از آن خرید فعال می‌شود.</span> : null}
+              <span class="block text-brand font-bold mt-1">مشاهده در {siteName(p.source_url)} <i class="fa-solid fa-arrow-up-left-from-square text-[10px]"></i></span>
+            </span>
+          </a>
+        )}
+        {p.source_url && isInstagramUrl(p.source_url) && (
           <a href={p.source_url} target="_blank" rel="noopener nofollow" class="flex items-start gap-3 p-4 bg-card rounded-2xl text-xs text-muted leading-6">
             <i class="fa-brands fa-instagram text-brand text-xl mt-0.5"></i>
             <span>
