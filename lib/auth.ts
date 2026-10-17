@@ -1,9 +1,9 @@
 // Password hashing and D1-backed sessions (needs a `sessions (token_hash, user_id, expires_at)` table).
 
 const ITERATIONS = 100_000; // Workers' PBKDF2 maximum
-// A session ends after this many days without use; every day it's used pushes the end back. The
-// cookie itself lives longer (browsers cap it at 400 days), so only the server decides.
-const SESSION_DAYS = 60;
+// A session ends after a month without use; every day it's used pushes the end back a full month
+// again. The cookie itself lives longer (browsers cap it at 400 days), so only the server decides.
+export const SESSION_DAYS = 30;
 export const COOKIE_MAX_AGE = 400 * 86400;
 const DAY = 86400_000;
 

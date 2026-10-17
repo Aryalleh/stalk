@@ -2,9 +2,9 @@
 // them. The admin's own session is kept aside in a cookie and restored by "back to admin" (or by
 // logging out). The stand-in session lasts at most 2 hours, and every one is recorded.
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { COOKIE_MAX_AGE, createSession, deleteSession } from "../lib/auth";
+import { COOKIE_MAX_AGE, createSession, deleteSession, sessionUserId } from "../lib/auth";
 import type { C } from "./env";
-import { SESSION_COOKIE, sessionUser, type User } from "./session";
+import { SESSION_COOKIE, sessionTokens, sessionUser, type User } from "./session";
 import { now } from "./shop/db";
 import { cookieOptions } from "./shop/routes/helpers";
 
@@ -25,7 +25,9 @@ export async function startImpersonation(c: C, admin: User, targetId: number): P
   if (!target) return "کاربر پیدا نشد.";
   if (target.is_admin) return "ورود به حساب مدیران دیگر ممکن نیست.";
   if (target.id === admin.id) return "این حساب خودتان است.";
-  const adminToken = getCookie(c, SESSION_COOKIE);
+  // The admin's own live session (a browser may also hold an old or a mini app's session cookie).
+  let adminToken: string | undefined;
+  for (const t of sessionTokens(c.req.header("cookie"))) if ((await sessionUserId(c.env.DB, t)) === admin.id) adminToken ??= t;
   if (!adminToken) return "دوباره وارد شوید.";
   const { token, maxAge } = await createSession(c.env.DB, target.id, MAX_SECONDS);
   await c.env.DB.prepare("INSERT INTO impersonations (admin_id, user_id, started_at) VALUES (?, ?, ?)").bind(admin.id, target.id, now()).run();
@@ -40,7 +42,8 @@ export async function stopImpersonation(c: C): Promise<boolean> {
   const adminToken = getCookie(c, IMPERSONATOR_COOKIE);
   if (!adminToken) return false;
   const user = c.get("user");
-  await deleteSession(c.env.DB, getCookie(c, SESSION_COOKIE));
+  // Only the stand-in session (the admin's own, e.g. a mini app's, stays).
+  for (const t of sessionTokens(c.req.header("cookie"))) if (user && t !== adminToken && (await sessionUserId(c.env.DB, t)) === user.id) await deleteSession(c.env.DB, t);
   if (user) {
     await c.env.DB.prepare("UPDATE impersonations SET ended_at = ? WHERE user_id = ? AND ended_at IS NULL").bind(now(), user.id).run();
   }

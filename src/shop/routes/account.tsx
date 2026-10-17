@@ -11,7 +11,7 @@ import { fetchPost, handOver, inviteText, memberShopFor, parseHandle, parsePostU
 import { upsertCustomer } from "../../crm/sync";
 import { hasChoice, pickVariant, variantFromForm } from "../variants";
 import type { C, Env } from "../../env";
-import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile, publicNameSql } from "../../session";
+import { SESSION_COOKIE, USER_COLUMNS, assignUsername, needsProfile, publicNameSql, sessionTokens } from "../../session";
 import { birthDate, fullName } from "../../../lib/people";
 import { cancelCode, issueCode, verifyCode } from "../../bale/otp";
 import { SafirError, sendSafirOtp } from "../../bale/safir";
@@ -65,6 +65,7 @@ const hasAdmin = async (c: C) => !!(await c.env.DB.prepare("SELECT 1 FROM users 
 
 account.get("/login", async (c) => {
   const next = safeNext(c.req.query("next"));
+  if (c.get("user")) return c.redirect(next); // already signed in
   // Inside Bale / Telegram (a mini-app chat waiting in this browser): share the number instead of an SMS code.
   if (getCookie(c, MINIAPP_COOKIE) && c.req.query("sms") !== "1") return c.redirect(`/app/phone?next=${encodeURIComponent(next)}`);
   if (!safirReady(c.get("settings"))) return render(c, <CodeLoginPage next={next} step="unavailable" setupOpen={!(await hasAdmin(c))} />, 503);
@@ -84,6 +85,7 @@ account.post("/login", async (c) => {
 });
 
 account.get("/login/verify", async (c) => {
+  if (c.get("user")) return c.redirect(safeNext(c.req.query("next")));
   const phone = normalizePhone(c.req.query("phone") ?? "");
   if (!MOBILE.test(phone)) return c.redirect("/login");
   const isNew = !(await userByPhone(c, phone));
@@ -173,8 +175,10 @@ account.post("/logout/return", async (c) => c.redirect((await stopImpersonation(
 
 account.post("/logout", async (c) => {
   if (await stopImpersonation(c)) return c.redirect("/admin/users");
-  await deleteSession(c.env.DB, getCookie(c, SESSION_COOKIE));
-  deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
+  for (const t of sessionTokens(c.req.header("cookie"))) await deleteSession(c.env.DB, t);
+  // Both kinds of session cookie: the site's and a mini app's (partitioned).
+  deleteCookie(c, SESSION_COOKIE, cookieOptions(0, false));
+  deleteCookie(c, SESSION_COOKIE, cookieOptions(0, true));
   return c.redirect("/");
 });
 

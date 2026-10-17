@@ -5,7 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { crm } from "./crm/routes";
 import type { AddressAsk, Env } from "./env";
-import { SESSION_COOKIE, assignUsername, isConnected, needsProfile, sessionUser } from "./session";
+import { assignUsername, sessionTokens, isConnected, needsProfile, sessionUser } from "./session";
 import { activeBots, setBaleApiBase, setTelegramApiBase } from "./bale/botapi";
 import { setInstagramApiBase } from "./shop/crm/instagram";
 import { setDigikalaApiBase } from "./shop/web-shop";
@@ -83,7 +83,7 @@ app.use(secureHeaders({ xFrameOptions: false, contentSecurityPolicy: { frameAnce
 app.use(csrf()); // rejects cross-origin form posts; bot webhooks send JSON and are unaffected
 
 app.use(async (c, next) => {
-  const [user, settings] = await Promise.all([sessionUser(c.env.DB, getCookie(c, SESSION_COOKIE)), loadSettings(c.env.DB)]);
+  const [user, settings] = await Promise.all([sessionUser(c.env.DB, sessionTokens(c.req.header("cookie"))), loadSettings(c.env.DB)]);
   c.set("user", user);
   c.set("settings", settings);
   c.set("impersonator", user ? await actingAdmin(c) : null); // an admin signed in as this user
@@ -150,7 +150,7 @@ app.use(async (c, next) => {
   const user = c.get("user");
   if (user && !user.username) {
     await assignUsername(c.env.DB, user.id);
-    c.set("user", await sessionUser(c.env.DB, getCookie(c, SESSION_COOKIE)));
+    c.set("user", await sessionUser(c.env.DB, sessionTokens(c.req.header("cookie"))));
   }
   if (user && needsProfile(user) && !isPlaceholder(user) && !CONNECT_EXEMPT.test(c.req.path) && c.req.path !== "/me/complete") {
     const back = c.req.method === "GET" ? c.req.path + (new URL(c.req.url).search || "") : "/";

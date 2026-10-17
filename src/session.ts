@@ -33,10 +33,32 @@ export type Accent = keyof typeof ACCENTS;
 export const USER_COLUMNS =
   "id, phone, name, is_admin, is_staff, bale_chat_id, telegram_chat_id, avatar_key, banner_key, first_name, last_name, nickname, birth_date, username, show_received, show_givers, show_birthday, show_given_count, shop_id, shop_role, accent, theme";
 
-export async function sessionUser(db: D1Database, token: string | undefined): Promise<User | null> {
-  const id = await sessionUserId(db, token);
-  if (id === null) return null;
-  return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
+/**
+ * Every session cookie the browser sent. There can be two: the site's own and the one a Bale / Telegram
+ * mini app set (partitioned, for its iframe); an old, ended one first must not hide a live one.
+ */
+export function sessionTokens(cookieHeader: string | undefined): string[] {
+  const out: string[] = [];
+  for (const part of (cookieHeader ?? "").split(";")) {
+    const i = part.indexOf("=");
+    if (i < 0 || part.slice(0, i).trim() !== SESSION_COOKIE) continue;
+    const raw = part.slice(i + 1).trim().replace(/^"|"$/g, "");
+    try {
+      out.push(decodeURIComponent(raw));
+    } catch {
+      out.push(raw);
+    }
+  }
+  return [...new Set(out)].filter(Boolean).slice(0, 4);
+}
+
+/** The signed-in user: the first of the request's session cookies that is still valid. */
+export async function sessionUser(db: D1Database, tokens: string | string[] | undefined): Promise<User | null> {
+  for (const token of Array.isArray(tokens) ? tokens : [tokens]) {
+    const id = await sessionUserId(db, token);
+    if (id !== null) return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).bind(id).first<User>();
+  }
+  return null;
 }
 
 export const canUseCrm = (u: User | null) => !!u && (u.is_admin === 1 || u.is_staff === 1);
